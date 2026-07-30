@@ -1,0 +1,9 @@
+Iron Music 420 AI v2.4.0 Exact Home UI
+- Home screen rebuilt to closely match the approved neon HUD design.
+- Exact seven-leaf neon cannabis HUD core extracted from the approved concept.
+- Metallic IRON MUSIC title and large glowing 420 AI title.
+- Compact dynamic Gemini API status card.
+- Four horizontal neon glass quick-action cards.
+- Rounded five-item bottom navigation with Settings label.
+- Removed dashboard metrics and extra version cards from Home.
+- Existing Gemini, chat, voice, Rap Studio, songs and local storage retained.

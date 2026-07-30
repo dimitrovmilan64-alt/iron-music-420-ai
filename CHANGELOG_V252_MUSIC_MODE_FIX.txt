@@ -1,0 +1,8 @@
+IRON MUSIC 420 AI v2.5.2 — MUSIC MODE FIX
+
+- Премахнато е автоматичното отваряне на Spotify и open.spotify.com.
+- Music Mode вече изпраща само broadcast команда music_mode_420 към MacroDroid.
+- Приложението, което се отваря, се определя единствено от действията в MacroDroid.
+- Премахната е Spotify командата от бързите и личните действия.
+- Запазени са всички функции от v2.5.1 и FlutLab vector_math поправката.
+- Версия: 2.5.2+22.

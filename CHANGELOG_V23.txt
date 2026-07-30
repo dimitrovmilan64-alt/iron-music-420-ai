@@ -1,0 +1,22 @@
+IRON MUSIC 420 AI — v2.3 NEON CORE UI
+
+INTERFACE
+- Complete black and neon-green visual redesign.
+- Animated 420 cannabis-leaf AI core.
+- HUD grid, waveform, rings and subtle leaf background details.
+- New branded home dashboard and custom bottom navigation.
+- Refined glass/HUD panels, buttons, text fields and status elements.
+- Redesigned My Songs project cards with quick actions.
+- Updated Rap Studio 2.3 and AI Chat 2.3 hierarchy.
+
+ANDROID
+- New neon leaf launcher icon.
+- Dark launch screen and Android 12+ splash configuration.
+- Same applicationId, so the APK can update the existing installation.
+
+PRESERVED
+- Gemini API key and fallback models.
+- Bulgarian speech-to-text and text-to-speech.
+- Chat history and local song projects.
+- Rap editor, autosave and AI tools.
+- Suno Lyrics / Style of Music / Exclude package.

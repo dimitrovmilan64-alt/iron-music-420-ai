@@ -1,0 +1,5 @@
+Iron Music 420 AI v2.3.1 Build Fix
+
+- Fixed Flutter compile error in lib/pages/home_page.dart.
+- Replaced invalid Colors.white50 with valid Colors.white54.
+- Bumped app version to 2.3.1+15.

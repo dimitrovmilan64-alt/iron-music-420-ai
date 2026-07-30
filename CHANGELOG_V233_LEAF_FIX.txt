@@ -1,0 +1,6 @@
+Iron Music 420 AI v2.3.3 Leaf Core Fix
+
+- Replaced the broad maple-like leaf with a sharp, symmetric 7-leaflet cannabis core.
+- Added serrated edges, thinner leaflets, neon veins and a darker green fill.
+- Rebuilt Android and web launcher icons to match the new core.
+- Version bumped to 2.3.3+17.

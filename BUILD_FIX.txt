@@ -1,0 +1,13 @@
+Iron Music 420 AI v2.3 Neon Core UI
+
+New:
+- Complete black/neon-green interface redesign.
+- Animated 420 cannabis-leaf AI core and HUD background.
+- New branded dashboard, navigation and launcher icon.
+- Redesigned Rap Studio, Chat and My Songs project cards.
+- Dark splash screen without white flash.
+- Existing v2.2 Gemini, voice, projects and Suno Pack features preserved.
+
+Build:
+1. flutter pub get
+2. flutter build apk --release
