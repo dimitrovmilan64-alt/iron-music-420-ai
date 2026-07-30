@@ -21,79 +21,137 @@ class CommandsPage extends StatefulWidget {
   State<CommandsPage> createState() => _CommandsPageState();
 }
 
-class _CommandsPageState extends State<CommandsPage> {
+class _CommandsPageState extends State<CommandsPage>
+    with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
   final stt.SpeechToText _speech = stt.SpeechToText();
   final TextEditingController _commandController = TextEditingController();
   bool _isListening = false;
   bool _isRunning = false;
+  bool _ironActive = false;
+  bool _ironBusy = false;
   bool _voiceResultHandled = false;
+  bool _flashlightOn = false;
 
   static const _quickActions = <_AutomationItem>[
     _AutomationItem('youtube', 'YouTube', 'Отвори YouTube', Icons.play_circle),
-    _AutomationItem('chrome', 'Chrome', 'Отвори браузъра', Icons.language),
     _AutomationItem('camera', 'Камера', 'Отвори камерата', Icons.camera_alt),
-    _AutomationItem('maps', 'Карти', 'Отвори Google Maps', Icons.map),
-    _AutomationItem('settings', 'Настройки', 'Системни настройки', Icons.settings),
-    _AutomationItem('flash_on', 'Фенер ВКЛ', 'Включи светкавицата', Icons.flashlight_on),
-    _AutomationItem('flash_off', 'Фенер ИЗКЛ', 'Изключи светкавицата', Icons.flashlight_off),
-    _AutomationItem('volume_up', 'Звук +', 'Увеличи медийния звук', Icons.volume_up),
-    _AutomationItem('volume_down', 'Звук −', 'Намали медийния звук', Icons.volume_down),
-    _AutomationItem('bluetooth', 'Bluetooth', 'Bluetooth настройки', Icons.bluetooth),
-    _AutomationItem('wifi', 'Wi‑Fi', 'Wi‑Fi настройки', Icons.wifi),
-    _AutomationItem('dialer', 'Телефон', 'Отвори набиране', Icons.phone),
+    _AutomationItem('maps', 'Карти', 'Отвори картите', Icons.map),
+    _AutomationItem(
+      'flash_toggle',
+      'Фенер',
+      'Включи или изключи',
+      Icons.flashlight_on,
+    ),
+    _AutomationItem('volume_up', 'Звук +', 'Увеличи звука', Icons.volume_up),
+    _AutomationItem('volume_down', 'Звук −', 'Намали звука', Icons.volume_down),
+    _AutomationItem(
+      'settings',
+      'Настройки',
+      'Отвори настройките',
+      Icons.settings,
+    ),
     _AutomationItem('alarms', 'Аларми', 'Отвори алармите', Icons.alarm),
-    _AutomationItem('calendar', 'Календар', 'Отвори календара', Icons.calendar_month),
-    _AutomationItem('keep_awake_on', 'Екран ВКЛ', 'Не изгасвай екрана', Icons.light_mode),
+    _AutomationItem(
+      'calendar',
+      'Календар',
+      'Отвори календара',
+      Icons.calendar_month,
+    ),
+    _AutomationItem('dialer', 'Телефон', 'Отвори телефона', Icons.phone),
+    _AutomationItem(
+      'bluetooth',
+      'Bluetooth',
+      'Bluetooth настройки',
+      Icons.bluetooth,
+    ),
+    _AutomationItem('wifi', 'Wi‑Fi', 'Wi‑Fi настройки', Icons.wifi),
+    _AutomationItem('chrome', 'Chrome', 'Отвори браузъра', Icons.language),
   ];
 
   static const _routines = <_AutomationItem>[
     _AutomationItem(
       'music_mode',
-      'Music Mode',
-      'Изпраща music_mode_420 към MacroDroid',
+      'Музика',
+      'Пуска музикалния режим чрез Automate',
       Icons.headphones,
     ),
     _AutomationItem(
       'studio_mode',
-      'Studio Mode',
-      'Усилва звука, държи екрана буден и отваря Studio',
+      'Студио',
+      'Подготвя телефона за запис',
       Icons.mic_external_on,
     ),
     _AutomationItem(
       'night_mode',
-      'Night Mode',
-      'Намалява звука и отваря „Не безпокой“',
+      'Нощ',
+      'Намалява звука',
       Icons.nightlight_round,
     ),
   ];
 
   static const _customActionCatalog = <_AutomationItem>[
     _AutomationItem('app_home', 'Начало', 'Отвори началния екран', Icons.home),
-    _AutomationItem('app_studio', 'Rap Studio', 'Отвори Studio', Icons.mic_external_on),
-    _AutomationItem('app_songs', 'Моите песни', 'Отвори библиотеката', Icons.library_music),
+    _AutomationItem(
+      'app_studio',
+      'Rap Studio',
+      'Отвори Studio',
+      Icons.mic_external_on,
+    ),
+    _AutomationItem(
+      'app_songs',
+      'Моите песни',
+      'Отвори библиотеката',
+      Icons.library_music,
+    ),
     _AutomationItem('app_chat', 'AI чат', 'Отвори чата', Icons.chat_bubble),
     _AutomationItem('youtube', 'YouTube', 'Отвори YouTube', Icons.play_circle),
     _AutomationItem('chrome', 'Chrome', 'Отвори браузъра', Icons.language),
     _AutomationItem('camera', 'Камера', 'Отвори камерата', Icons.camera_alt),
     _AutomationItem('maps', 'Карти', 'Отвори Google Maps', Icons.map),
-    _AutomationItem('flash_on', 'Фенер ВКЛ', 'Включи светкавицата', Icons.flashlight_on),
-    _AutomationItem('flash_off', 'Фенер ИЗКЛ', 'Изключи светкавицата', Icons.flashlight_off),
+    _AutomationItem(
+      'flash_toggle',
+      'Фенер',
+      'Включи или изключи',
+      Icons.flashlight_on,
+    ),
     _AutomationItem('volume_up', 'Звук +', 'Увеличи звука', Icons.volume_up),
     _AutomationItem('volume_down', 'Звук −', 'Намали звука', Icons.volume_down),
-    _AutomationItem('keep_awake_on', 'Екран буден', 'Не изгасвай екрана', Icons.light_mode),
-    _AutomationItem('keep_awake_off', 'Екран нормално', 'Разреши изгасване', Icons.bedtime),
-    _AutomationItem('bluetooth', 'Bluetooth', 'Отвори Bluetooth', Icons.bluetooth),
+    _AutomationItem(
+      'keep_awake_on',
+      'Екран буден',
+      'Не изгасвай екрана',
+      Icons.light_mode,
+    ),
+    _AutomationItem(
+      'keep_awake_off',
+      'Екран нормално',
+      'Разреши изгасване',
+      Icons.bedtime,
+    ),
+    _AutomationItem(
+      'bluetooth',
+      'Bluetooth',
+      'Отвори Bluetooth',
+      Icons.bluetooth,
+    ),
     _AutomationItem('wifi', 'Wi‑Fi', 'Отвори Wi‑Fi', Icons.wifi),
     _AutomationItem('dialer', 'Телефон', 'Отвори набиране', Icons.phone),
     _AutomationItem('alarms', 'Аларми', 'Отвори алармите', Icons.alarm),
-    _AutomationItem('calendar', 'Календар', 'Отвори календара', Icons.calendar_month),
+    _AutomationItem(
+      'calendar',
+      'Календар',
+      'Отвори календара',
+      Icons.calendar_month,
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.store.addListener(_storeChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIronStatus());
   }
 
   void _storeChanged() {
@@ -101,11 +159,48 @@ class _CommandsPageState extends State<CommandsPage> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadIronStatus();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.store.removeListener(_storeChanged);
     _commandController.dispose();
     _speech.stop();
     super.dispose();
+  }
+
+  Future<void> _loadIronStatus() async {
+    final active = await _automation.isIronVoiceActive();
+    if (mounted && active != _ironActive) {
+      setState(() => _ironActive = active);
+    }
+  }
+
+  Future<void> _toggleIron() async {
+    if (_ironBusy) return;
+    if (_isListening) {
+      await _speech.stop();
+    }
+    setState(() {
+      _ironBusy = true;
+      _isListening = false;
+    });
+    final result = await _automation.execute(
+      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
+    );
+    if (!mounted) return;
+    setState(() {
+      _ironBusy = false;
+      if (result.success) {
+        _ironActive = !_ironActive;
+      }
+    });
+    _showResult(result);
   }
 
   Future<AutomationResult> _executeActionInternal(
@@ -126,10 +221,7 @@ class _CommandsPageState extends State<CommandsPage> {
         widget.onOpenSection(3);
         return const AutomationResult(true, 'AI чатът е отворен.');
       default:
-        final result = await _automation.execute(
-          action,
-          arguments: arguments,
-        );
+        final result = await _automation.execute(action, arguments: arguments);
         if (result.success && action == 'studio_mode') {
           widget.onOpenSection(1);
         }
@@ -144,11 +236,19 @@ class _CommandsPageState extends State<CommandsPage> {
   }) async {
     if (_isRunning) return;
     setState(() => _isRunning = true);
-    final result = await _executeActionInternal(action, arguments: arguments);
-    await _recordHistory(
-      title ?? _titleForAction(action),
-      result,
+    final executedAction = action == 'flash_toggle'
+        ? (_flashlightOn ? 'flash_off' : 'flash_on')
+        : action;
+    final result = await _executeActionInternal(
+      executedAction,
+      arguments: arguments,
     );
+    if (result.success && executedAction == 'flash_on') {
+      _flashlightOn = true;
+    } else if (result.success && executedAction == 'flash_off') {
+      _flashlightOn = false;
+    }
+    await _recordHistory(title ?? _titleForAction(action), result);
     if (!mounted) return;
     setState(() => _isRunning = false);
     _showResult(result);
@@ -261,14 +361,17 @@ class _CommandsPageState extends State<CommandsPage> {
       }
     }
 
-    if (text.startsWith('макро ') || text.startsWith('макродроид ')) {
+    if (text.startsWith('automate ') ||
+        text.startsWith('аутомейт ') ||
+        text.startsWith('макро ') ||
+        text.startsWith('макродроид ')) {
       final command = text
-          .replaceFirst(RegExp(r'^макро(дроид)?\s+'), '')
+          .replaceFirst(RegExp(r'^(automate|аутомейт|макро(дроид)?)\s+'), '')
           .trim();
       if (command.isNotEmpty) {
         await _run(
           'macrodroid_broadcast',
-          title: 'MacroDroid: $command',
+          title: 'Automate: $command',
           arguments: {'command': command},
         );
         return;
@@ -300,11 +403,9 @@ class _CommandsPageState extends State<CommandsPage> {
     } else if (text.contains('music mode') ||
         text.contains('музикален режим')) {
       action = 'music_mode';
-    } else if (text.contains('studio mode') ||
-        text.contains('студио режим')) {
+    } else if (text.contains('studio mode') || text.contains('студио режим')) {
       action = 'studio_mode';
-    } else if (text.contains('night mode') ||
-        text.contains('нощен режим')) {
+    } else if (text.contains('night mode') || text.contains('нощен режим')) {
       action = 'night_mode';
     } else if (text.contains('аларм')) {
       action = 'alarms';
@@ -312,13 +413,11 @@ class _CommandsPageState extends State<CommandsPage> {
       action = 'calendar';
     } else if (text.contains('телефон') || text.contains('набиране')) {
       action = 'dialer';
-    } else if (text.contains('отвори студио') ||
-        text.contains('rap studio')) {
+    } else if (text.contains('отвори студио') || text.contains('rap studio')) {
       action = 'app_studio';
     } else if (text.contains('отвори чат')) {
       action = 'app_chat';
-    } else if (text.contains('отвори песни') ||
-        text.contains('библиотека')) {
+    } else if (text.contains('отвори песни') || text.contains('библиотека')) {
       action = 'app_songs';
     } else if (text.contains('начален екран') || text == 'начало') {
       action = 'app_home';
@@ -349,26 +448,23 @@ class _CommandsPageState extends State<CommandsPage> {
       .trim();
 
   String _titleForAction(String action) {
-    for (final item in [..._routines, ..._quickActions, ..._customActionCatalog]) {
+    for (final item in [
+      ..._routines,
+      ..._quickActions,
+      ..._customActionCatalog,
+    ]) {
       if (item.action == action) return item.title;
     }
-    if (action == 'macrodroid_broadcast') return 'MacroDroid команда';
+    if (action == 'flash_on' || action == 'flash_off') return 'Фенер';
+    if (action == 'macrodroid_broadcast') return 'Automate команда';
     return 'Автоматизация';
   }
 
-  _AutomationItem? _itemForFavorite(String id) {
-    for (final item in [..._routines, ..._quickActions]) {
-      if (item.action == id) return item;
-    }
-    return null;
-  }
-
-  Future<void> _openCustomAutomationEditor([
-    CustomAutomation? existing,
-  ]) async {
+  Future<void> _openCustomAutomationEditor([CustomAutomation? existing]) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
-    final phraseController =
-        TextEditingController(text: existing?.voicePhrase ?? '');
+    final phraseController = TextEditingController(
+      text: existing?.voicePhrase ?? '',
+    );
     final selected = <String>[...?existing?.actions];
 
     final saved = await showModalBottomSheet<CustomAutomation>(
@@ -482,7 +578,9 @@ class _CommandsPageState extends State<CommandsPage> {
                       onPressed: () {
                         final name = nameController.text.trim();
                         final phrase = phraseController.text.trim();
-                        if (name.isEmpty || phrase.isEmpty || selected.isEmpty) {
+                        if (name.isEmpty ||
+                            phrase.isEmpty ||
+                            selected.isEmpty) {
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -548,7 +646,7 @@ class _CommandsPageState extends State<CommandsPage> {
     }
   }
 
-  Future<void> _openMacroDroidSheet() async {
+  Future<void> _openAutomateSheet() async {
     final commandController = TextEditingController(text: 'music_mode_420');
     await showModalBottomSheet<void>(
       context: context,
@@ -567,7 +665,7 @@ class _CommandsPageState extends State<CommandsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'MacroDroid мост',
+                'Връзка с Automate',
                 style: TextStyle(
                   color: ironGreen,
                   fontSize: 24,
@@ -576,22 +674,32 @@ class _CommandsPageState extends State<CommandsPage> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'В MacroDroid създай Trigger „Intent Received“ със следното действие:',
+                '1. В блока „Broadcast receive“ включи fx за Action и постави:',
                 style: TextStyle(color: Colors.white70, height: 1.4),
               ),
               const SizedBox(height: 12),
               _CodeBox(
-                text: 'com.ironmusic420ai.MACRODROID_COMMAND',
+                text: '"com.ironmusic420ai.MACRODROID_COMMAND"',
                 onCopy: () => Clipboard.setData(
                   const ClipboardData(
-                    text: 'com.ironmusic420ai.MACRODROID_COMMAND',
+                    text: '"com.ironmusic420ai.MACRODROID_COMMAND"',
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               const Text(
-                'Добави Extra: command = * и запази стойността в променлива. После според нея изпълни желания MacroDroid макрос.',
+                '2. В „Broadcast extras“ напиши: extras\n'
+                '3. След блока добави „Expression true“:',
                 style: TextStyle(color: Colors.white60, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              _CodeBox(
+                text: 'extras["command"] = "music_mode_420"',
+                onCopy: () => Clipboard.setData(
+                  const ClipboardData(
+                    text: 'extras["command"] = "music_mode_420"',
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
@@ -606,9 +714,9 @@ class _CommandsPageState extends State<CommandsPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _run('open_macrodroid'),
+                      onPressed: () => _run('open_automate'),
                       icon: const Icon(Icons.open_in_new),
-                      label: const Text('ОТВОРИ MACRODROID'),
+                      label: const Text('Отвори Automate'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -620,12 +728,12 @@ class _CommandsPageState extends State<CommandsPage> {
                         Navigator.pop(context);
                         _run(
                           'macrodroid_broadcast',
-                          title: 'MacroDroid: $command',
+                          title: 'Automate: $command',
                           arguments: {'command': command},
                         );
                       },
                       icon: const Icon(Icons.send),
-                      label: const Text('ТЕСТ'),
+                      label: const Text('Тест'),
                     ),
                   ),
                 ],
@@ -641,244 +749,341 @@ class _CommandsPageState extends State<CommandsPage> {
   @override
   Widget build(BuildContext context) {
     final favoriteIds = widget.store.favoriteAutomationIds;
-    final favoriteBuiltIns = favoriteIds
-        .map(_itemForFavorite)
-        .whereType<_AutomationItem>()
-        .toList(growable: false);
-    final favoriteCustoms = widget.store.customAutomations
-        .where((item) => favoriteIds.contains('custom:${item.id}'))
-        .toList(growable: false);
+    final mainActions = _quickActions.take(6).toList(growable: false);
+    final moreActions = _quickActions.skip(6).toList(growable: false);
 
     return IronBackground(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
         children: [
           const PageTitle(
-            eyebrow: 'JARVIS CONTROL',
-            title: 'Автоматизации 2.5.3',
-            subtitle: 'Лични команди, любими, MacroDroid и история',
+            eyebrow: 'IRON',
+            title: 'Команди',
+            subtitle: 'Кажи команда или натисни бутон',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           IronCard(
             bright: true,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Кажи команда',
-                  style: TextStyle(
-                    color: ironGreenSoft,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: ironGreen.withOpacity(0.12),
+                        border: Border.all(
+                          color: ironGreen.withOpacity(
+                            _ironActive ? 0.72 : 0.28,
+                          ),
+                        ),
+                      ),
+                      child: Icon(
+                        _ironActive ? Icons.graphic_eq : Icons.hearing,
+                        color: ironGreen,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _ironActive ? 'Iron е активен' : 'Хей, Iron',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _ironActive
+                                ? 'Кажи „Хей, Iron“ — отговаря „Слушам“'
+                                : 'Фонов гласов режим',
+                            style: const TextStyle(color: Colors.white54),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: _ironActive
+                      ? OutlinedButton.icon(
+                          onPressed: _ironBusy ? null : _toggleIron,
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          label: const Text('Спри Iron'),
+                        )
+                      : FilledButton.icon(
+                          onPressed: _ironBusy ? null : _toggleIron,
+                          icon: _ironBusy
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.black,
+                                  ),
+                                )
+                              : const Icon(Icons.power_settings_new),
+                          label: const Text('Активирай Iron'),
+                        ),
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                if (!_ironActive) ...[
+                  Row(
+                    children: [
+                      Material(
+                        color: _isListening
+                            ? Colors.redAccent.withOpacity(0.16)
+                            : ironGreen.withOpacity(0.12),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _isRunning ? null : _toggleVoiceCommand,
+                          child: SizedBox.square(
+                            dimension: 58,
+                            child: Icon(
+                              _isListening ? Icons.mic : Icons.mic_none,
+                              color:
+                                  _isListening ? Colors.redAccent : ironGreen,
+                              size: 30,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isListening ? 'Слушам…' : 'Натисни и говори',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            const Text(
+                              'Например: „Пусни музика“',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 TextField(
                   controller: _commandController,
                   onSubmitted: _executeSpokenCommand,
                   decoration: InputDecoration(
-                    hintText: 'Например: Стартирай запис',
+                    hintText: 'Или напиши команда',
                     suffixIcon: IconButton(
-                      onPressed: _toggleVoiceCommand,
-                      icon: Icon(
-                        _isListening ? Icons.mic : Icons.mic_none,
-                        color: _isListening ? Colors.redAccent : ironGreen,
-                      ),
+                      tooltip: 'Изпълни',
+                      onPressed: _isRunning
+                          ? null
+                          : () =>
+                              _executeSpokenCommand(_commandController.text),
+                      icon: _isRunning
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.arrow_forward, color: ironGreen),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _isRunning
-                        ? null
-                        : () => _executeSpokenCommand(
-                              _commandController.text,
-                            ),
-                    icon: _isRunning
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.bolt),
-                    label: const Text('ИЗПЪЛНИ КОМАНДАТА'),
                   ),
                 ),
               ],
             ),
           ),
-          if (favoriteBuiltIns.isNotEmpty || favoriteCustoms.isNotEmpty) ...[
-            const _SectionTitle('Любими'),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                ...favoriteBuiltIns.map(
-                  (item) => _FavoriteButton(
-                    title: item.title,
-                    icon: item.icon,
-                    onRun: () => _run(item.action),
-                  ),
-                ),
-                ...favoriteCustoms.map(
-                  (item) => _FavoriteButton(
-                    title: item.name,
-                    icon: Icons.auto_awesome,
-                    onRun: () => _runCustom(item),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const _SectionTitle('Готови режими'),
-          ..._routines.map(
-            (item) => _AutomationTile(
-              item: item,
-              favorite: favoriteIds.contains(item.action),
-              onRun: _run,
-              onFavorite: () =>
-                  widget.store.toggleAutomationFavorite(item.action),
-            ),
-          ),
-          Row(
-            children: [
-              const Expanded(child: _SectionTitle('Моите команди')),
-              IconButton.filled(
-                onPressed: () => _openCustomAutomationEditor(),
-                icon: const Icon(Icons.add),
-                tooltip: 'Нова лична команда',
-              ),
-            ],
-          ),
-          if (widget.store.customAutomations.isEmpty)
-            IronCard(
-              child: Column(
-                children: [
-                  const Icon(Icons.auto_awesome, color: ironGreen, size: 42),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Създай своя команда без програмиране.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Избираш име, гласова фраза и действията по ред.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () => _openCustomAutomationEditor(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('НОВА ЛИЧНА КОМАНДА'),
-                  ),
-                ],
-              ),
-            )
-          else
-            ...widget.store.customAutomations.map(
-              (automation) => _CustomAutomationTile(
-                automation: automation,
-                favorite: favoriteIds.contains('custom:${automation.id}'),
-                actionTitle: _titleForAction,
-                onRun: () => _runCustom(automation),
-                onEdit: () => _openCustomAutomationEditor(automation),
-                onDelete: () => _confirmDeleteCustom(automation),
-                onFavorite: () => widget.store.toggleAutomationFavorite(
-                  'custom:${automation.id}',
-                ),
-              ),
-            ),
-          const _SectionTitle('Бързи действия'),
+          const _SectionTitle('Режими'),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _quickActions.length,
+            itemCount: _routines.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.22,
+              crossAxisCount: 3,
+              mainAxisSpacing: 9,
+              crossAxisSpacing: 9,
+              childAspectRatio: 1.05,
             ),
             itemBuilder: (context, index) {
-              final item = _quickActions[index];
-              return _QuickActionCard(
+              final item = _routines[index];
+              return _CommandButton(
                 item: item,
-                favorite: favoriteIds.contains(item.action),
-                onRun: _run,
-                onFavorite: () =>
-                    widget.store.toggleAutomationFavorite(item.action),
+                onTap: _isRunning ? null : () => _run(item.action),
               );
             },
           ),
-          const SizedBox(height: 18),
+          const _SectionTitle('Бързи бутони'),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: mainActions.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 9,
+              crossAxisSpacing: 9,
+              childAspectRatio: 1.65,
+            ),
+            itemBuilder: (context, index) {
+              final item = mainActions[index];
+              return _CommandButton(
+                item: item,
+                active: item.action == 'flash_toggle' && _flashlightOn,
+                title: item.action == 'flash_toggle'
+                    ? (_flashlightOn ? 'Фенер включен' : 'Фенер')
+                    : null,
+                icon: item.action == 'flash_toggle'
+                    ? (_flashlightOn
+                        ? Icons.flashlight_off
+                        : Icons.flashlight_on)
+                    : null,
+                onTap: _isRunning ? null : () => _run(item.action),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           IronCard(
-            bright: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            margin: EdgeInsets.zero,
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              leading: const Icon(Icons.apps, color: ironGreen),
+              title: const Text(
+                'Още команди',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.hub, color: ironGreen),
-                    SizedBox(width: 10),
-                    Text(
-                      'MacroDroid връзка',
-                      style: TextStyle(
-                        color: ironGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: moreActions.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 9,
+                    crossAxisSpacing: 9,
+                    childAspectRatio: 1.65,
+                  ),
+                  itemBuilder: (context, index) {
+                    final item = moreActions[index];
+                    return _CommandButton(
+                      item: item,
+                      onTap: _isRunning ? null : () => _run(item.action),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          IronCard(
+            margin: EdgeInsets.zero,
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              leading: const Icon(Icons.auto_awesome, color: ironGreen),
+              title: const Text(
+                'Моите команди',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              children: [
+                if (widget.store.customAutomations.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Все още нямаш лични команди.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                else
+                  ...widget.store.customAutomations.map(
+                    (automation) => _CustomAutomationTile(
+                      automation: automation,
+                      favorite: favoriteIds.contains('custom:${automation.id}'),
+                      actionTitle: _titleForAction,
+                      onRun: () => _runCustom(automation),
+                      onEdit: () => _openCustomAutomationEditor(automation),
+                      onDelete: () => _confirmDeleteCustom(automation),
+                      onFavorite: () => widget.store.toggleAutomationFavorite(
+                        'custom:${automation.id}',
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Изпращай команда към MacroDroid и задействай макроси, които си направил там.',
-                  style: TextStyle(color: Colors.white70, height: 1.4),
-                ),
-                const SizedBox(height: 12),
+                  ),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _openMacroDroidSheet,
-                    icon: const Icon(Icons.settings_input_antenna),
-                    label: const Text('НАСТРОЙ MACRODROID МОСТ'),
+                    onPressed: () => _openCustomAutomationEditor(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Нова команда'),
                   ),
                 ),
               ],
             ),
           ),
-          if (widget.store.automationHistory.isNotEmpty) ...[
-            Row(
+          const SizedBox(height: 10),
+          IronCard(
+            margin: EdgeInsets.zero,
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              leading: const Icon(Icons.settings_outlined, color: ironGreen),
+              title: const Text(
+                'Настройки',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               children: [
-                const Expanded(child: _SectionTitle('Последни изпълнения')),
-                TextButton(
-                  onPressed: widget.store.clearAutomationHistory,
-                  child: const Text('Изчисти'),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.settings_input_antenna,
+                    color: ironGreen,
+                  ),
+                  title: const Text('Automate'),
+                  subtitle: const Text('Връзка за музикалния режим'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openAutomateSheet,
                 ),
-              ],
-            ),
-            IronCard(
-              child: Column(
-                children: [
+                if (widget.store.automationHistory.isNotEmpty) ...[
+                  const Divider(),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Последни действия',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: widget.store.clearAutomationHistory,
+                        child: const Text('Изчисти'),
+                      ),
+                    ],
+                  ),
                   for (var index = 0;
-                      index < widget.store.automationHistory.length && index < 8;
+                      index < widget.store.automationHistory.length &&
+                          index < 5;
                       index++) ...[
                     _HistoryRow(entry: widget.store.automationHistory[index]),
                     if (index < widget.store.automationHistory.length - 1 &&
-                        index < 7)
+                        index < 4)
                       const Divider(),
                   ],
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -903,127 +1108,54 @@ class _SectionTitle extends StatelessWidget {
       );
 }
 
-class _AutomationTile extends StatelessWidget {
+class _CommandButton extends StatelessWidget {
   final _AutomationItem item;
-  final bool favorite;
-  final ValueChanged<String> onRun;
-  final VoidCallback onFavorite;
+  final VoidCallback? onTap;
+  final bool active;
+  final String? title;
+  final IconData? icon;
 
-  const _AutomationTile({
+  const _CommandButton({
     required this.item,
-    required this.favorite,
-    required this.onRun,
-    required this.onFavorite,
-  });
-
-  @override
-  Widget build(BuildContext context) => IronCard(
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: ironGreen.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: ironGreen.withOpacity(0.35)),
-              ),
-              child: Icon(item.icon, color: ironGreen, size: 28),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.subtitle,
-                    style: const TextStyle(color: Colors.white60),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onFavorite,
-              icon: Icon(
-                favorite ? Icons.star : Icons.star_border,
-                color: favorite ? ironGreen : Colors.white38,
-              ),
-            ),
-            IconButton.filled(
-              onPressed: () => onRun(item.action),
-              icon: const Icon(Icons.play_arrow),
-            ),
-          ],
-        ),
-      );
-}
-
-class _QuickActionCard extends StatelessWidget {
-  final _AutomationItem item;
-  final bool favorite;
-  final ValueChanged<String> onRun;
-  final VoidCallback onFavorite;
-
-  const _QuickActionCard({
-    required this.item,
-    required this.favorite,
-    required this.onRun,
-    required this.onFavorite,
+    required this.onTap,
+    this.active = false,
+    this.title,
+    this.icon,
   });
 
   @override
   Widget build(BuildContext context) => Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => onRun(item.action),
-          borderRadius: BorderRadius.circular(20),
-          child: IronCard(
-            margin: EdgeInsets.zero,
-            padding: const EdgeInsets.all(14),
-            child: Stack(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            decoration: BoxDecoration(
+              color: active
+                  ? ironGreen.withOpacity(0.18)
+                  : ironPanelRaised.withOpacity(0.92),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: active ? ironGreen : ironGreen.withOpacity(0.28),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(item.icon, color: ironGreen, size: 30),
-                    const SizedBox(height: 10),
-                    Text(
-                      item.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                Positioned(
-                  right: -8,
-                  top: -8,
-                  child: IconButton(
-                    onPressed: onFavorite,
-                    icon: Icon(
-                      favorite ? Icons.star : Icons.star_border,
-                      size: 20,
-                      color: favorite ? ironGreen : Colors.white30,
+                Icon(icon ?? item.icon, color: ironGreen, size: 28),
+                const SizedBox(height: 7),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title ?? item.title,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -1128,27 +1260,6 @@ class _CustomAutomationTile extends StatelessWidget {
       );
 }
 
-class _FavoriteButton extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final VoidCallback onRun;
-
-  const _FavoriteButton({
-    required this.title,
-    required this.icon,
-    required this.onRun,
-  });
-
-  @override
-  Widget build(BuildContext context) => ActionChip(
-        avatar: Icon(icon, color: ironGreen, size: 18),
-        label: Text(title),
-        onPressed: onRun,
-        side: BorderSide(color: ironGreen.withOpacity(0.45)),
-        backgroundColor: ironPanelRaised,
-      );
-}
-
 class _HistoryRow extends StatelessWidget {
   final AutomationHistoryEntry entry;
 
@@ -1190,7 +1301,10 @@ class _HistoryRow extends StatelessWidget {
               ],
             ),
           ),
-          Text(time, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          Text(
+            time,
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
         ],
       ),
     );

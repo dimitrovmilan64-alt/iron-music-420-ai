@@ -170,10 +170,9 @@ class SongProject {
   String get exportText {
     final buffer = StringBuffer()
       ..writeln(title)
-      ..writeln(List<String>.filled(
-        title.length.clamp(4, 40).toInt(),
-        '=',
-      ).join())
+      ..writeln(
+        List<String>.filled(title.length.clamp(4, 40).toInt(), '=').join(),
+      )
       ..writeln()
       ..writeln('Стил: $style')
       ..writeln('Настроение: $mood')
@@ -209,7 +208,7 @@ class SongProject {
         ..writeln();
     }
 
-    buffer.writeln('Създадено с Iron Music 420 AI v2.5.3');
+    buffer.writeln('Създадено с Iron Music 420 AI v2.6.0');
     return buffer.toString().trim();
   }
 }

@@ -11,6 +11,25 @@ class AutomationService {
   static const MethodChannel _channel =
       MethodChannel('iron_music_420/automations');
 
+  Future<bool> isIronVoiceActive() async {
+    try {
+      final state = await _channel.invokeMethod<String>('execute', {
+        'action': 'iron_voice_status',
+      });
+      return state == 'active';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<int?> consumeIronSection() async {
+    try {
+      return await _channel.invokeMethod<int>('consumeIronSection');
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<AutomationResult> execute(
     String action, {
     Map<String, dynamic> arguments = const <String, dynamic>{},
@@ -27,7 +46,8 @@ class AutomationService {
         error.message ?? 'Командата не може да бъде изпълнена.',
       );
     } catch (_) {
-      return const AutomationResult(false, 'Възникна проблем при изпълнението.');
+      return const AutomationResult(
+          false, 'Възникна проблем при изпълнението.');
     }
   }
 }

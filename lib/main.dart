@@ -5,6 +5,7 @@ import 'pages/commands_page.dart';
 import 'pages/home_page.dart';
 import 'pages/rap_studio_page.dart';
 import 'pages/songs_page.dart';
+import 'services/automation_service.dart';
 import 'services/local_store.dart';
 import 'ui/common_widgets.dart';
 
@@ -163,7 +164,8 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  final AutomationService _automation = AutomationService();
   int _currentIndex = 0;
   late final List<Widget> _pages;
 
@@ -176,7 +178,7 @@ class _MainScreenState extends State<MainScreen> {
     IronNavItem(
       icon: Icons.mic_external_on_outlined,
       selectedIcon: Icons.mic_external_on,
-      label: 'Studio',
+      label: 'Студио',
     ),
     IronNavItem(
       icon: Icons.library_music_outlined,
@@ -189,31 +191,44 @@ class _MainScreenState extends State<MainScreen> {
       label: 'Чат',
     ),
     IronNavItem(
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings,
-      label: 'Автоматизации',
+      icon: Icons.graphic_eq_outlined,
+      selectedIcon: Icons.graphic_eq,
+      label: 'Iron',
     ),
   ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pages = [
-      HomePage(
-        store: widget.store,
-        onOpenSection: _openSection,
-      ),
+      HomePage(store: widget.store, onOpenSection: _openSection),
       RapStudioPage(store: widget.store),
-      SongsPage(
-        store: widget.store,
-        onOpenStudio: () => _openSection(1),
-      ),
+      SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
       ChatPage(store: widget.store),
-      CommandsPage(
-        store: widget.store,
-        onOpenSection: _openSection,
-      ),
+      CommandsPage(store: widget.store, onOpenSection: _openSection),
     ];
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _openPendingSection();
+    }
+  }
+
+  Future<void> _openPendingSection() async {
+    final section = await _automation.consumeIronSection();
+    if (section != null) {
+      _openSection(section);
+    }
   }
 
   void _openSection(int index) {
@@ -225,10 +240,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: IronBottomNavigation(
         selectedIndex: _currentIndex,
         onSelected: _openSection,

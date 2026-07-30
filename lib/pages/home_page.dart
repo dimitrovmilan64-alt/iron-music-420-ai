@@ -7,11 +7,7 @@ class HomePage extends StatefulWidget {
   final LocalStore store;
   final ValueChanged<int> onOpenSection;
 
-  const HomePage({
-    super.key,
-    required this.store,
-    required this.onOpenSection,
-  });
+  const HomePage({super.key, required this.store, required this.onOpenSection});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -87,35 +83,31 @@ class _HomePageState extends State<HomePage>
                           physics: const NeverScrollableScrollPhysics(),
                           mainAxisSpacing: compact ? 8 : 10,
                           crossAxisSpacing: compact ? 8 : 10,
-                          childAspectRatio: compact ? 1.84 : 1.72,
+                          childAspectRatio: compact ? 2.15 : 2.0,
                           children: [
                             _ExactActionCard(
                               icon: Icons.chat_bubble_outline_rounded,
-                              title: 'ЧАТ',
-                              subtitle: 'Говори с AI',
+                              title: 'Чат',
                               compact: compact,
                               onTap: () => widget.onOpenSection(3),
                             ),
                             _ExactActionCard(
                               icon: Icons.mic_none_rounded,
-                              title: 'RAP STUDIO',
-                              subtitle: 'Пиши и генерирай',
+                              title: 'Студио',
                               compact: compact,
                               onTap: () => widget.onOpenSection(1),
                             ),
                             _ExactActionCard(
                               icon: Icons.music_note_rounded,
-                              title: 'ПЕСНИ',
-                              subtitle: 'Моите проекти',
+                              title: 'Песни',
                               compact: compact,
                               onTap: () => widget.onOpenSection(2),
                             ),
                             _ExactActionCard(
                               icon: Icons.graphic_eq_rounded,
-                              title: 'ГЛАС',
-                              subtitle: 'BG микрофон',
+                              title: 'Iron',
                               compact: compact,
-                              onTap: () => widget.onOpenSection(3),
+                              onTap: () => widget.onOpenSection(4),
                             ),
                           ],
                         ),
@@ -190,8 +182,9 @@ class _TopHudBar extends StatelessWidget {
               color: online ? ironGreenSoft : Colors.orangeAccent,
               boxShadow: [
                 BoxShadow(
-                  color: (online ? ironGreen : Colors.orangeAccent)
-                      .withOpacity(0.9),
+                  color: (online ? ironGreen : Colors.orangeAccent).withOpacity(
+                    0.9,
+                  ),
                   blurRadius: 12,
                   spreadRadius: 1,
                 ),
@@ -228,7 +221,7 @@ class _ExactTitle extends StatelessWidget {
             stops: [0, 0.38, 0.72, 1],
           ).createShader(bounds),
           child: Text(
-            'IRON MUSIC',
+            'IRON',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: compact ? 31 : 38,
@@ -236,37 +229,29 @@ class _ExactTitle extends StatelessWidget {
               fontWeight: FontWeight.w900,
               letterSpacing: compact ? 1.3 : 1.7,
               shadows: const [
-                Shadow(color: Colors.black, blurRadius: 5, offset: Offset(0, 2)),
+                Shadow(
+                  color: Colors.black,
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
               ],
             ),
           ),
         ),
         SizedBox(height: compact ? 1 : 3),
         Text(
-          '420 AI',
+          'MUSIC 420 AI',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: ironGreen,
-            fontSize: compact ? 40 : 49,
+            fontSize: compact ? 25 : 30,
             height: 0.94,
             fontWeight: FontWeight.w900,
-            letterSpacing: compact ? 2.8 : 3.6,
+            letterSpacing: compact ? 1.8 : 2.4,
             shadows: const [
               Shadow(color: ironGreen, blurRadius: 22),
               Shadow(color: ironGreen, blurRadius: 7),
             ],
-          ),
-        ),
-        SizedBox(height: compact ? 5 : 8),
-        Text(
-          'ТВОЯТ AI РАП ПРОДУЦЕНТ',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: ironGreenSoft.withOpacity(0.88),
-            fontSize: compact ? 9.5 : 11,
-            fontWeight: FontWeight.w900,
-            letterSpacing: compact ? 1.9 : 2.5,
-            shadows: const [Shadow(color: ironGreen, blurRadius: 8)],
           ),
         ),
       ],
@@ -278,10 +263,7 @@ class _ApiStatusCard extends StatelessWidget {
   final bool hasApiKey;
   final bool compact;
 
-  const _ApiStatusCard({
-    required this.hasApiKey,
-    required this.compact,
-  });
+  const _ApiStatusCard({required this.hasApiKey, required this.compact});
 
   @override
   Widget build(BuildContext context) {
@@ -316,9 +298,7 @@ class _ApiStatusCard extends StatelessWidget {
               border: Border.all(color: accent.withOpacity(0.5)),
             ),
             child: Icon(
-              hasApiKey
-                  ? Icons.verified_user_outlined
-                  : Icons.key_off_outlined,
+              hasApiKey ? Icons.verified_user_outlined : Icons.key_off_outlined,
               color: accent,
               size: compact ? 21 : 25,
             ),
@@ -332,9 +312,7 @@ class _ApiStatusCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    hasApiKey
-                        ? 'API ключът е запазен'
-                        : 'Gemini API ключ липсва',
+                    hasApiKey ? 'Iron е готов' : 'Добави Gemini ключ',
                     maxLines: 1,
                     style: TextStyle(
                       color: accent,
@@ -348,7 +326,7 @@ class _ApiStatusCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Gemini Flash • Български глас',
+                    hasApiKey ? 'Чат и глас' : 'Отвори Чат → Настройки',
                     maxLines: 1,
                     style: TextStyle(
                       color: Colors.white60,
@@ -377,14 +355,12 @@ class _ApiStatusCard extends StatelessWidget {
 class _ExactActionCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
   final bool compact;
   final VoidCallback onTap;
 
   const _ExactActionCard({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.compact,
     required this.onTap,
   });
@@ -404,11 +380,7 @@ class _ExactActionCard extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xF00A2915),
-                Color(0xF004160B),
-                Color(0xF0010905),
-              ],
+              colors: [Color(0xF00A2915), Color(0xF004160B), Color(0xF0010905)],
             ),
             border: Border.all(color: ironGreen.withOpacity(0.72)),
             boxShadow: [
@@ -472,44 +444,18 @@ class _ExactActionCard extends StatelessWidget {
                     ),
                     SizedBox(width: compact ? 8 : 10),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                title,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: compact ? 12.5 : 14,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: compact ? 15 : 17,
+                            fontWeight: FontWeight.w800,
                           ),
-                          SizedBox(height: compact ? 2 : 4),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                subtitle,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: compact ? 9.5 : 11,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],

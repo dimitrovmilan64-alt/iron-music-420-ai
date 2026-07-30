@@ -287,10 +287,9 @@ class _SongsPageState extends State<SongsPage> {
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 112),
             children: [
               PageTitle(
-                eyebrow: 'ЛИЧНА БИБЛИОТЕКА',
-                title: 'Моите песни',
-                subtitle:
-                    '${widget.store.songProjects.length} запазени проекта • локално',
+                eyebrow: 'IRON',
+                title: 'Песни',
+                subtitle: '${widget.store.songProjects.length} запазени',
                 trailing: IconButton.filledTonal(
                   tooltip: 'Нов проект',
                   onPressed: () async {
@@ -306,7 +305,7 @@ class _SongsPageState extends State<SongsPage> {
                 onChanged: (value) => setState(() => _query = value),
                 cursorColor: ironGreen,
                 decoration: InputDecoration(
-                  hintText: 'Търси песни и проекти...',
+                  hintText: 'Търси песен',
                   prefixIcon: const Icon(Icons.search, color: ironGreen),
                   suffixIcon: _query.isEmpty
                       ? const Icon(Icons.tune, color: Colors.white38)
@@ -318,26 +317,6 @@ class _SongsPageState extends State<SongsPage> {
                           icon: const Icon(Icons.close),
                         ),
                 ),
-              ),
-              const SizedBox(height: 13),
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: [
-                  NeonPill(
-                    text: 'ВСИЧКИ ${songs.length}',
-                    icon: Icons.grid_view_rounded,
-                    active: true,
-                  ),
-                  NeonPill(
-                    text: 'SUNO',
-                    icon: Icons.music_note,
-                  ),
-                  NeonPill(
-                    text: 'DRAFT',
-                    icon: Icons.edit_note,
-                  ),
-                ],
               ),
               const SizedBox(height: 16),
               if (songs.isEmpty)
@@ -365,7 +344,7 @@ class _SongsPageState extends State<SongsPage> {
                       if (_query.isEmpty) ...[
                         const SizedBox(height: 8),
                         const Text(
-                          'Създай песен в Rap Studio и натисни „Запази песен“.',
+                          'Създай песен в Студио и натисни „Запази“.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white60),
                         ),
@@ -485,7 +464,8 @@ class _SongProjectCard extends StatelessWidget {
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'open', child: Text('Отвори')),
                   PopupMenuItem(value: 'edit', child: Text('Редактирай')),
-                  PopupMenuItem(value: 'copy', child: Text('Копирай Suno пакет')),
+                  PopupMenuItem(
+                      value: 'copy', child: Text('Копирай Suno пакет')),
                   PopupMenuItem(value: 'export', child: Text('TXT експорт')),
                   PopupMenuItem(value: 'delete', child: Text('Изтрий')),
                 ],
@@ -682,8 +662,7 @@ class _SongCoverPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     final path = Path()..moveTo(0, size.height * 0.72);
     for (double x = 0; x <= size.width; x += 4) {
-      final y = size.height * 0.72 +
-          math.sin((x + seed.abs() % 20) / 6) * 4;
+      final y = size.height * 0.72 + math.sin((x + seed.abs() % 20) / 6) * 4;
       path.lineTo(x, y);
     }
     canvas.drawPath(path, wave);

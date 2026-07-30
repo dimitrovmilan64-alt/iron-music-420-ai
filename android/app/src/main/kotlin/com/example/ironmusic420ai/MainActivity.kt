@@ -7,8 +7,10 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.provider.AlarmClock
 import android.provider.Settings
+import android.speech.SpeechRecognizer
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -20,19 +22,40 @@ class MainActivity : FlutterActivity() {
     private val channelName = "iron_music_420/automations"
     private var pendingFlashResult: MethodChannel.Result? = null
     private var pendingFlashEnabled = false
+    private var pendingVoiceResult: MethodChannel.Result? = null
+    private var pendingIronSection: Int? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        captureIronSection(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
-                if (call.method != "execute") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
+                when (call.method) {
+                    "execute" -> {
+                        val action = call.argument<String>("action").orEmpty()
+                        val command = call.argument<String>("command").orEmpty()
+                        executeAction(action, command, result)
+                    }
+                    "consumeIronSection" -> {
+                        result.success(pendingIronSection)
+                        pendingIronSection = null
+                    }
+                    else -> result.notImplemented()
                 }
-                val action = call.argument<String>("action").orEmpty()
-                val command = call.argument<String>("command").orEmpty()
-                executeAction(action, command, result)
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureIronSection(intent)
+    }
+
+    private fun captureIronSection(intent: Intent?) {
+        val section = intent?.getIntExtra("iron_section", -1) ?: -1
+        if (section in 0..4) {
+            pendingIronSection = section
+        }
     }
 
     private fun executeAction(
@@ -84,8 +107,7 @@ class MainActivity : FlutterActivity() {
                     result.success("Телефонът е отворен.")
                 }
                 "alarms" -> {
-                    startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS))
-                    result.success("Алармите са отворени.")
+                    openAlarms(result)
                 }
                 "calendar" -> {
                     val intent = Intent(Intent.ACTION_MAIN).apply {
@@ -113,7 +135,7 @@ class MainActivity : FlutterActivity() {
                     result.success("Нормалното изгасване на екрана е възстановено.")
                 }
                 "music_mode" -> {
-                    // v2.5.3: Music Mode is controlled only by the user's MacroDroid macro.
+                    // Music Mode is controlled only by the user's Automate flow.
                     // This avoids opening Spotify or any web fallback from Iron Music.
                     sendMusicModeBroadcast(result)
                 }
@@ -129,13 +151,25 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
                     result.success("Night Mode: звукът е намален и настройките за „Не безпокой“ са отворени.")
                 }
-                "open_macrodroid" -> openPackageOrUrl(
-                    "com.arlosoft.macrodroid",
-                    "https://play.google.com/store/apps/details?id=com.arlosoft.macrodroid",
-                    "MacroDroid е отворен.",
+                "iron_voice_status" -> {
+                    result.success(if (IronVoiceService.isRunning) "active" else "inactive")
+                }
+                "iron_voice_on" -> startIronVoice(result)
+                "iron_voice_off" -> {
+                    stopService(
+                        Intent(this, IronVoiceService::class.java).apply {
+                            action = IronVoiceService.ACTION_STOP
+                        }
+                    )
+                    result.success("Iron е спрян.")
+                }
+                "open_automate" -> openPackageOrUrl(
+                    "com.llamalab.automate",
+                    "market://details?id=com.llamalab.automate",
+                    "Automate е отворен.",
                     result
                 )
-                "macrodroid_broadcast" -> sendMacroDroidCommand(command, result)
+                "macrodroid_broadcast" -> sendAutomationCommand(command, result)
                 else -> result.error(
                     "UNKNOWN_ACTION",
                     "Непозната автоматизация.",
@@ -160,25 +194,68 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private fun sendMacroDroidCommand(
+    private fun startIronVoice(result: MethodChannel.Result) {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            result.error(
+                "SPEECH_RECOGNIZER_UNAVAILABLE",
+                "Телефонът няма активна услуга за гласово разпознаване.",
+                null
+            )
+            return
+        }
+        val missingPermissions = mutableListOf<String>()
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            missingPermissions.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (missingPermissions.isNotEmpty()) {
+            pendingVoiceResult = result
+            ActivityCompat.requestPermissions(
+                this,
+                missingPermissions.toTypedArray(),
+                4202
+            )
+            return
+        }
+        launchIronVoiceService(result)
+    }
+
+    private fun launchIronVoiceService(result: MethodChannel.Result) {
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, IronVoiceService::class.java).apply {
+                action = IronVoiceService.ACTION_START
+            }
+        )
+        result.success("Iron е активен. Кажи „Хей, Iron“.")
+    }
+
+    private fun sendAutomationCommand(
         command: String,
         result: MethodChannel.Result
     ) {
         if (command.isBlank()) {
             result.error(
                 "EMPTY_COMMAND",
-                "Въведи име на MacroDroid командата.",
+                "Въведи име на Automate командата.",
                 null
             )
             return
         }
         val intent = Intent("com.ironmusic420ai.MACRODROID_COMMAND").apply {
-            setPackage("com.arlosoft.macrodroid")
             putExtra("command", command)
-            putExtra("source", "Iron Music 420 AI")
         }
         sendBroadcast(intent)
-        result.success("Командата „$command“ е изпратена към MacroDroid.")
+        result.success("Командата „$command“ е изпратена към Automate.")
     }
 
     private fun sendMusicModeBroadcast(result: MethodChannel.Result) {
@@ -186,7 +263,33 @@ class MainActivity : FlutterActivity() {
             putExtra("command", "music_mode_420")
         }
         sendBroadcast(intent)
-        result.success("Music Mode е изпратен към MacroDroid.")
+        result.success("Музикалният режим е изпратен към Automate.")
+    }
+
+    private fun openAlarms(result: MethodChannel.Result) {
+        val intents = listOf(
+            Intent.makeMainSelectorActivity(
+                Intent.ACTION_MAIN,
+                Intent.CATEGORY_APP_CLOCK
+            ),
+            Intent(AlarmClock.ACTION_SHOW_ALARMS)
+        )
+        for (intent in intents) {
+            try {
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    result.success("Алармите са отворени.")
+                    return
+                }
+            } catch (_: Exception) {
+                // Some Android manufacturers block one of the clock intents.
+            }
+        }
+        result.error(
+            "ALARMS_UNAVAILABLE",
+            "Приложението за часовник не е достъпно.",
+            null
+        )
     }
 
     private fun setFlashlight(enabled: Boolean, result: MethodChannel.Result) {
@@ -237,23 +340,47 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 4201) return
-        val result = pendingFlashResult ?: return
-        pendingFlashResult = null
-        if (grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            try {
-                toggleFlash(pendingFlashEnabled, result)
-            } catch (error: Exception) {
-                result.error("FLASH_ERROR", error.localizedMessage, null)
+        when (requestCode) {
+            4201 -> {
+                val result = pendingFlashResult ?: return
+                pendingFlashResult = null
+                if (grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        toggleFlash(pendingFlashEnabled, result)
+                    } catch (error: Exception) {
+                        result.error("FLASH_ERROR", error.localizedMessage, null)
+                    }
+                } else {
+                    result.error(
+                        "CAMERA_PERMISSION",
+                        "Разреши достъп до камерата, за да работи фенерчето.",
+                        null
+                    )
+                }
             }
-        } else {
-            result.error(
-                "CAMERA_PERMISSION",
-                "Разреши достъп до камерата, за да работи фенерчето.",
-                null
-            )
+            4202 -> {
+                val result = pendingVoiceResult ?: return
+                pendingVoiceResult = null
+                if (ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        launchIronVoiceService(result)
+                    } catch (error: Exception) {
+                        result.error("IRON_VOICE_ERROR", error.localizedMessage, null)
+                    }
+                } else {
+                    result.error(
+                        "MICROPHONE_PERMISSION",
+                        "Разреши микрофона, за да работи „Хей, Iron“.",
+                        null
+                    )
+                }
+            }
         }
     }
 }

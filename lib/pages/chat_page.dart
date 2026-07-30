@@ -149,8 +149,7 @@ class _ChatPageState extends State<ChatPage> {
       var selectedLocale = _selectedVoiceLocale;
       final savedVoiceExists = found.any(
         (voice) =>
-            voice['name'] == selectedName &&
-            voice['locale'] == selectedLocale,
+            voice['name'] == selectedName && voice['locale'] == selectedLocale,
       );
 
       if (!savedVoiceExists && found.isNotEmpty) {
@@ -201,9 +200,8 @@ class _ChatPageState extends State<ChatPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final selectedKey = tempVoiceName.isEmpty
-              ? null
-              : '$tempVoiceName|$tempVoiceLocale';
+          final selectedKey =
+              tempVoiceName.isEmpty ? null : '$tempVoiceName|$tempVoiceLocale';
           final validSelectedKey = _bulgarianVoices.any(
             (voice) => _voiceKey(voice) == selectedKey,
           )
@@ -709,10 +707,10 @@ class _ChatPageState extends State<ChatPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: PageTitle(
-              eyebrow: 'JARVIS MUSIC MODE',
-              title: 'AI Chat v2.5.3',
+              eyebrow: 'IRON',
+              title: 'Чат',
               subtitle: _gemini.activeModel == null
-                  ? 'Gemini Flash + български глас'
+                  ? 'Пиши или говори'
                   : 'Модел: ${_gemini.activeModel}',
               trailing: PopupMenuButton<String>(
                 tooltip: 'Настройки',
@@ -759,20 +757,10 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   label: Text(
                     widget.store.voiceRepliesEnabled
-                        ? (_voiceReady ? 'Глас ВКЛ' : 'Глас системен')
-                        : 'Глас ИЗКЛ',
+                        ? (_voiceReady ? 'Глас включен' : 'Системен глас')
+                        : 'Глас изключен',
                   ),
                   onPressed: _toggleVoiceReplies,
-                ),
-                Chip(
-                  avatar: Icon(
-                    _speechAvailable ? Icons.mic : Icons.mic_off,
-                    size: 18,
-                    color: _speechAvailable
-                        ? ironGreen
-                        : Colors.orangeAccent,
-                  ),
-                  label: Text(_speechAvailable ? 'BG микрофон' : 'Без микрофон'),
                 ),
               ],
             ),
@@ -783,8 +771,7 @@ class _ChatPageState extends State<ChatPage> {
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
@@ -841,11 +828,13 @@ class _ChatPageState extends State<ChatPage> {
                       fillColor: const Color(0xFF010A05).withOpacity(0.94),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: ironGreen.withOpacity(0.28)),
+                        borderSide:
+                            BorderSide(color: ironGreen.withOpacity(0.28)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: const BorderSide(color: ironGreen, width: 1.5),
+                        borderSide:
+                            const BorderSide(color: ironGreen, width: 1.5),
                       ),
                     ),
                     onSubmitted: (_) => _sendMessage(),
@@ -912,7 +901,8 @@ class _ChatBubble extends StatelessWidget {
           border: Border.all(color: borderColor.withOpacity(0.8)),
           boxShadow: [
             BoxShadow(
-              color: (message.isUser ? ironGreen : Colors.black).withOpacity(0.08),
+              color:
+                  (message.isUser ? ironGreen : Colors.black).withOpacity(0.08),
               blurRadius: 12,
               offset: const Offset(0, 5),
             ),
@@ -941,7 +931,8 @@ class _ChatBubble extends StatelessWidget {
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Съобщението е копирано.')),
+                        const SnackBar(
+                            content: Text('Съобщението е копирано.')),
                       );
                     }
                   },
