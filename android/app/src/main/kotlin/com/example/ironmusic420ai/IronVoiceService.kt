@@ -52,6 +52,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         private const val NOTIFICATION_ID = 2420
         private const val WAKE_SAMPLE_RATE = 16_000
         private const val WAKE_FRAME_SAMPLES = 1_600
+        private const val COMMAND_TIMEOUT_MS = 30_000L
+        private const val CONVERSATION_WINDOW_MS = 180_000L
+        private const val CONVERSATION_TURNS = 10
         private const val MODEL_DIR =
             "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
     }
@@ -80,8 +83,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var foregroundStarted = false
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
-    private var followUpListening = false
-    private var lastPartialCommand = ""
+    private var conversationExpiresAt = 0L
+    private var conversationTurnsRemaining = 0
+    private val pendingCommandParts = mutableListOf<String>()
+    private var ignoreNextRecognitionError = false
 
     @Volatile
     private var wakeWordActive = false
@@ -98,28 +103,22 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private val beginWakeWordListening = Runnable {
         startWakeWordListening()
     }
+    private val finalizePendingCommand = Runnable {
+        finalizePendingCommandNow()
+    }
     private val recognitionTimeout = Runnable {
-        if (!isListening || isSpeaking) return@Runnable
-        isListening = false
-        recognizer?.cancel()
-
-        val partial = lastPartialCommand.trim()
-        lastPartialCommand = ""
-        if (partial.isNotBlank()) {
-            runVoiceCommand(partial)
+        if (pendingCommandParts.isNotEmpty()) {
+            finalizePendingCommandNow()
             return@Runnable
         }
-
+        if (!isListening || isSpeaking) return@Runnable
+        isListening = false
+        ignoreNextRecognitionError = true
+        recognizer?.cancel()
+        endConversation()
         voiceState = VoiceState.WAITING_FOR_WAKE
-        if (followUpListening) {
-            followUpListening = false
-            updateNotification("Iron чака „Hey Iron“")
-            scheduleWakeWordListening(350)
-        } else {
-            speak("Не чух какво каза.") {
-                scheduleWakeWordListening(450)
-            }
-        }
+        updateNotification("Iron чака „Hey Iron“")
+        scheduleWakeWordListening(450)
     }
 
     override fun onCreate() {
@@ -533,12 +532,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        followUpListening = false
-        lastPartialCommand = ""
+        beginConversation()
         voiceState = VoiceState.WAITING_FOR_COMMAND
-        updateNotification("„Hey Iron“ е разпознат • слушам те")
+        updateNotification("„Hey Iron“ е разпознат • разговорът започна")
         speak("Слушам") {
-            scheduleCommandListening(220)
+            scheduleCommandListening(260)
         }
     }
 
@@ -577,26 +575,19 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             )
             putExtra(
                 RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                2_800L,
+                3_500L,
             )
             putExtra(
                 RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                4_500L,
+                5_500L,
             )
         }
 
         try {
-            lastPartialCommand = ""
             isListening = true
-            updateNotification(
-                if (followUpListening) {
-                    "Iron е в разговор • говори спокойно"
-                } else {
-                    "Iron слуша • можеш да говориш по-дълго"
-                },
-            )
+            updateNotification("Iron слуша командата")
             currentRecognizer.startListening(recognitionIntent)
-            handler.postDelayed(recognitionTimeout, 35_000)
+            handler.postDelayed(recognitionTimeout, COMMAND_TIMEOUT_MS)
         } catch (_: Exception) {
             isListening = false
             voiceState = VoiceState.WAITING_FOR_WAKE
@@ -605,6 +596,82 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 scheduleWakeWordListening(1_200)
             }
         }
+    }
+
+    private fun beginConversation() {
+        pendingCommandParts.clear()
+        handler.removeCallbacks(finalizePendingCommand)
+        conversationExpiresAt = System.currentTimeMillis() + CONVERSATION_WINDOW_MS
+        conversationTurnsRemaining = CONVERSATION_TURNS
+        aiRouter.resetConversation()
+    }
+
+    private fun isConversationActive(): Boolean =
+        conversationTurnsRemaining > 0 &&
+            System.currentTimeMillis() < conversationExpiresAt
+
+    private fun endConversation() {
+        pendingCommandParts.clear()
+        handler.removeCallbacks(finalizePendingCommand)
+        conversationExpiresAt = 0L
+        conversationTurnsRemaining = 0
+        aiRouter.resetConversation()
+    }
+
+    private fun continueConversationOrWake(delayMillis: Long = 650) {
+        if (isConversationActive()) {
+            conversationTurnsRemaining--
+            conversationExpiresAt = System.currentTimeMillis() + CONVERSATION_WINDOW_MS
+            voiceState = VoiceState.WAITING_FOR_COMMAND
+            updateNotification("Iron е в разговор • говори")
+            scheduleCommandListening(delayMillis)
+        } else {
+            endConversation()
+            voiceState = VoiceState.WAITING_FOR_WAKE
+            updateNotification("Iron чака „Hey Iron“")
+            scheduleWakeWordListening(delayMillis)
+        }
+    }
+
+    private fun isStopConversationCommand(command: String): Boolean {
+        return command == "стоп" ||
+            command == "край" ||
+            command.contains("спри разговора") ||
+            command.contains("приключи разговора") ||
+            command.contains("стига толкова") ||
+            command.contains("чао айрън")
+    }
+
+    private fun queueRecognizedPhrase(phrase: String) {
+        val clean = phrase.trim()
+        if (clean.isBlank()) return
+
+        val normalized = normalize(clean)
+        val duplicate = pendingCommandParts.any { normalize(it) == normalized }
+        if (!duplicate) pendingCommandParts.add(clean)
+
+        voiceState = VoiceState.WAITING_FOR_COMMAND
+        updateNotification("Iron изчаква да довършиш…")
+        handler.removeCallbacks(finalizePendingCommand)
+        handler.postDelayed(finalizePendingCommand, 3_400L)
+        scheduleCommandListening(280)
+    }
+
+    private fun finalizePendingCommandNow() {
+        if (pendingCommandParts.isEmpty()) return
+
+        handler.removeCallbacks(finalizePendingCommand)
+        handler.removeCallbacks(recognitionTimeout)
+        val shouldCancel = isListening
+        isListening = false
+        if (shouldCancel) {
+            ignoreNextRecognitionError = true
+            recognizer?.cancel()
+        }
+
+        val command = pendingCommandParts.joinToString(" ").trim()
+        pendingCommandParts.clear()
+        if (command.isNotBlank()) runVoiceCommand(command)
     }
 
     private fun scheduleCommandListening(delayMillis: Long = 250) {
@@ -636,56 +703,34 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         if (phrases.isEmpty()) {
             if (isFinal) {
                 isListening = false
-                voiceState = VoiceState.WAITING_FOR_WAKE
-                if (followUpListening) {
-                    followUpListening = false
-                    scheduleWakeWordListening(350)
+                if (isConversationActive()) {
+                    voiceState = VoiceState.WAITING_FOR_COMMAND
+                    scheduleCommandListening(650)
                 } else {
-                    speak("Не чух какво каза.") {
-                        scheduleWakeWordListening(450)
-                    }
+                    voiceState = VoiceState.WAITING_FOR_WAKE
+                    scheduleWakeWordListening(450)
                 }
             }
             return
         }
 
-        lastPartialCommand = phrases.first()
         if (isFinal) {
             isListening = false
-            val finalCommand = lastPartialCommand
-            lastPartialCommand = ""
-            runVoiceCommand(finalCommand)
+            queueRecognizedPhrase(phrases.first())
         }
     }
 
     private fun runVoiceCommand(command: String) {
+        voiceState = VoiceState.WAITING_FOR_WAKE
         val originalCommand = command.trim()
         val normalizedCommand = normalize(originalCommand)
 
-        if (
-            normalizedCommand == "стоп" ||
-            normalizedCommand == "край" ||
-            normalizedCommand == "стига" ||
-            normalizedCommand.contains("спри разговора") ||
-            normalizedCommand.contains("това е всичко")
-        ) {
-            followUpListening = false
-            voiceState = VoiceState.WAITING_FOR_WAKE
+        if (isStopConversationCommand(normalizedCommand)) {
+            endConversation()
             speak("Добре.") {
-                scheduleWakeWordListening(350)
+                voiceState = VoiceState.WAITING_FOR_WAKE
+                scheduleWakeWordListening(450)
             }
-            return
-        }
-
-        if (
-            normalizedCommand == "нова тема" ||
-            normalizedCommand.contains("започни нов разговор")
-        ) {
-            aiRouter.clearConversation()
-            finishVoiceTurn(
-                reply = "Добре, започваме начисто. Кажи.",
-                continueConversation = true,
-            )
             return
         }
 
@@ -696,11 +741,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             } else {
                 localReply
             }
-            finishVoiceTurn(reply, continueConversation = false)
+            speak(reply) {
+                continueConversationOrWake(650)
+            }
             return
         }
 
-        voiceState = VoiceState.WAITING_FOR_WAKE
         isAiProcessing = true
         updateNotification("Iron мисли с AI…")
 
@@ -719,10 +765,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     val decision = result.getOrNull()
                     if (decision != null) {
                         val reply = executeAiDecision(decision)
-                        finishVoiceTurn(
-                            reply = reply,
-                            continueConversation = decision.action == "reply",
-                        )
+                        speak(reply) {
+                            continueConversationOrWake(650)
+                        }
                         return@post
                     }
 
@@ -736,37 +781,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                             error.message ?: "AI временно не отговаря. Опитай пак."
                         else -> "AI временно не отговаря. Опитай пак."
                     }
-                    finishVoiceTurn(reply, continueConversation = false)
+                    speak(reply) {
+                        continueConversationOrWake(900)
+                    }
                 }
             },
             "IronAiRouter",
         ).apply {
             isDaemon = true
             start()
-        }
-    }
-
-    private fun finishVoiceTurn(
-        reply: String,
-        continueConversation: Boolean,
-    ) {
-        val spokenReply = reply.ifBlank { "Готово." }
-        followUpListening = continueConversation
-
-        if (continueConversation) {
-            voiceState = VoiceState.WAITING_FOR_COMMAND
-            updateNotification("Iron отговаря • после можеш да продължиш")
-            speak(spokenReply) {
-                if (!isRunning) return@speak
-                voiceState = VoiceState.WAITING_FOR_COMMAND
-                updateNotification("Iron е в разговор • говори спокойно")
-                scheduleCommandListening(650)
-            }
-        } else {
-            voiceState = VoiceState.WAITING_FOR_WAKE
-            speak(spokenReply) {
-                scheduleWakeWordListening(450)
-            }
         }
     }
 
@@ -788,33 +811,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     )
                     decision.reply.ifBlank { "Търся в YouTube." }
                 }
-                "spotify" -> {
-                    launchPackageOrUri(
-                        packageName = "com.spotify.music",
-                        fallbackUri = "https://open.spotify.com",
-                    )
-                    decision.reply.ifBlank { "Отварям Spotify." }
-                }
-                "spotify_search" -> {
-                    val query = decision.argument.ifBlank { return "Какво да търся в Spotify?" }
-                    val spotifyIntent = Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("spotify:search:${Uri.encode(query)}"),
-                    ).apply {
-                        setPackage("com.spotify.music")
-                    }
-                    if (spotifyIntent.resolveActivity(packageManager) != null) {
-                        launch(spotifyIntent)
-                    } else {
-                        launch(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://open.spotify.com/search/${Uri.encode(query)}"),
-                            ),
-                        )
-                    }
-                    decision.reply.ifBlank { "Търся в Spotify." }
-                }
                 "chrome" -> {
                     launchPackage("com.android.chrome")
                     decision.reply.ifBlank { "Отварям браузъра." }
@@ -835,14 +831,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     launch(Intent("android.media.action.IMAGE_CAPTURE"))
                     decision.reply.ifBlank { "Отварям камерата." }
                 }
-                "gallery" -> {
-                    launch(
-                        Intent(Intent.ACTION_PICK).apply {
-                            type = "image/*"
-                        },
-                    )
-                    decision.reply.ifBlank { "Отварям снимките." }
-                }
                 "maps" -> {
                     openMaps("")
                     decision.reply.ifBlank { "Отварям картите." }
@@ -855,14 +843,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 "alarms" -> {
                     launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
                     decision.reply.ifBlank { "Отварям алармите." }
-                }
-                "set_alarm" -> {
-                    setAlarm(decision.argument)
-                    decision.reply.ifBlank { "Алармата е подготвена." }
-                }
-                "set_timer" -> {
-                    setTimer(decision.argument)
-                    decision.reply.ifBlank { "Таймерът е стартиран." }
                 }
                 "calendar" -> {
                     launch(
@@ -881,45 +861,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     if (number.isBlank()) return "Не разбрах телефонния номер."
                     launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
                     decision.reply.ifBlank { "Подготвям номера за набиране." }
-                }
-                "contacts" -> {
-                    launch(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("content://contacts/people"),
-                        ),
-                    )
-                    decision.reply.ifBlank { "Отварям контактите." }
-                }
-                "email" -> {
-                    launch(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")))
-                    decision.reply.ifBlank { "Отварям имейла." }
-                }
-                "messages" -> {
-                    launch(
-                        Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_APP_MESSAGING)
-                        },
-                    )
-                    decision.reply.ifBlank { "Отварям съобщенията." }
-                }
-                "calculator" -> {
-                    launch(
-                        Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_APP_CALCULATOR)
-                        },
-                    )
-                    decision.reply.ifBlank { "Отварям калкулатора." }
-                }
-                "play_store" -> {
-                    val query = decision.argument.ifBlank { return "Кое приложение да потърся?" }
-                    launch(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("market://search?q=${Uri.encode(query)}"),
-                        ),
-                    )
-                    decision.reply.ifBlank { "Търся приложението." }
                 }
                 "bluetooth" -> {
                     launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
@@ -987,56 +928,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         } catch (_: Exception) {
             "Това действие не е достъпно на телефона."
         }
-    }
-
-    private fun launchPackageOrUri(
-        packageName: String,
-        fallbackUri: String,
-    ) {
-        val packageIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (packageIntent != null) {
-            launch(packageIntent)
-        } else {
-            launch(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUri)))
-        }
-    }
-
-    private fun setAlarm(argument: String) {
-        val parts = argument.split("|", limit = 2)
-        val timeParts = parts.firstOrNull().orEmpty().split(":", limit = 2)
-        val hour = timeParts.getOrNull(0)?.toIntOrNull()
-            ?: throw IllegalArgumentException("Missing alarm hour")
-        val minute = timeParts.getOrNull(1)?.toIntOrNull()
-            ?: throw IllegalArgumentException("Missing alarm minute")
-        val label = parts.getOrNull(1).orEmpty().trim()
-
-        launch(
-            Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_HOUR, hour.coerceIn(0, 23))
-                putExtra(AlarmClock.EXTRA_MINUTES, minute.coerceIn(0, 59))
-                if (label.isNotBlank()) {
-                    putExtra(AlarmClock.EXTRA_MESSAGE, label.take(100))
-                }
-                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            },
-        )
-    }
-
-    private fun setTimer(argument: String) {
-        val parts = argument.split("|", limit = 2)
-        val seconds = parts.firstOrNull()?.trim()?.toIntOrNull()
-            ?: throw IllegalArgumentException("Missing timer duration")
-        val label = parts.getOrNull(1).orEmpty().trim()
-
-        launch(
-            Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                putExtra(AlarmClock.EXTRA_LENGTH, seconds.coerceIn(1, 86_400))
-                if (label.isNotBlank()) {
-                    putExtra(AlarmClock.EXTRA_MESSAGE, label.take(100))
-                }
-                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            },
-        )
     }
 
     private fun openMaps(query: String) {
@@ -1403,23 +1294,30 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onReadyForSpeech(params: Bundle?) = Unit
-
-    override fun onBeginningOfSpeech() {
-        handler.removeCallbacks(recognitionTimeout)
-        handler.postDelayed(recognitionTimeout, 35_000)
-        updateNotification("Iron те слуша • довърши спокойно")
-    }
+    override fun onBeginningOfSpeech() = Unit
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
 
     override fun onEndOfSpeech() {
-        updateNotification("Iron обработва казаното…")
+        // Keep the recognizer marked busy until onResults/onError arrives.
     }
 
     override fun onError(error: Int) {
         handler.removeCallbacks(recognitionTimeout)
         isListening = false
+        if (ignoreNextRecognitionError) {
+            ignoreNextRecognitionError = false
+            return
+        }
         if (isSpeaking) return
+
+        if (pendingCommandParts.isNotEmpty() &&
+            (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+        ) {
+            handler.postDelayed(finalizePendingCommand, 450L)
+            return
+        }
 
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
             stopSelf()
@@ -1435,36 +1333,23 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             resetRecognizer()
         }
 
-        val partial = lastPartialCommand.trim()
-        lastPartialCommand = ""
-        if (
-            partial.isNotBlank() &&
-            (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
-        ) {
-            runVoiceCommand(partial)
-            return
-        }
-
-        voiceState = VoiceState.WAITING_FOR_WAKE
-
         if (
             error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
         ) {
-            if (followUpListening) {
-                followUpListening = false
-                updateNotification("Iron чака „Hey Iron“")
-                scheduleWakeWordListening(350)
+            if (isConversationActive()) {
+                voiceState = VoiceState.WAITING_FOR_COMMAND
+                updateNotification("Iron е в разговор • слушам")
+                scheduleCommandListening(750)
             } else {
-                speak("Не чух какво каза.") {
-                    scheduleWakeWordListening(450)
-                }
+                voiceState = VoiceState.WAITING_FOR_WAKE
+                scheduleWakeWordListening(450)
             }
             return
         }
 
-        followUpListening = false
+        endConversation()
+        voiceState = VoiceState.WAITING_FOR_WAKE
         scheduleWakeWordListening(
             when (error) {
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1_200
@@ -1488,10 +1373,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onPartialResults(partialResults: Bundle?) {
         processRecognition(partialResults, isFinal = false)
-        if (lastPartialCommand.isNotBlank()) {
-            handler.removeCallbacks(recognitionTimeout)
-            handler.postDelayed(recognitionTimeout, 16_000)
-        }
     }
 
     override fun onEvent(eventType: Int, params: Bundle?) = Unit

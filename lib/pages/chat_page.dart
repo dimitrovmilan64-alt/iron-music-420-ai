@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -22,7 +20,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   static const _welcomeText =
-      'Готов съм. Говори ми свободно на български — пазя контекста на разговора.';
+      'Аз съм Iron. Говори ми естествено на български — помня разговора и мога да продължавам по контекста.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
@@ -39,8 +37,9 @@ class _ChatPageState extends State<ChatPage> {
   bool _speechAvailable = false;
   bool _voiceReady = false;
   bool _speechSendTriggered = false;
-  bool _continuousConversation = true;
-  Timer? _speechSendTimer;
+  bool _conversationMode = false;
+  bool _ironActive = false;
+  bool _ironBusy = false;
   String _bulgarianLocale = 'bg_BG';
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
@@ -73,11 +72,11 @@ class _ChatPageState extends State<ChatPage> {
     _selectedVoiceLocale = widget.store.ttsVoiceLocale;
     _configureBulgarianVoice();
     _prepareSpeechRecognition();
+    _loadIronStatus();
   }
 
   @override
   void dispose() {
-    _speechSendTimer?.cancel();
     _flutterTts.stop();
     _speechToText.stop();
     _gemini.dispose();
@@ -353,7 +352,7 @@ class _ChatPageState extends State<ChatPage> {
                 _messageController.text.trim().isNotEmpty;
             setState(() => _isListening = false);
             if (shouldAutoSend) {
-              _scheduleRecognizedSpeechSend();
+              Future.microtask(_sendRecognizedSpeech);
             }
           }
         },
@@ -418,12 +417,49 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _scheduleRecognizedSpeechSend() {
-    _speechSendTimer?.cancel();
-    _speechSendTimer = Timer(
-      const Duration(milliseconds: 900),
-      _sendRecognizedSpeech,
+  Future<void> _loadIronStatus() async {
+    final active = await _automation.isIronVoiceActive();
+    if (!mounted) return;
+    setState(() => _ironActive = active);
+  }
+
+  Future<void> _toggleIron() async {
+    if (_ironBusy) return;
+    setState(() => _ironBusy = true);
+    final result = await _automation.execute(
+      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
     );
+    if (!mounted) return;
+    setState(() {
+      _ironBusy = false;
+      if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
+  }
+
+  Future<void> _toggleConversationMode() async {
+    final enabled = !_conversationMode;
+    setState(() => _conversationMode = enabled);
+
+    if (!enabled) {
+      await _speechToText.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+
+    if (!_isLoading && !_speechToText.isListening) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (mounted && _conversationMode) await _toggleListening();
+    }
+  }
+
+  void _scheduleConversationListening() {
+    if (!_conversationMode) return;
+    Future<void>.delayed(const Duration(milliseconds: 650)).then((_) async {
+      if (!mounted || !_conversationMode || _isLoading) return;
+      if (_speechToText.isListening || _isListening) return;
+      await _toggleListening();
+    });
   }
 
   Future<void> _sendRecognizedSpeech() async {
@@ -431,11 +467,10 @@ class _ChatPageState extends State<ChatPage> {
     if (_messageController.text.trim().isEmpty) return;
 
     _speechSendTriggered = true;
-    _speechSendTimer?.cancel();
     if (mounted) setState(() => _isListening = false);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await Future<void>.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
-    await _sendMessage(fromVoice: true);
+    await _sendMessage();
   }
 
   Future<void> _toggleListening() async {
@@ -468,7 +503,7 @@ class _ChatPageState extends State<ChatPage> {
       await _speechToText.listen(
         localeId: _bulgarianLocale,
         listenFor: const Duration(seconds: 90),
-        pauseFor: const Duration(seconds: 8),
+        pauseFor: const Duration(seconds: 7),
         partialResults: true,
         cancelOnError: true,
         listenMode: stt.ListenMode.dictation,
@@ -483,7 +518,7 @@ class _ChatPageState extends State<ChatPage> {
           });
 
           if (result.finalResult && recognized.isNotEmpty) {
-            _scheduleRecognizedSpeechSend();
+            Future.microtask(_sendRecognizedSpeech);
           }
         },
       );
@@ -519,7 +554,7 @@ class _ChatPageState extends State<ChatPage> {
     _showMessage('API ключът е премахнат.');
   }
 
-  Future<void> _sendMessage({bool fromVoice = false}) async {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading) return;
 
@@ -570,14 +605,6 @@ class _ChatPageState extends State<ChatPage> {
       await widget.store.replaceChatHistory(_messages);
       _scrollToBottom();
       await _speak(reply);
-
-      if (fromVoice && _continuousConversation && mounted) {
-        Future<void>.delayed(const Duration(milliseconds: 650), () {
-          if (mounted && !_isLoading && !_isListening) {
-            _toggleListening();
-          }
-        });
-      }
     } on GeminiException catch (error) {
       if (!mounted) return;
       await _addLocalNotice(error.message);
@@ -588,6 +615,7 @@ class _ChatPageState extends State<ChatPage> {
       if (mounted) {
         setState(() => _isLoading = false);
         _scrollToBottom();
+        _scheduleConversationListening();
       }
     }
   }
@@ -657,7 +685,21 @@ class _ChatPageState extends State<ChatPage> {
 
   Widget _buildApiSection() {
     if (!_showApiBox) {
-      return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            Expanded(
+              child: IronButton(
+                text: 'API ключът е запазен',
+                icon: Icons.lock,
+                secondary: true,
+                onPressed: () => setState(() => _showApiBox = true),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     return Padding(
@@ -721,12 +763,10 @@ class _ChatPageState extends State<ChatPage> {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: PageTitle(
               eyebrow: 'IRON',
-              title: 'AI разговор',
-              subtitle: _isListening
-                  ? 'Слушам — говори спокойно, изчаквам те.'
-                  : _gemini.activeModel == null
-                      ? 'Свободен разговор с контекст'
-                      : 'Онлайн • ${_gemini.activeModel}',
+              title: 'Iron AI',
+              subtitle: _gemini.activeModel == null
+                  ? 'Говори естествено. Не са нужни точни команди.'
+                  : 'Разговорен режим • ${_gemini.activeModel}',
               trailing: PopupMenuButton<String>(
                 tooltip: 'Настройки',
                 icon: const Icon(Icons.more_vert, color: ironGreen),
@@ -764,6 +804,28 @@ class _ChatPageState extends State<ChatPage> {
               children: [
                 ActionChip(
                   avatar: Icon(
+                    _conversationMode ? Icons.forum : Icons.forum_outlined,
+                    size: 18,
+                    color: _conversationMode ? ironGreen : Colors.white54,
+                  ),
+                  label: Text(_conversationMode ? 'Разговор активен' : 'Разговор'),
+                  onPressed: _toggleConversationMode,
+                ),
+                ActionChip(
+                  avatar: Icon(
+                    _ironActive ? Icons.hearing : Icons.hearing_disabled,
+                    size: 18,
+                    color: _ironActive ? ironGreen : Colors.white54,
+                  ),
+                  label: Text(
+                    _ironBusy
+                        ? 'Iron...'
+                        : (_ironActive ? 'Hey Iron активен' : 'Hey Iron спрян'),
+                  ),
+                  onPressed: _ironBusy ? null : _toggleIron,
+                ),
+                ActionChip(
+                  avatar: Icon(
                     widget.store.voiceRepliesEnabled
                         ? Icons.volume_up
                         : Icons.volume_off,
@@ -771,30 +833,9 @@ class _ChatPageState extends State<ChatPage> {
                     color: ironGreen,
                   ),
                   label: Text(
-                    widget.store.voiceRepliesEnabled
-                        ? (_voiceReady ? 'Глас включен' : 'Системен глас')
-                        : 'Глас изключен',
+                    widget.store.voiceRepliesEnabled ? 'Глас' : 'Без глас',
                   ),
                   onPressed: _toggleVoiceReplies,
-                ),
-                ActionChip(
-                  avatar: Icon(
-                    _continuousConversation
-                        ? Icons.record_voice_over_rounded
-                        : Icons.mic_none_rounded,
-                    size: 18,
-                    color: ironGreen,
-                  ),
-                  label: Text(
-                    _continuousConversation
-                        ? 'Продължаващ разговор'
-                        : 'Една реплика',
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _continuousConversation = !_continuousConversation;
-                    });
-                  },
                 ),
               ],
             ),
@@ -850,13 +891,13 @@ class _ChatPageState extends State<ChatPage> {
                   child: TextField(
                     controller: _messageController,
                     minLines: 1,
-                    maxLines: 7,
+                    maxLines: 5,
                     textCapitalization: TextCapitalization.sentences,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: _isListening
-                          ? 'Слушам... можеш да говориш по-дълго'
-                          : 'Кажи или напиши каквото искаш...',
+                          ? 'Слушам на български...'
+                          : 'Питай Iron Music 420 AI...',
                       hintStyle: const TextStyle(color: Colors.white38),
                       filled: true,
                       fillColor: const Color(0xFF010A05).withOpacity(0.94),
@@ -875,17 +916,12 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 const SizedBox(width: 5),
-                SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: IconButton.filledTonal(
-                    tooltip: 'Говори на български',
-                    onPressed: _isLoading ? null : _toggleListening,
-                    icon: Icon(
-                      _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                      color: _isListening ? Colors.redAccent : ironGreen,
-                      size: 26,
-                    ),
+                IconButton.filledTonal(
+                  tooltip: 'Български микрофон',
+                  onPressed: _isLoading ? null : _toggleListening,
+                  icon: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    color: _isListening ? Colors.redAccent : ironGreen,
                   ),
                 ),
                 const SizedBox(width: 3),
