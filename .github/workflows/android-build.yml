@@ -24,8 +24,14 @@ jobs:
           fetch-depth: 0
 
       - name: Restore stable v3.0 UI source and migration
+        id: migration
         shell: bash
         run: |
+          if grep -q '^version: 3.2.0+37$' pubspec.yaml; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "needed=true" >> "$GITHUB_OUTPUT"
           git fetch origin agent/v3-2-clean-ui-from-v3-0
           mkdir -p scripts
           git show origin/agent/v3-2-clean-ui-from-v3-0:scripts/apply_v320_clean_ui.py > scripts/apply_v320_clean_ui.py
@@ -34,73 +40,18 @@ jobs:
           git show 62b3ef3969c9c4448d6f1c077a551c79a480318e:pubspec.yaml > pubspec.yaml
 
       - name: Apply v3.2 clean UI
+        if: steps.migration.outputs.needed == 'true'
         run: python3 scripts/apply_v320_clean_ui.py
 
-      - name: Commit clean source and final workflow
+      - name: Commit clean source
+        if: steps.migration.outputs.needed == 'true'
         shell: bash
         run: |
           rm scripts/apply_v320_clean_ui.py
-          cat > .github/workflows/android-build.yml <<'YAML'
-          name: Android build
-
-          on:
-            push:
-              branches:
-                - main
-            pull_request:
-              branches:
-                - main
-
-          concurrency:
-            group: android-build-${{ github.event.pull_request.number || github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            build-apk:
-              runs-on: ubuntu-latest
-              timeout-minutes: 40
-
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-
-                - name: Set up Java 17
-                  uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-
-                - name: Set up Flutter
-                  uses: subosito/flutter-action@v2
-                  with:
-                    channel: stable
-                    cache: true
-
-                - name: Prepare offline Hey Iron engine
-                  run: bash scripts/prepare_sherpa_kws.sh
-
-                - name: Get Flutter packages
-                  run: flutter pub get
-
-                - name: Analyze clean UI
-                  run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/main.dart lib/pages/chat_page.dart
-
-                - name: Test small-screen layout
-                  run: flutter test test/chat_layout_test.dart
-
-                - name: Build arm64 debug APK
-                  run: flutter build apk --debug --target-platform android-arm64
-
-                - name: Upload APK
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: iron-music-420-ai-v3.2.0-clean-ui
-                    path: build/app/outputs/flutter-apk/app-debug.apk
-                    if-no-files-found: error
-          YAML
+          git checkout HEAD -- .github/workflows/android-build.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add lib/main.dart lib/pages/chat_page.dart pubspec.yaml test/chat_layout_test.dart CHANGELOG_V320_CLEAN_UI.md
           git diff --cached --check
           git commit -m "Build v3.2 clean UI from stable v3.0"
           git push origin HEAD:${{ github.head_ref }}
