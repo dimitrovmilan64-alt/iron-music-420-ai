@@ -170,6 +170,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   late final List<Widget> _pages;
 
+  static const _visibleSections = <int>[0, 3, 4];
+
   static const _navItems = <IronNavItem>[
     IronNavItem(
       icon: Icons.home_outlined,
@@ -177,24 +179,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       label: 'Начало',
     ),
     IronNavItem(
-      icon: Icons.mic_external_on_outlined,
-      selectedIcon: Icons.mic_external_on,
-      label: 'Студио',
+      icon: Icons.forum_outlined,
+      selectedIcon: Icons.forum_rounded,
+      label: 'AI разговор',
     ),
     IronNavItem(
-      icon: Icons.library_music_outlined,
-      selectedIcon: Icons.library_music,
-      label: 'Песни',
-    ),
-    IronNavItem(
-      icon: Icons.chat_bubble_outline,
-      selectedIcon: Icons.chat_bubble,
-      label: 'Чат',
-    ),
-    IronNavItem(
-      icon: Icons.graphic_eq_outlined,
-      selectedIcon: Icons.graphic_eq,
-      label: 'Iron',
+      icon: Icons.tune_outlined,
+      selectedIcon: Icons.tune_rounded,
+      label: 'Инструменти',
     ),
   ];
 
@@ -243,8 +235,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: IronBottomNavigation(
-        selectedIndex: _currentIndex,
-        onSelected: _openSection,
+        selectedIndex: _visibleSections.indexOf(_currentIndex) >= 0
+            ? _visibleSections.indexOf(_currentIndex)
+            : 0,
+        onSelected: (index) => _openSection(_visibleSections[index]),
         items: _navItems,
       ),
     );
