@@ -11,6 +11,16 @@ class AutomationService {
   static const MethodChannel _channel =
       MethodChannel('iron_music_420/automations');
 
+  Future<void> syncGeminiApiKey(String apiKey) async {
+    try {
+      await _channel.invokeMethod<bool>('syncGeminiApiKey', {
+        'apiKey': apiKey.trim(),
+      });
+    } catch (_) {
+      // The chat remains usable even if native voice sync is unavailable.
+    }
+  }
+
   Future<bool> isIronVoiceActive() async {
     try {
       final state = await _channel.invokeMethod<String>('execute', {

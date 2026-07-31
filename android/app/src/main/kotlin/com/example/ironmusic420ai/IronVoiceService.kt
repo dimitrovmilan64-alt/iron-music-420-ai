@@ -67,6 +67,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     )
 
     private val handler = Handler(Looper.getMainLooper())
+    private val aiRouter by lazy { GeminiVoiceRouter(this) }
     private var recognizer: SpeechRecognizer? = null
     private var keywordSpotter: KeywordSpotter? = null
     private var keywordStream: OnlineStream? = null
@@ -85,6 +86,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     @Volatile
     private var wakeEngineLoading = false
+
+    @Volatile
+    private var isAiProcessing = false
 
     private val beginSpeechRecognition = Runnable {
         startListening()
@@ -166,6 +170,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         textToSpeech = null
         isListening = false
         isSpeaking = false
+        isAiProcessing = false
         foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -272,6 +277,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             isRunning &&
             !isSpeaking &&
             !isListening &&
+            !isAiProcessing &&
             voiceState == VoiceState.WAITING_FOR_WAKE &&
             !wakeWordActive
         ) {
@@ -609,10 +615,217 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     private fun runVoiceCommand(command: String) {
         voiceState = VoiceState.WAITING_FOR_WAKE
-        val reply = executeCommand(normalize(command))
-        speak(reply) {
-            scheduleWakeWordListening(450)
+        val originalCommand = command.trim()
+        val normalizedCommand = normalize(originalCommand)
+
+        if (!aiRouter.hasApiKey()) {
+            val localReply = executeCommand(normalizedCommand)
+            val reply = if (localReply == "Не разбрах командата. Опитай пак.") {
+                "За свободния AI режим отвори приложението и запази Gemini API ключа."
+            } else {
+                localReply
+            }
+            speak(reply) {
+                scheduleWakeWordListening(450)
+            }
+            return
         }
+
+        isAiProcessing = true
+        updateNotification("Iron мисли с AI…")
+
+        Thread(
+            {
+                val result = try {
+                    Result.success(aiRouter.route(originalCommand))
+                } catch (error: Exception) {
+                    Result.failure(error)
+                }
+
+                handler.post {
+                    isAiProcessing = false
+                    if (!isRunning) return@post
+
+                    val decision = result.getOrNull()
+                    if (decision != null) {
+                        val reply = executeAiDecision(decision)
+                        speak(reply) {
+                            scheduleWakeWordListening(450)
+                        }
+                        return@post
+                    }
+
+                    val localReply = executeCommand(normalizedCommand)
+                    val error = result.exceptionOrNull()
+                    val reply = when {
+                        localReply != "Не разбрах командата. Опитай пак." -> localReply
+                        error is GeminiVoiceRouter.MissingApiKeyException ->
+                            "За свободния AI режим отвори приложението и запази Gemini API ключа."
+                        error is GeminiVoiceRouter.AiUnavailableException ->
+                            error.message ?: "AI временно не отговаря. Опитай пак."
+                        else -> "AI временно не отговаря. Опитай пак."
+                    }
+                    speak(reply) {
+                        scheduleWakeWordListening(900)
+                    }
+                }
+            },
+            "IronAiRouter",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun executeAiDecision(decision: GeminiVoiceRouter.Decision): String {
+        return try {
+            when (decision.action) {
+                "reply" -> decision.reply
+                "youtube" -> {
+                    launchPackage("com.google.android.youtube")
+                    decision.reply.ifBlank { "Отварям YouTube." }
+                }
+                "youtube_search" -> {
+                    val query = decision.argument.ifBlank { return "Какво да търся в YouTube?" }
+                    launch(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}"),
+                        ),
+                    )
+                    decision.reply.ifBlank { "Търся в YouTube." }
+                }
+                "chrome" -> {
+                    launchPackage("com.android.chrome")
+                    decision.reply.ifBlank { "Отварям браузъра." }
+                }
+                "web_search" -> {
+                    val query = decision.argument.ifBlank { return "Какво да потърся?" }
+                    launch(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}"),
+                        ).apply {
+                            setPackage("com.android.chrome")
+                        },
+                    )
+                    decision.reply.ifBlank { "Търся в интернет." }
+                }
+                "camera" -> {
+                    launch(Intent("android.media.action.IMAGE_CAPTURE"))
+                    decision.reply.ifBlank { "Отварям камерата." }
+                }
+                "maps" -> {
+                    openMaps("")
+                    decision.reply.ifBlank { "Отварям картите." }
+                }
+                "maps_search" -> {
+                    val query = decision.argument.ifBlank { return "Кое място да потърся?" }
+                    openMaps(query)
+                    decision.reply.ifBlank { "Търся мястото в картите." }
+                }
+                "alarms" -> {
+                    launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+                    decision.reply.ifBlank { "Отварям алармите." }
+                }
+                "calendar" -> {
+                    launch(
+                        Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_APP_CALENDAR)
+                        },
+                    )
+                    decision.reply.ifBlank { "Отварям календара." }
+                }
+                "dialer" -> {
+                    launch(Intent(Intent.ACTION_DIAL))
+                    decision.reply.ifBlank { "Отварям телефона." }
+                }
+                "dial_number" -> {
+                    val number = decision.argument.filter { it.isDigit() || it == '+' }
+                    if (number.isBlank()) return "Не разбрах телефонния номер."
+                    launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
+                    decision.reply.ifBlank { "Подготвям номера за набиране." }
+                }
+                "bluetooth" -> {
+                    launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                    decision.reply.ifBlank { "Отварям Bluetooth." }
+                }
+                "wifi" -> {
+                    launch(Intent(Settings.ACTION_WIFI_SETTINGS))
+                    decision.reply.ifBlank { "Отварям Wi-Fi." }
+                }
+                "settings" -> {
+                    launch(Intent(Settings.ACTION_SETTINGS))
+                    decision.reply.ifBlank { "Отварям настройките." }
+                }
+                "flash_on" -> {
+                    setFlashlight(true)
+                    decision.reply.ifBlank { "Фенерчето е включено." }
+                }
+                "flash_off" -> {
+                    setFlashlight(false)
+                    decision.reply.ifBlank { "Фенерчето е изключено." }
+                }
+                "volume_up" -> {
+                    adjustVolume(AudioManager.ADJUST_RAISE)
+                    decision.reply.ifBlank { "Звукът е увеличен." }
+                }
+                "volume_down" -> {
+                    adjustVolume(AudioManager.ADJUST_LOWER)
+                    decision.reply.ifBlank { "Звукът е намален." }
+                }
+                "music_mode" -> {
+                    sendAutomateCommand("music_mode_420")
+                    decision.reply.ifBlank { "Музикалният режим е включен." }
+                }
+                "night_mode" -> {
+                    adjustVolume(AudioManager.ADJUST_LOWER)
+                    adjustVolume(AudioManager.ADJUST_LOWER)
+                    decision.reply.ifBlank { "Нощният режим е включен." }
+                }
+                "studio" -> {
+                    openIronSection(1)
+                    decision.reply.ifBlank { "Отварям Rap Studio." }
+                }
+                "chat" -> {
+                    openIronSection(3)
+                    decision.reply.ifBlank { "Отварям AI чата." }
+                }
+                "songs" -> {
+                    openIronSection(2)
+                    decision.reply.ifBlank { "Отварям песните." }
+                }
+                "home" -> {
+                    openIronSection(0)
+                    decision.reply.ifBlank { "Отварям началния екран." }
+                }
+                "automate" -> {
+                    val macro = decision.argument.trim()
+                    if (macro.isBlank()) return "Кажи името на Automate командата."
+                    sendAutomateCommand(macro)
+                    decision.reply.ifBlank { "Командата е изпратена." }
+                }
+                else -> decision.reply.ifBlank { "Не разбрах. Опитай пак." }
+            }
+        } catch (_: SecurityException) {
+            "Липсва нужно разрешение за това действие."
+        } catch (_: Exception) {
+            "Това действие не е достъпно на телефона."
+        }
+    }
+
+    private fun openMaps(query: String) {
+        val encoded = Uri.encode(query)
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse(if (query.isBlank()) "geo:0,0?q=" else "geo:0,0?q=$encoded"),
+        ).apply {
+            setPackage("com.google.android.apps.maps")
+        }
+        if (intent.resolveActivity(packageManager) == null) {
+            intent.setPackage(null)
+        }
+        launch(intent)
     }
 
     private fun executeCommand(command: String): String {
