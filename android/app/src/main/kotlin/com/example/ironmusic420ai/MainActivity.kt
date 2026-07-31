@@ -158,7 +158,7 @@ class MainActivity : FlutterActivity() {
                 "iron_voice_off" -> {
                     stopService(
                         Intent(this, IronVoiceService::class.java).apply {
-                            action = IronVoiceService.ACTION_STOP
+                            this.action = IronVoiceService.ACTION_STOP
                         }
                     )
                     result.success("Iron е спрян.")
@@ -268,10 +268,6 @@ class MainActivity : FlutterActivity() {
 
     private fun openAlarms(result: MethodChannel.Result) {
         val intents = listOf(
-            Intent.makeMainSelectorActivity(
-                Intent.ACTION_MAIN,
-                Intent.CATEGORY_APP_CLOCK
-            ),
             Intent(AlarmClock.ACTION_SHOW_ALARMS)
         )
         for (intent in intents) {
