@@ -8,9 +8,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-
 concurrency:
   group: android-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -23,33 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
-
-      - name: Apply v3 AI implementation
-        shell: bash
-        run: |
-          if [[ -d .v3patch ]]; then
-            cat \
-              .v3patch/part00 \
-              .v3patch/part01 \
-              .v3patch/part02 \
-              .v3patch/part03 \
-              .v3patch/part04 \
-              .v3patch/part05a \
-              .v3patch/part05b1 \
-              .v3patch/part05b2 \
-              | base64 --decode > /tmp/v3-ai-mode.patch
-            echo "a06dbdd920918391bd6f86b60907f67026e4c597ec79f8bb69542d5d5d1d9a3e  /tmp/v3-ai-mode.patch" | sha256sum --check
-            patch -p1 < /tmp/v3-ai-mode.patch
-            rm -rf .v3patch
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "Implement v3 AI voice mode"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
-          fi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
