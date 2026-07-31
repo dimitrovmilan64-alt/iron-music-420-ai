@@ -53,8 +53,12 @@ jobs:
           xz -dc /tmp/v31-remaining.patch.xz > /tmp/v31-remaining.patch
           echo "67e56cf3e15a07e5df80f99c9406a23250636c88c15f500625f19f0f9c3dcfb5  /tmp/v31-remaining.patch" | sha256sum --check
           test "$(wc -c < /tmp/v31-remaining.patch)" -eq 83260
-          patch -p1 < /tmp/v31-remaining.patch
-          rm -rf .v31remain .v31fixed
+          awk '/^diff -urN .*GeminiVoiceRouter\.kt/{copy=1} copy' \
+            /tmp/v31-remaining.patch > /tmp/v31-core.patch
+          echo "f3812622537f403279c4bbd830fd2cb6363da6440ae62098d915f0d2c748e6e8  /tmp/v31-core.patch" | sha256sum --check
+          test "$(wc -c < /tmp/v31-core.patch)" -eq 42121
+          patch -p1 < /tmp/v31-core.patch
+          rm -rf .v31remain .v31fixed .v31patch
 
       - name: Commit v3.1 implementation
         uses: stefanzweifel/git-auto-commit-action@v5
