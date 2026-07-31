@@ -1,0 +1,38 @@
+name: Apply v3.2 clean UI
+
+on:
+  push:
+    branches:
+      - agent/v3-2-clean-ui-from-v3-0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-v320-clean-ui
+  cancel-in-progress: true
+
+jobs:
+  apply-clean-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout stable-based branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v3-2-clean-ui-from-v3-0
+          fetch-depth: 0
+
+      - name: Apply clean UI migration
+        run: python3 scripts/apply_v320_clean_ui.py
+
+      - name: Commit real source and remove migration machinery
+        shell: bash
+        run: |
+          rm scripts/apply_v320_clean_ui.py
+          rm .github/workflows/apply-v320-clean-ui.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Build v3.2 clean UI from stable v3.0"
+          git push origin HEAD:agent/v3-2-clean-ui-from-v3-0
