@@ -1,7 +1,6 @@
 package com.example.ironmusic420ai
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,17 +11,12 @@ import android.os.Build
 import android.provider.AlarmClock
 import android.provider.Settings
 import android.speech.SpeechRecognizer
-import android.text.InputType
 import android.view.WindowManager
-import android.widget.EditText
-import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import ai.picovoice.porcupine.Porcupine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val channelName = "iron_music_420/automations"
@@ -30,7 +24,6 @@ class MainActivity : FlutterActivity() {
     private var pendingFlashEnabled = false
     private var pendingVoiceResult: MethodChannel.Result? = null
     private var pendingIronSection: Int? = null
-    private var wakeWordSetupRunning = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -198,15 +191,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startIronVoice(result: MethodChannel.Result) {
-        if (wakeWordSetupRunning) {
-            result.error(
-                "WAKE_WORD_SETUP_RUNNING",
-                "„Hey Iron“ вече се настройва.",
-                null
-            )
-            return
-        }
-
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             result.error(
                 "SPEECH_RECOGNIZER_UNAVAILABLE",
@@ -239,185 +223,17 @@ class MainActivity : FlutterActivity() {
             )
             return
         }
-
-        ensureWakeWordReady(result)
-    }
-
-    private fun ensureWakeWordReady(result: MethodChannel.Result) {
-        val preferences = getSharedPreferences(
-            IronVoiceService.PREFS_NAME,
-            Context.MODE_PRIVATE
-        )
-        val accessKey = preferences
-            .getString(IronVoiceService.PREF_ACCESS_KEY, null)
-            ?.trim()
-            .orEmpty()
-        val modelFile = File(filesDir, IronVoiceService.WAKE_MODEL_FILE)
-
-        if (accessKey.isNotBlank() && modelFile.exists() && modelFile.length() > 0L) {
-            launchIronVoiceService(result)
-            return
-        }
-
-        if (accessKey.isNotBlank()) {
-            trainHeyIronModel(accessKey, result)
-            return
-        }
-
-        showAccessKeyDialog(result)
-    }
-
-    private fun showAccessKeyDialog(result: MethodChannel.Result) {
-        val input = EditText(this).apply {
-            hint = "Picovoice AccessKey"
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-            isSingleLine = true
-            setPadding(48, 16, 48, 8)
-        }
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Настрой „Hey Iron“")
-            .setMessage(
-                "Постави безплатния Picovoice AccessKey. " +
-                    "Той се пази само на телефона и не се качва в GitHub."
-            )
-            .setView(input)
-            .setPositiveButton("Настрой", null)
-            .setNegativeButton("Отказ") { _, _ ->
-                result.error(
-                    "WAKE_WORD_SETUP_CANCELLED",
-                    "Настройването на „Hey Iron“ е отказано.",
-                    null
-                )
-            }
-            .setOnCancelListener {
-                result.error(
-                    "WAKE_WORD_SETUP_CANCELLED",
-                    "Настройването на „Hey Iron“ е отказано.",
-                    null
-                )
-            }
-            .create()
-
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val accessKey = input.text?.toString()?.trim().orEmpty()
-                if (accessKey.length < 20) {
-                    input.error = "Постави целия Picovoice AccessKey."
-                    return@setOnClickListener
-                }
-
-                dialog.setOnCancelListener(null)
-                dialog.dismiss()
-                getSharedPreferences(
-                    IronVoiceService.PREFS_NAME,
-                    Context.MODE_PRIVATE
-                ).edit()
-                    .putString(IronVoiceService.PREF_ACCESS_KEY, accessKey)
-                    .apply()
-                trainHeyIronModel(accessKey, result)
-            }
-        }
-        dialog.show()
-    }
-
-    private fun trainHeyIronModel(
-        accessKey: String,
-        result: MethodChannel.Result
-    ) {
-        if (wakeWordSetupRunning) {
-            result.error(
-                "WAKE_WORD_SETUP_RUNNING",
-                "„Hey Iron“ вече се настройва.",
-                null
-            )
-            return
-        }
-
-        wakeWordSetupRunning = true
-        Toast.makeText(
-            this,
-            "Настройвам истинското разпознаване на „Hey Iron“…",
-            Toast.LENGTH_LONG
-        ).show()
-
-        Thread {
-            val modelFile = File(filesDir, IronVoiceService.WAKE_MODEL_FILE)
-            val temporaryFile = File(filesDir, "hey_iron_android_training.ppn")
-            try {
-                temporaryFile.delete()
-                Porcupine.trainWakeWordFromPhrase(
-                    accessKey,
-                    temporaryFile.absolutePath,
-                    "en",
-                    "Hey Iron"
-                )
-                if (!temporaryFile.exists() || temporaryFile.length() <= 0L) {
-                    throw IllegalStateException("Не беше създаден wake-word модел.")
-                }
-                modelFile.delete()
-                if (!temporaryFile.renameTo(modelFile)) {
-                    temporaryFile.copyTo(modelFile, overwrite = true)
-                    temporaryFile.delete()
-                }
-
-                runOnUiThread {
-                    wakeWordSetupRunning = false
-                    launchIronVoiceService(result)
-                }
-            } catch (error: Exception) {
-                temporaryFile.delete()
-                modelFile.delete()
-                getSharedPreferences(
-                    IronVoiceService.PREFS_NAME,
-                    Context.MODE_PRIVATE
-                ).edit()
-                    .remove(IronVoiceService.PREF_ACCESS_KEY)
-                    .apply()
-
-                runOnUiThread {
-                    wakeWordSetupRunning = false
-                    result.error(
-                        "WAKE_WORD_TRAINING_FAILED",
-                        error.localizedMessage
-                            ?: "Не успях да обуча „Hey Iron“. Провери AccessKey и интернет връзката.",
-                        null
-                    )
-                }
-            }
-        }.apply {
-            name = "HeyIronModelTrainer"
-            isDaemon = true
-            start()
-        }
+        launchIronVoiceService(result)
     }
 
     private fun launchIronVoiceService(result: MethodChannel.Result) {
-        val modelFile = File(filesDir, IronVoiceService.WAKE_MODEL_FILE)
-        val accessKey = getSharedPreferences(
-            IronVoiceService.PREFS_NAME,
-            Context.MODE_PRIVATE
-        ).getString(IronVoiceService.PREF_ACCESS_KEY, null)
-            ?.trim()
-            .orEmpty()
-
-        if (accessKey.isBlank() || !modelFile.exists() || modelFile.length() <= 0L) {
-            result.error(
-                "WAKE_WORD_NOT_CONFIGURED",
-                "„Hey Iron“ още не е настроен.",
-                null
-            )
-            return
-        }
-
         ContextCompat.startForegroundService(
             this,
             Intent(this, IronVoiceService::class.java).apply {
                 action = IronVoiceService.ACTION_START
             }
         )
-        result.success("Iron е активен. Кажи „Hey Iron“.")
+        result.success("Iron е активен офлайн. Кажи „Hey Iron“.")
     }
 
     private fun sendAutomationCommand(
@@ -448,9 +264,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun openAlarms(result: MethodChannel.Result) {
-        val intents = listOf(
-            Intent(AlarmClock.ACTION_SHOW_ALARMS)
-        )
+        val intents = listOf(Intent(AlarmClock.ACTION_SHOW_ALARMS))
         for (intent in intents) {
             try {
                 if (intent.resolveActivity(packageManager) != null) {
@@ -470,7 +284,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun setFlashlight(enabled: Boolean, result: MethodChannel.Result) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             pendingFlashResult = result
@@ -548,7 +363,7 @@ class MainActivity : FlutterActivity() {
                     ) == PackageManager.PERMISSION_GRANTED
                 ) {
                     try {
-                        ensureWakeWordReady(result)
+                        launchIronVoiceService(result)
                     } catch (error: Exception) {
                         result.error("IRON_VOICE_ERROR", error.localizedMessage, null)
                     }
