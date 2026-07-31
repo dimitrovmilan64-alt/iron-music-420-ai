@@ -30,7 +30,21 @@ jobs:
       - name: Apply remaining v3.1 changes
         shell: bash
         run: |
-          cat .v31remain/part{00..13} | base64 --decode > /tmp/v31-remaining.patch.xz
+          cat > /tmp/v31-parts.sha256 <<'EOF'
+          1a4dbaae4a8966ca80d72686fae87594a1397c723f12c0cb09731ebf11c1578b  .v31remain/part00
+          cfb48de7e9b5fa9f6533899b8a5f191d3123476a6b0774ea0fba02547d51f35f  .v31remain/part01
+          56d7d508df488f859584696c58c67f0c7a6af6f4db187a15c8331d875ac54de0  .v31remain/part02
+          cb9ab18972139cf074f5abfadc8d6b7fb7798ef459fd0c55e82099922e5c3372  .v31remain/part03
+          c20332a0c82564b8b6d07a347fbc204cfedb23f2b04eda372cdc6d7c9cb0935d  .v31remain/part04
+          95d49093a1e25e2fcdbb6eafd697d16d315a28c1529ea3941a323b7b7181c31d  .v31remain/part05
+          7e7e50a895c06a80ad8bee4791fa332c01c68f1f1c0a5f5b320bc620dbf5546a  .v31remain/part06
+          76324e9a4ee531ea8f7738fc68b4c20526d0022a3021d730a8598697111f954b  .v31remain/part07
+          6ced3f6439254122cc232e792fc9b00e8020849116b2fb343bdcd6ae31b11797  .v31remain/part08
+          9fb712ae2b63e28ced1d1c711a9bf76d5ebafa387ec03debc2d27903c27a9649  .v31remain/part09
+          c13214cd02fa6e48da3a5bd86cc790a3e0b6bdb590e1c031b98f309cbf966dc8  .v31remain/part10
+          EOF
+          sha256sum --check /tmp/v31-parts.sha256
+          cat .v31remain/part{00..10} | base64 --decode > /tmp/v31-remaining.patch.xz
           xz -t /tmp/v31-remaining.patch.xz
           xz -dc /tmp/v31-remaining.patch.xz > /tmp/v31-remaining.patch
           echo "67e56cf3e15a07e5df80f99c9406a23250636c88c15f500625f19f0f9c3dcfb5  /tmp/v31-remaining.patch" | sha256sum --check
