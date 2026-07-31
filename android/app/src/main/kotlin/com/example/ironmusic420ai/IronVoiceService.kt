@@ -268,12 +268,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 }
 
                 command.contains("аларм") -> {
-                    launch(
-                        Intent.makeMainSelectorActivity(
-                            Intent.ACTION_MAIN,
-                            Intent.CATEGORY_APP_CLOCK,
-                        ),
-                    )
+                    launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
                     "Отварям алармите."
                 }
 
