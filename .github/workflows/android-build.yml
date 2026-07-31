@@ -30,9 +30,9 @@ jobs:
       - name: Apply remaining v3.1 changes
         shell: bash
         run: |
-          cat .v31remain/part{00..13} | base64 --decode > /tmp/v31-remaining.patch.gz
-          gzip -t /tmp/v31-remaining.patch.gz
-          gzip -dc /tmp/v31-remaining.patch.gz > /tmp/v31-remaining.patch
+          cat .v31remain/part{00..13} | base64 --decode > /tmp/v31-remaining.patch.xz
+          xz -t /tmp/v31-remaining.patch.xz
+          xz -dc /tmp/v31-remaining.patch.xz > /tmp/v31-remaining.patch
           echo "67e56cf3e15a07e5df80f99c9406a23250636c88c15f500625f19f0f9c3dcfb5  /tmp/v31-remaining.patch" | sha256sum --check
           test "$(wc -c < /tmp/v31-remaining.patch)" -eq 83260
           patch -p1 < /tmp/v31-remaining.patch
