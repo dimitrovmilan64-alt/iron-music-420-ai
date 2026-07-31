@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.example.ironmusic420ai"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -24,6 +24,10 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {
@@ -33,6 +37,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            pickFirsts += setOf("**/libc++_shared.so")
+        }
         resources {
             excludes += setOf(
                 "META-INF/DEPENDENCIES",
@@ -43,6 +50,10 @@ android {
             )
         }
     }
+}
+
+dependencies {
+    implementation(files("libs/sherpa-onnx-1.13.4.aar"))
 }
 
 flutter {

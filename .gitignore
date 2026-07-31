@@ -57,6 +57,10 @@ unlinked_spec.ds
 **/android/key.properties
 *.jks
 
+# Downloaded sherpa-onnx runtime and wake-word model
+android/app/libs/sherpa-onnx-*.aar
+android/app/src/main/assets/sherpa-onnx-kws-*/
+
 # iOS/XCode related
 **/ios/**/*.mode1v3
 **/ios/**/*.mode2v3

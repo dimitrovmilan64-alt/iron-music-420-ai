@@ -106,9 +106,7 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Intent.ACTION_DIAL))
                     result.success("Телефонът е отворен.")
                 }
-                "alarms" -> {
-                    openAlarms(result)
-                }
+                "alarms" -> openAlarms(result)
                 "calendar" -> {
                     val intent = Intent(Intent.ACTION_MAIN).apply {
                         addCategory(Intent.CATEGORY_APP_CALENDAR)
@@ -134,11 +132,7 @@ class MainActivity : FlutterActivity() {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     result.success("Нормалното изгасване на екрана е възстановено.")
                 }
-                "music_mode" -> {
-                    // Music Mode is controlled only by the user's Automate flow.
-                    // This avoids opening Spotify or any web fallback from Iron Music.
-                    sendMusicModeBroadcast(result)
-                }
+                "music_mode" -> sendMusicModeBroadcast(result)
                 "studio_mode" -> {
                     adjustVolume(AudioManager.ADJUST_RAISE)
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -149,7 +143,9 @@ class MainActivity : FlutterActivity() {
                     adjustVolume(AudioManager.ADJUST_LOWER)
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
-                    result.success("Night Mode: звукът е намален и настройките за „Не безпокой“ са отворени.")
+                    result.success(
+                        "Night Mode: звукът е намален и настройките за „Не безпокой“ са отворени."
+                    )
                 }
                 "iron_voice_status" -> {
                     result.success(if (IronVoiceService.isRunning) "active" else "inactive")
@@ -203,6 +199,7 @@ class MainActivity : FlutterActivity() {
             )
             return
         }
+
         val missingPermissions = mutableListOf<String>()
         if (
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
@@ -236,7 +233,7 @@ class MainActivity : FlutterActivity() {
                 action = IronVoiceService.ACTION_START
             }
         )
-        result.success("Iron е активен. Кажи „Хей, Iron“.")
+        result.success("Iron е активен офлайн. Кажи „Hey Iron“.")
     }
 
     private fun sendAutomationCommand(
@@ -267,9 +264,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun openAlarms(result: MethodChannel.Result) {
-        val intents = listOf(
-            Intent(AlarmClock.ACTION_SHOW_ALARMS)
-        )
+        val intents = listOf(Intent(AlarmClock.ACTION_SHOW_ALARMS))
         for (intent in intents) {
             try {
                 if (intent.resolveActivity(packageManager) != null) {
@@ -289,7 +284,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun setFlashlight(enabled: Boolean, result: MethodChannel.Result) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             pendingFlashResult = result
@@ -340,7 +336,8 @@ class MainActivity : FlutterActivity() {
             4201 -> {
                 val result = pendingFlashResult ?: return
                 pendingFlashResult = null
-                if (grantResults.isNotEmpty() &&
+                if (
+                    grantResults.isNotEmpty() &&
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
                 ) {
                     try {
@@ -359,7 +356,8 @@ class MainActivity : FlutterActivity() {
             4202 -> {
                 val result = pendingVoiceResult ?: return
                 pendingVoiceResult = null
-                if (ContextCompat.checkSelfPermission(
+                if (
+                    ContextCompat.checkSelfPermission(
                         this,
                         Manifest.permission.RECORD_AUDIO
                     ) == PackageManager.PERMISSION_GRANTED
@@ -372,7 +370,7 @@ class MainActivity : FlutterActivity() {
                 } else {
                     result.error(
                         "MICROPHONE_PERMISSION",
-                        "Разреши микрофона, за да работи „Хей, Iron“.",
+                        "Разреши микрофона, за да работи „Hey Iron“.",
                         null
                     )
                 }
