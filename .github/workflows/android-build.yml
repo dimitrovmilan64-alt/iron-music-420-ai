@@ -8,18 +8,102 @@ on:
     branches:
       - main
 
-concurrency:
-  group: android-build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: write
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
-      - name: Checkout
+      - name: Checkout mainline branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Restore stable v3.0 UI source and migration
+        shell: bash
+        run: |
+          git fetch origin agent/v3-2-clean-ui-from-v3-0
+          mkdir -p scripts
+          git show origin/agent/v3-2-clean-ui-from-v3-0:scripts/apply_v320_clean_ui.py > scripts/apply_v320_clean_ui.py
+          git show 62b3ef3969c9c4448d6f1c077a551c79a480318e:lib/main.dart > lib/main.dart
+          git show 62b3ef3969c9c4448d6f1c077a551c79a480318e:lib/pages/chat_page.dart > lib/pages/chat_page.dart
+          git show 62b3ef3969c9c4448d6f1c077a551c79a480318e:pubspec.yaml > pubspec.yaml
+
+      - name: Apply v3.2 clean UI
+        run: python3 scripts/apply_v320_clean_ui.py
+
+      - name: Commit clean source and final workflow
+        shell: bash
+        run: |
+          rm scripts/apply_v320_clean_ui.py
+          cat > .github/workflows/android-build.yml <<'YAML'
+          name: Android build
+
+          on:
+            push:
+              branches:
+                - main
+            pull_request:
+              branches:
+                - main
+
+          concurrency:
+            group: android-build-${{ github.event.pull_request.number || github.ref }}
+            cancel-in-progress: true
+
+          jobs:
+            build-apk:
+              runs-on: ubuntu-latest
+              timeout-minutes: 40
+
+              steps:
+                - name: Checkout
+                  uses: actions/checkout@v4
+
+                - name: Set up Java 17
+                  uses: actions/setup-java@v4
+                  with:
+                    distribution: temurin
+                    java-version: '17'
+
+                - name: Set up Flutter
+                  uses: subosito/flutter-action@v2
+                  with:
+                    channel: stable
+                    cache: true
+
+                - name: Prepare offline Hey Iron engine
+                  run: bash scripts/prepare_sherpa_kws.sh
+
+                - name: Get Flutter packages
+                  run: flutter pub get
+
+                - name: Analyze clean UI
+                  run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/main.dart lib/pages/chat_page.dart
+
+                - name: Test small-screen layout
+                  run: flutter test test/chat_layout_test.dart
+
+                - name: Build arm64 debug APK
+                  run: flutter build apk --debug --target-platform android-arm64
+
+                - name: Upload APK
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: iron-music-420-ai-v3.2.0-clean-ui
+                    path: build/app/outputs/flutter-apk/app-debug.apk
+                    if-no-files-found: error
+          YAML
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Build v3.2 clean UI from stable v3.0"
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -39,15 +123,18 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze responsive UI
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/pages/chat_page.dart
-
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Analyze clean UI
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/main.dart lib/pages/chat_page.dart
+
+      - name: Test small-screen layout
+        run: flutter test test/chat_layout_test.dart
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.1.2-responsive-ui
+          name: iron-music-420-ai-v3.2.0-clean-ui
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
