@@ -31,7 +31,11 @@ jobs:
         shell: bash
         run: |
           if [[ -d .v3patch ]]; then
+            wc -c .v3patch/part*
+            sha256sum .v3patch/part*
             cat .v3patch/part* | base64 --decode > /tmp/v3-ai-mode.patch
+            wc -c /tmp/v3-ai-mode.patch
+            sha256sum /tmp/v3-ai-mode.patch
             echo "a06dbdd920918391bd6f86b60907f67026e4c597ec79f8bb69542d5d5d1d9a3e  /tmp/v3-ai-mode.patch" | sha256sum --check
             patch -p1 < /tmp/v3-ai-mode.patch
             rm -rf .v3patch
