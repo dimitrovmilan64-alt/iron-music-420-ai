@@ -1,0 +1,42 @@
+name: UI finalize
+
+on:
+  push:
+    branches:
+      - agent/v3-1-1-ui-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-ui:
+    if: ${{ !contains(github.event.head_commit.message, '[ui-final]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v3-1-1-ui-recovery
+          fetch-depth: 0
+
+      - name: Fit centered leaf UI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('lib/pages/chat_page.dart')
+          text = path.read_text()
+          text = text.replace('height: showLargeCore ? 246 : 174,', 'height: showLargeCore ? 260 : 190,')
+          text = text.replace("(_coreController.value * 0.72 + activityBoost).clamp(0.0, 1.0);", "(_coreController.value * 0.72 + activityBoost)\n                        .clamp(0.0, 1.0)\n                        .toDouble();")
+          text = text.replace('size: showLargeCore ? 184 : 126,', 'size: showLargeCore ? 176 : 120,')
+          path.write_text(text)
+          PY
+
+      - name: Commit final UI sizing
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/pages/chat_page.dart
+          git commit -m "[ui-final] Fit centered Iron leaf on phone screens"
+          git push origin HEAD:agent/v3-1-1-ui-recovery
