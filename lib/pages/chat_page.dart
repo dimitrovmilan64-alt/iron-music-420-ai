@@ -877,13 +877,15 @@ class _ChatPageState extends State<ChatPage>
           AnimatedContainer(
             duration: const Duration(milliseconds: 320),
             curve: Curves.easeOut,
-            height: showLargeCore ? 246 : 174,
+            height: showLargeCore ? 260 : 190,
             child: AnimatedBuilder(
               animation: _coreController,
               builder: (context, _) {
                 final activityBoost = (_isListening || _isLoading) ? 0.22 : 0.0;
                 final progress =
-                    (_coreController.value * 0.72 + activityBoost).clamp(0.0, 1.0);
+                    (_coreController.value * 0.72 + activityBoost)
+                        .clamp(0.0, 1.0)
+                        .toDouble();
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -894,7 +896,7 @@ class _ChatPageState extends State<ChatPage>
                         scale: _isListening ? 1.08 : 1.0,
                         child: CannabisCore(
                           progress: progress,
-                          size: showLargeCore ? 184 : 126,
+                          size: showLargeCore ? 176 : 120,
                         ),
                       ),
                     ),
