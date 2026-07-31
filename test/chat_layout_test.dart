@@ -28,12 +28,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Настройки'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('API ключ'));
+    final apiButton = find.byTooltip('Gemini API ключ');
+    expect(apiButton, findsOneWidget);
+    await tester.ensureVisible(apiButton);
+    await tester.tap(apiButton);
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Gemini API ключ'), findsOneWidget);
+    expect(find.text('Запази ключа'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
