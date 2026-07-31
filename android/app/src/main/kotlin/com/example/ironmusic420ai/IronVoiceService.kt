@@ -12,7 +12,10 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +31,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
 import java.util.Locale
+import kotlin.math.sqrt
 
 class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitListener {
     companion object {
@@ -40,6 +44,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
         private const val CHANNEL_ID = "iron_voice_service"
         private const val NOTIFICATION_ID = 2420
+        private const val WAKE_SAMPLE_RATE = 16_000
+        private const val WAKE_CALIBRATION_FRAMES = 8
+        private const val WAKE_REQUIRED_FRAMES = 2
+        private const val WAKE_MIN_RMS = 700.0
+        private const val WAKE_NOISE_MULTIPLIER = 3.0
     }
 
     private enum class VoiceState {
@@ -56,9 +65,30 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
     private var foregroundStarted = false
+    private var wakeAudioRecord: AudioRecord? = null
+    private var wakeMonitorThread: Thread? = null
 
-    private val restartListening = Runnable {
+    @Volatile
+    private var wakeMonitorActive = false
+
+    private val beginSpeechRecognition = Runnable {
         startListening()
+    }
+    private val beginWakeMonitoring = Runnable {
+        startWakeMonitoring()
+    }
+    private val recognitionTimeout = Runnable {
+        if (!isListening || isSpeaking) return@Runnable
+        isListening = false
+        recognizer?.cancel()
+        if (voiceState == VoiceState.WAITING_FOR_COMMAND) {
+            voiceState = VoiceState.WAITING_FOR_WAKE
+            speak("Не чух команда.") {
+                scheduleWakeMonitoring(450)
+            }
+        } else {
+            scheduleWakeMonitoring(450)
+        }
     }
 
     override fun onCreate() {
@@ -86,14 +116,16 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             foregroundStarted = true
         }
         initializeRecognizer()
-        scheduleListening(350)
+        scheduleWakeMonitoring(350)
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        isRunning = false
         handler.removeCallbacksAndMessages(null)
+        stopWakeMonitoring()
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
@@ -102,7 +134,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         textToSpeech = null
         isListening = false
         isSpeaking = false
-        isRunning = false
         foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -120,9 +151,17 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun startListening() {
-        handler.removeCallbacks(restartListening)
+        handler.removeCallbacks(beginSpeechRecognition)
+        handler.removeCallbacks(recognitionTimeout)
         if (!isRunning || isSpeaking || isListening) return
-        val currentRecognizer = recognizer ?: return
+        stopWakeMonitoring()
+        initializeRecognizer()
+        val currentRecognizer = recognizer ?: run {
+            if (voiceState == VoiceState.WAITING_FOR_WAKE) {
+                scheduleWakeMonitoring(1_500)
+            }
+            return
+        }
 
         val recognitionIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -133,23 +172,205 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "bg-BG")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_BIASING_STRINGS,
+                    arrayListOf("Хей, Iron", "Хей, Айрън", "Iron", "Айрън"),
+                )
+            }
         }
 
         try {
             isListening = true
             currentRecognizer.startListening(recognitionIntent)
+            handler.postDelayed(
+                recognitionTimeout,
+                if (voiceState == VoiceState.WAITING_FOR_COMMAND) 9_000 else 7_000,
+            )
         } catch (_: Exception) {
             isListening = false
             resetRecognizer()
-            scheduleListening(1_200)
+            if (voiceState == VoiceState.WAITING_FOR_COMMAND) {
+                voiceState = VoiceState.WAITING_FOR_WAKE
+                speak("Не успях да включа микрофона.") {
+                    scheduleWakeMonitoring(1_200)
+                }
+            } else {
+                scheduleWakeMonitoring(1_200)
+            }
         }
     }
 
-    private fun scheduleListening(delayMillis: Long = 700) {
-        handler.removeCallbacks(restartListening)
-        if (isRunning && !isSpeaking) {
-            handler.postDelayed(restartListening, delayMillis)
+    private fun scheduleCommandListening(delayMillis: Long = 250) {
+        handler.removeCallbacks(beginSpeechRecognition)
+        if (
+            isRunning &&
+            !isSpeaking &&
+            voiceState == VoiceState.WAITING_FOR_COMMAND
+        ) {
+            handler.postDelayed(beginSpeechRecognition, delayMillis)
         }
+    }
+
+    private fun scheduleWakeMonitoring(delayMillis: Long = 500) {
+        handler.removeCallbacks(beginWakeMonitoring)
+        if (
+            isRunning &&
+            !isSpeaking &&
+            voiceState == VoiceState.WAITING_FOR_WAKE &&
+            !wakeMonitorActive
+        ) {
+            handler.postDelayed(beginWakeMonitoring, delayMillis)
+        }
+    }
+
+    private fun startWakeMonitoring() {
+        handler.removeCallbacks(beginWakeMonitoring)
+        if (
+            !isRunning ||
+            isSpeaking ||
+            isListening ||
+            wakeMonitorActive ||
+            voiceState != VoiceState.WAITING_FOR_WAKE
+        ) {
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            stopSelf()
+            return
+        }
+
+        val minimumBufferSize = AudioRecord.getMinBufferSize(
+            WAKE_SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minimumBufferSize <= 0) {
+            scheduleWakeMonitoring(2_000)
+            return
+        }
+
+        val recorder = try {
+            AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(WAKE_SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build(),
+                )
+                .setBufferSizeInBytes(maxOf(minimumBufferSize * 2, 4_096))
+                .build()
+        } catch (_: Exception) {
+            scheduleWakeMonitoring(2_000)
+            return
+        }
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            scheduleWakeMonitoring(2_000)
+            return
+        }
+
+        try {
+            recorder.startRecording()
+        } catch (_: Exception) {
+            recorder.release()
+            scheduleWakeMonitoring(2_000)
+            return
+        }
+
+        wakeAudioRecord = recorder
+        wakeMonitorActive = true
+        val samples = ShortArray(maxOf(512, minimumBufferSize / 2))
+        wakeMonitorThread = Thread(
+            {
+                var calibrationFrames = 0
+                var loudFrames = 0
+                var noiseFloor = 250.0
+                var speechDetected = false
+                try {
+                    while (isRunning && wakeMonitorActive) {
+                        val sampleCount = recorder.read(
+                            samples,
+                            0,
+                            samples.size,
+                            AudioRecord.READ_BLOCKING,
+                        )
+                        if (sampleCount <= 0) continue
+
+                        var squareSum = 0.0
+                        for (index in 0 until sampleCount) {
+                            val sample = samples[index].toDouble()
+                            squareSum += sample * sample
+                        }
+                        val rms = sqrt(squareSum / sampleCount)
+                        if (calibrationFrames < WAKE_CALIBRATION_FRAMES) {
+                            noiseFloor = (noiseFloor * 0.75) + (rms * 0.25)
+                            calibrationFrames += 1
+                            continue
+                        }
+
+                        val trigger = maxOf(
+                            WAKE_MIN_RMS,
+                            noiseFloor * WAKE_NOISE_MULTIPLIER,
+                        )
+                        if (rms >= trigger) {
+                            loudFrames += 1
+                        } else {
+                            loudFrames = 0
+                            noiseFloor = ((noiseFloor * 0.96) + (rms * 0.04))
+                                .coerceIn(120.0, 4_000.0)
+                        }
+
+                        if (loudFrames >= WAKE_REQUIRED_FRAMES) {
+                            speechDetected = true
+                            wakeMonitorActive = false
+                            break
+                        }
+                    }
+                } catch (_: Exception) {
+                    // The main thread performs cleanup and restarts the monitor if needed.
+                } finally {
+                    handler.post {
+                        if (wakeAudioRecord === recorder) {
+                            stopWakeMonitoring()
+                        }
+                        if (
+                            speechDetected &&
+                            isRunning &&
+                            !isSpeaking &&
+                            voiceState == VoiceState.WAITING_FOR_WAKE
+                        ) {
+                            startListening()
+                        } else if (isRunning) {
+                            scheduleWakeMonitoring(1_200)
+                        }
+                    }
+                }
+            },
+            "IronWakeMonitor",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun stopWakeMonitoring() {
+        wakeMonitorActive = false
+        val recorder = wakeAudioRecord
+        wakeAudioRecord = null
+        try {
+            if (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                recorder.stop()
+            }
+        } catch (_: Exception) {
+            // The recorder may already have been stopped by Android.
+        }
+        recorder?.release()
+        wakeMonitorThread = null
     }
 
     private fun resetRecognizer() {
@@ -166,14 +387,23 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             .map(::normalize)
             .filter { it.isNotBlank() }
         if (phrases.isEmpty()) {
-            if (isFinal) scheduleListening()
+            if (isFinal) {
+                if (voiceState == VoiceState.WAITING_FOR_COMMAND) {
+                    voiceState = VoiceState.WAITING_FOR_WAKE
+                    speak("Не чух команда.") {
+                        scheduleWakeMonitoring(450)
+                    }
+                } else {
+                    scheduleWakeMonitoring()
+                }
+            }
             return
         }
 
         if (voiceState == VoiceState.WAITING_FOR_WAKE) {
             val wakePhrase = phrases.firstOrNull(::containsWakePhrase)
             if (wakePhrase == null) {
-                if (isFinal) scheduleListening(1_500)
+                if (isFinal) scheduleWakeMonitoring(450)
                 return
             }
             isListening = false
@@ -184,7 +414,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             } else {
                 voiceState = VoiceState.WAITING_FOR_COMMAND
                 speak("Слушам") {
-                    scheduleListening(250)
+                    scheduleCommandListening(250)
                 }
             }
             return
@@ -200,7 +430,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         voiceState = VoiceState.WAITING_FOR_WAKE
         val reply = executeCommand(normalize(command))
         speak(reply) {
-            scheduleListening(450)
+            scheduleWakeMonitoring(450)
         }
     }
 
@@ -401,7 +631,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun containsWakePhrase(value: String): Boolean {
-        return wakePhrases.any(value::contains)
+        return wakePhrases.any(value::contains) ||
+            value.split(' ').any(wakeWords::contains)
     }
 
     private fun commandAfterWakePhrase(value: String): String {
@@ -410,6 +641,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             if (index >= 0) {
                 return value.substring(index + wakePhrase.length).trim()
             }
+        }
+        for (wakeWord in wakeWords) {
+            val match = Regex("(^| )${Regex.escape(wakeWord)}(?= |$)")
+                .find(value) ?: continue
+            return value.substring(match.range.last + 1).trim()
         }
         return ""
     }
@@ -431,8 +667,19 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         "хей ирон",
     )
 
+    private val wakeWords = setOf(
+        "iron",
+        "айрън",
+        "айрон",
+        "айран",
+        "ирон",
+    )
+
     private fun speak(text: String, onFinished: () -> Unit) {
-        handler.removeCallbacks(restartListening)
+        handler.removeCallbacks(beginSpeechRecognition)
+        handler.removeCallbacks(beginWakeMonitoring)
+        handler.removeCallbacks(recognitionTimeout)
+        stopWakeMonitoring()
         isListening = false
         isSpeaking = true
         recognizer?.cancel()
@@ -567,10 +814,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onBufferReceived(buffer: ByteArray?) = Unit
 
     override fun onEndOfSpeech() {
-        isListening = false
+        // Keep the recognizer marked busy until onResults/onError arrives.
     }
 
     override fun onError(error: Int) {
+        handler.removeCallbacks(recognitionTimeout)
         isListening = false
         if (isSpeaking) return
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
@@ -584,7 +832,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         ) {
             voiceState = VoiceState.WAITING_FOR_WAKE
             speak("Не чух команда.") {
-                scheduleListening(450)
+                scheduleWakeMonitoring(450)
             }
             return
         }
@@ -596,7 +844,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         ) {
             resetRecognizer()
         }
-        scheduleListening(
+        if (voiceState == VoiceState.WAITING_FOR_COMMAND) {
+            voiceState = VoiceState.WAITING_FOR_WAKE
+        }
+        scheduleWakeMonitoring(
             when (error) {
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1_200
                 SpeechRecognizer.ERROR_NO_MATCH,
@@ -614,6 +865,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onResults(results: Bundle?) {
+        handler.removeCallbacks(recognitionTimeout)
         isListening = false
         processRecognition(results, isFinal = true)
     }
