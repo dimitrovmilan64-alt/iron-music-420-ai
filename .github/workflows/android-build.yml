@@ -41,6 +41,7 @@ jobs:
           xz -t /tmp/v31-final.tar.xz
           echo "4476709f5b30fef15c9ed6baf02ea2b986810da06e348ab4e2c9b7ea3ab211e5  /tmp/v31-final.tar.xz" | sha256sum --check
           tar -xJf /tmp/v31-final.tar.xz -C .
+          git checkout HEAD -- .github/workflows/android-build.yml
           rm -rf .v31final .v31patch .v31fixed .v31remain
 
       - name: Commit final v3.1 source
