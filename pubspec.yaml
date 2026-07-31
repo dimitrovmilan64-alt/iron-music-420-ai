@@ -2,7 +2,7 @@ name: ironmusic420ai
 description: Iron Music 420 AI - Bulgarian rap assistant with Gemini, voice and Rap Studio.
 publish_to: 'none'
 
-version: 2.6.5+29
+version: 2.6.6+30
 
 environment:
   sdk: '>=3.4.0 <4.0.0'

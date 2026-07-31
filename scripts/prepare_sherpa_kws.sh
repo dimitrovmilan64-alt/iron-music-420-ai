@@ -22,9 +22,9 @@ if [[ ! -s "${AAR_DEST}" ]]; then
 fi
 
 required_model_files=(
-  "encoder-epoch-13-avg-2-chunk-8-left-64.int8.onnx"
-  "decoder-epoch-13-avg-2-chunk-8-left-64.onnx"
-  "joiner-epoch-13-avg-2-chunk-8-left-64.int8.onnx"
+  "encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx"
+  "decoder-epoch-13-avg-2-chunk-16-left-64.onnx"
+  "joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx"
   "tokens.txt"
   "keywords.txt"
 )
@@ -51,17 +51,45 @@ if [[ "${model_ready}" != true ]]; then
   rm -rf "${MODEL_DEST}"
   mkdir -p "${MODEL_DEST}"
 
-  cp "${source_dir}/encoder-epoch-13-avg-2-chunk-8-left-64.int8.onnx" "${MODEL_DEST}/"
-  cp "${source_dir}/decoder-epoch-13-avg-2-chunk-8-left-64.onnx" "${MODEL_DEST}/"
-  cp "${source_dir}/joiner-epoch-13-avg-2-chunk-8-left-64.int8.onnx" "${MODEL_DEST}/"
+  cp "${source_dir}/encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx" "${MODEL_DEST}/"
+  cp "${source_dir}/decoder-epoch-13-avg-2-chunk-16-left-64.onnx" "${MODEL_DEST}/"
+  cp "${source_dir}/joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx" "${MODEL_DEST}/"
   cp "${source_dir}/tokens.txt" "${MODEL_DEST}/"
-
-  # CMU pronunciation: HEY = HH EY1, IRON = AY1 ER0 N.
-  # A higher score helps Bulgarian-accented English; the threshold stays
-  # conservative enough to reject ordinary speech and loud background noise.
-  printf '%s\n' \
-    'HH EY1 AY1 ER0 N :2.0 #0.30 @HEY_IRON' \
-    > "${MODEL_DEST}/keywords.txt"
 fi
+
+python3 - "${MODEL_DEST}/tokens.txt" "${MODEL_DEST}/keywords.txt" <<'PY'
+from pathlib import Path
+import sys
+
+tokens_path = Path(sys.argv[1])
+keywords_path = Path(sys.argv[2])
+
+tokens = set()
+for raw in tokens_path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line:
+        continue
+    tokens.add(line.split()[0])
+
+# Standard CMU pronunciation plus two common compressed variants.
+variants = [
+    ("HEY_IRON", ["HH", "EY1", "AY1", "ER0", "N"]),
+    ("HEY_IRON_ALT", ["HH", "EY1", "AY1", "R", "AH0", "N"]),
+    ("HEY_IRON_FAST", ["HH", "EY1", "AY1", "R", "N"]),
+]
+
+lines = []
+for name, phones in variants:
+    missing = [phone for phone in phones if phone not in tokens]
+    if not missing:
+        lines.append(f"{' '.join(phones)} :3.5 #0.10 @{name}")
+
+if not lines:
+    raise SystemExit("No valid Hey Iron pronunciation can be built from tokens.txt")
+
+keywords_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+print("Hey Iron pronunciations:")
+print(keywords_path.read_text(encoding="utf-8"))
+PY
 
 echo "sherpa-onnx Hey Iron assets are ready."
