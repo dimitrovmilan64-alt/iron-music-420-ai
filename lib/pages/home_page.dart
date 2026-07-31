@@ -83,29 +83,33 @@ class _HomePageState extends State<HomePage>
                           physics: const NeverScrollableScrollPhysics(),
                           mainAxisSpacing: compact ? 8 : 10,
                           crossAxisSpacing: compact ? 8 : 10,
-                          childAspectRatio: compact ? 2.15 : 2.0,
+                          childAspectRatio: compact ? 1.84 : 1.72,
                           children: [
                             _ExactActionCard(
                               icon: Icons.chat_bubble_outline_rounded,
-                              title: 'Чат',
+                              title: 'ЧАТ',
+                              subtitle: 'Говори с AI',
                               compact: compact,
                               onTap: () => widget.onOpenSection(3),
                             ),
                             _ExactActionCard(
                               icon: Icons.mic_none_rounded,
-                              title: 'Студио',
+                              title: 'RAP STUDIO',
+                              subtitle: 'Пиши и генерирай',
                               compact: compact,
                               onTap: () => widget.onOpenSection(1),
                             ),
                             _ExactActionCard(
                               icon: Icons.music_note_rounded,
-                              title: 'Песни',
+                              title: 'ПЕСНИ',
+                              subtitle: 'Моите проекти',
                               compact: compact,
                               onTap: () => widget.onOpenSection(2),
                             ),
                             _ExactActionCard(
                               icon: Icons.graphic_eq_rounded,
-                              title: 'Iron',
+                              title: 'IRON',
+                              subtitle: 'Хей, Iron',
                               compact: compact,
                               onTap: () => widget.onOpenSection(4),
                             ),
@@ -221,7 +225,7 @@ class _ExactTitle extends StatelessWidget {
             stops: [0, 0.38, 0.72, 1],
           ).createShader(bounds),
           child: Text(
-            'IRON',
+            'IRON MUSIC',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: compact ? 31 : 38,
@@ -240,18 +244,30 @@ class _ExactTitle extends StatelessWidget {
         ),
         SizedBox(height: compact ? 1 : 3),
         Text(
-          'MUSIC 420 AI',
+          '420 AI',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: ironGreen,
-            fontSize: compact ? 25 : 30,
+            fontSize: compact ? 40 : 49,
             height: 0.94,
             fontWeight: FontWeight.w900,
-            letterSpacing: compact ? 1.8 : 2.4,
+            letterSpacing: compact ? 2.8 : 3.6,
             shadows: const [
               Shadow(color: ironGreen, blurRadius: 22),
               Shadow(color: ironGreen, blurRadius: 7),
             ],
+          ),
+        ),
+        SizedBox(height: compact ? 5 : 8),
+        Text(
+          'ТВОЯТ AI РАП ПРОДУЦЕНТ',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: ironGreenSoft.withOpacity(0.88),
+            fontSize: compact ? 9.5 : 11,
+            fontWeight: FontWeight.w900,
+            letterSpacing: compact ? 1.9 : 2.5,
+            shadows: const [Shadow(color: ironGreen, blurRadius: 8)],
           ),
         ),
       ],
@@ -312,7 +328,9 @@ class _ApiStatusCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    hasApiKey ? 'Iron е готов' : 'Добави Gemini ключ',
+                    hasApiKey
+                        ? 'API ключът е запазен'
+                        : 'Gemini API ключ липсва',
                     maxLines: 1,
                     style: TextStyle(
                       color: accent,
@@ -326,7 +344,7 @@ class _ApiStatusCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    hasApiKey ? 'Чат и глас' : 'Отвори Чат → Настройки',
+                    'Gemini Flash • Български глас',
                     maxLines: 1,
                     style: TextStyle(
                       color: Colors.white60,
@@ -355,12 +373,14 @@ class _ApiStatusCard extends StatelessWidget {
 class _ExactActionCard extends StatelessWidget {
   final IconData icon;
   final String title;
+  final String subtitle;
   final bool compact;
   final VoidCallback onTap;
 
   const _ExactActionCard({
     required this.icon,
     required this.title,
+    required this.subtitle,
     required this.compact,
     required this.onTap,
   });
@@ -444,18 +464,44 @@ class _ExactActionCard extends StatelessWidget {
                     ),
                     SizedBox(width: compact ? 8 : 10),
                     Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: compact ? 15 : 17,
-                            fontWeight: FontWeight.w800,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: compact ? 12.5 : 14,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          SizedBox(height: compact ? 2 : 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                subtitle,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: compact ? 9.5 : 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

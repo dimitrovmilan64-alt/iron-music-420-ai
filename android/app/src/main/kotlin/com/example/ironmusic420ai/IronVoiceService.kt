@@ -55,9 +55,16 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var isSpeaking = false
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
+    private val audioManager by lazy {
+        getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    private var systemVolumeBeforeCue: Int? = null
 
     private val restartListening = Runnable {
         startListening()
+    }
+    private val restoreRecognitionCueVolume = Runnable {
+        restoreSystemVolume()
     }
 
     override fun onCreate() {
@@ -93,6 +100,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
+        restoreSystemVolume()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -132,6 +140,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
         try {
             isListening = true
+            silenceRecognitionCue()
             currentRecognizer.startListening(recognitionIntent)
             updateNotification(
                 if (voiceState == VoiceState.WAITING_FOR_WAKE) {
@@ -150,6 +159,40 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(restartListening)
         if (isRunning && !isSpeaking) {
             handler.postDelayed(restartListening, delayMillis)
+        }
+    }
+
+    private fun silenceRecognitionCue(durationMillis: Long = 650) {
+        if (audioManager.isVolumeFixed) return
+        handler.removeCallbacks(restoreRecognitionCueVolume)
+        try {
+            if (systemVolumeBeforeCue == null) {
+                systemVolumeBeforeCue =
+                    audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
+            }
+            audioManager.setStreamVolume(
+                AudioManager.STREAM_SYSTEM,
+                0,
+                AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE,
+            )
+            handler.postDelayed(restoreRecognitionCueVolume, durationMillis)
+        } catch (_: SecurityException) {
+            restoreSystemVolume()
+        }
+    }
+
+    private fun restoreSystemVolume() {
+        handler.removeCallbacks(restoreRecognitionCueVolume)
+        val previousVolume = systemVolumeBeforeCue ?: return
+        try {
+            audioManager.setStreamVolume(
+                AudioManager.STREAM_SYSTEM,
+                previousVolume,
+                0,
+            )
+            systemVolumeBeforeCue = null
+        } catch (_: SecurityException) {
+            // Some manufacturers do not allow apps to control system cue volume.
         }
     }
 
@@ -430,6 +473,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(restartListening)
         isListening = false
         isSpeaking = true
+        silenceRecognitionCue()
         recognizer?.cancel()
         afterSpeech = onFinished
         if (!ttsReady) {
@@ -557,16 +601,22 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onReadyForSpeech(params: Bundle?) = Unit
-    override fun onBeginningOfSpeech() = Unit
+
+    override fun onBeginningOfSpeech() {
+        restoreSystemVolume()
+    }
+
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
 
     override fun onEndOfSpeech() {
         isListening = false
+        silenceRecognitionCue()
     }
 
     override fun onError(error: Int) {
         isListening = false
+        silenceRecognitionCue()
         if (isSpeaking) return
         if (
             voiceState == VoiceState.WAITING_FOR_COMMAND &&
@@ -586,6 +636,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onResults(results: Bundle?) {
         isListening = false
+        silenceRecognitionCue()
         processRecognition(results, isFinal = true)
     }
 
