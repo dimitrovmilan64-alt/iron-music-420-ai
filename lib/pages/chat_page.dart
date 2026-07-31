@@ -685,28 +685,27 @@ class _ChatPageState extends State<ChatPage>
 
   void _showMessage(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
-    );
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            96 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
 
   Widget _buildApiSection() {
     if (!_showApiBox) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            Expanded(
-              child: IronButton(
-                text: 'API ключът е запазен',
-                icon: Icons.lock,
-                secondary: true,
-                onPressed: () => setState(() => _showApiBox = true),
-              ),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return Padding(
@@ -773,6 +772,7 @@ class _ChatPageState extends State<ChatPage>
     required String tooltip,
     required bool active,
     required VoidCallback? onPressed,
+    required double size,
   }) {
     return Tooltip(
       message: tooltip,
@@ -781,8 +781,8 @@ class _ChatPageState extends State<ChatPage>
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          width: 44,
-          height: 44,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: active
@@ -803,7 +803,7 @@ class _ChatPageState extends State<ChatPage>
           child: Icon(
             icon,
             color: active ? ironGreen : Colors.white54,
-            size: 21,
+            size: size * 0.48,
           ),
         ),
       ),
@@ -812,7 +812,22 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   Widget build(BuildContext context) {
-    final showLargeCore = _messages.length <= 2;
+    final media = MediaQuery.of(context);
+    final usableHeight = media.size.height -
+        media.padding.vertical -
+        media.viewInsets.bottom;
+    final keyboardOpen = media.viewInsets.bottom > 0;
+    final compactHeight = usableHeight < 680;
+    final showLargeCore =
+        _messages.length <= 2 && !keyboardOpen && !compactHeight;
+    final coreSize = keyboardOpen
+        ? 88.0
+        : showLargeCore
+            ? 164.0
+            : compactHeight
+                ? 108.0
+                : 122.0;
+    final controlSize = compactHeight || keyboardOpen ? 40.0 : 44.0;
 
     return IronBackground(
       child: Column(
@@ -874,11 +889,17 @@ class _ChatPageState extends State<ChatPage>
               ],
             ),
           ),
-          AnimatedContainer(
+          AnimatedSize(
             duration: const Duration(milliseconds: 320),
             curve: Curves.easeOut,
-            height: showLargeCore ? 260 : 190,
-            child: AnimatedBuilder(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                keyboardOpen ? 2 : (showLargeCore ? 8 : 4),
+                12,
+                keyboardOpen ? 4 : 8,
+              ),
+              child: AnimatedBuilder(
               animation: _coreController,
               builder: (context, _) {
                 final activityBoost = (_isListening || _isLoading) ? 0.22 : 0.0;
@@ -887,6 +908,7 @@ class _ChatPageState extends State<ChatPage>
                         .clamp(0.0, 1.0)
                         .toDouble();
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     GestureDetector(
@@ -896,7 +918,7 @@ class _ChatPageState extends State<ChatPage>
                         scale: _isListening ? 1.08 : 1.0,
                         child: CannabisCore(
                           progress: progress,
-                          size: showLargeCore ? 176 : 120,
+                          size: coreSize,
                         ),
                       ),
                     ),
@@ -924,6 +946,7 @@ class _ChatPageState extends State<ChatPage>
                           tooltip: 'Продължаващ разговор',
                           active: _conversationMode,
                           onPressed: _toggleConversationMode,
+                          size: controlSize,
                         ),
                         const SizedBox(width: 12),
                         _coreControl(
@@ -933,6 +956,7 @@ class _ChatPageState extends State<ChatPage>
                           tooltip: 'Hey Iron',
                           active: _ironActive,
                           onPressed: _ironBusy ? null : _toggleIron,
+                          size: controlSize,
                         ),
                         const SizedBox(width: 12),
                         _coreControl(
@@ -942,6 +966,7 @@ class _ChatPageState extends State<ChatPage>
                           tooltip: 'Гласови отговори',
                           active: widget.store.voiceRepliesEnabled,
                           onPressed: _toggleVoiceReplies,
+                          size: controlSize,
                         ),
                       ],
                     ),
@@ -950,6 +975,7 @@ class _ChatPageState extends State<ChatPage>
               },
             ),
           ),
+        ),
           _buildApiSection(),
           Expanded(
             child: ListView.builder(
@@ -1100,10 +1126,22 @@ class _ChatBubble extends StatelessWidget {
                       ClipboardData(text: message.text),
                     );
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Съобщението е копирано.')),
-                      );
+                      final messenger = ScaffoldMessenger.of(context);
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: const Text('Съобщението е копирано.'),
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.fromLTRB(
+                              16,
+                              8,
+                              16,
+                              96 + MediaQuery.of(context).viewInsets.bottom,
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
                     }
                   },
                   child: const Padding(
