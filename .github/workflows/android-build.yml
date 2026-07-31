@@ -35,6 +35,12 @@ jobs:
         if: ${{ hashFiles('scripts/apply_v312_responsive_ui.py') != '' }}
         shell: bash
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('CHANGELOG_V312_RESPONSIVE_UI.txt')
+          clean = '\n'.join(line.rstrip() for line in path.read_text().splitlines()).rstrip() + '\n'
+          path.write_text(clean)
+          PY
           rm scripts/apply_v312_responsive_ui.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
