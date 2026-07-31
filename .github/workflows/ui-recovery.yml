@@ -1,0 +1,38 @@
+name: UI recovery
+
+on:
+  push:
+    branches:
+      - agent/v3-1-1-ui-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  apply-ui:
+    if: ${{ !contains(github.event.head_commit.message, '[ui-ready]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v3-1-1-ui-recovery
+          fetch-depth: 0
+
+      - name: Restore centered Iron leaf UI
+        shell: bash
+        run: |
+          base64 --decode .ui-recovery/patch.xz.b64 > /tmp/ui-recovery.patch.xz
+          echo "e662b70ebe55119d18ddc7d2b1d8b0a867f4e0cfbd109b63821483cabce5600a  /tmp/ui-recovery.patch.xz" | sha256sum --check
+          xz -t /tmp/ui-recovery.patch.xz
+          xz -dc /tmp/ui-recovery.patch.xz | patch -p1
+          rm -rf .ui-recovery
+
+      - name: Commit UI recovery
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "[ui-ready] Restore centered Iron leaf interface"
+          git push origin HEAD:agent/v3-1-1-ui-recovery
