@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           cat .v31remain/part{00..13} | base64 --decode > /tmp/v31-remaining.patch.gz
-          echo "89128f2302302c0473f2f1db30919d766f2d546a0a9e722107a96feead6970a9  /tmp/v31-remaining.patch.gz" | sha256sum --check
+          gzip -t /tmp/v31-remaining.patch.gz
           gzip -dc /tmp/v31-remaining.patch.gz > /tmp/v31-remaining.patch
           echo "67e56cf3e15a07e5df80f99c9406a23250636c88c15f500625f19f0f9c3dcfb5  /tmp/v31-remaining.patch" | sha256sum --check
           test "$(wc -c < /tmp/v31-remaining.patch)" -eq 83260
