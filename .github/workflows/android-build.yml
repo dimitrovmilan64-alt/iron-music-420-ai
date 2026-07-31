@@ -1,55 +1,50 @@
-name: Finalize v3.1
+name: Android build
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
-
-permissions:
-  contents: write
 
 concurrency:
   group: android-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  finalize-v31:
+  build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
 
     steps:
-      - name: Checkout v3.1 branch
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
+          distribution: temurin
+          java-version: '17'
 
-      - name: Verify and install final v3.1 source
-        shell: bash
-        run: |
-          cat > /tmp/v31-final-parts.sha256 <<'EOF'
-          c45d98e035f828e32fca3709442f07375bd2c8d9870816d564a073028f67b788  .v31final/part00
-          0ec4288dbf6ceab5a98d2963a147624ff72c4ff02eaa4e996ec6efd22251228b  .v31final/part01
-          4397a3cb50050ff8405bfcc27c3a9b532d361d67dee84a04aeac78bc31ee7eda  .v31final/part02
-          e4f671ecfad393b9bda1c7f75e99b84e5eab4b035b7dfb000ac17dc110c780e8  .v31final/part03
-          fff1b73b5cc85f7507ef075e9b31f276d3073aa0968f380e8299313e18d0a6d0  .v31final/part04
-          6349dff06d0af5f3b3d340da31d99759807c255b56fd1d7ef78ffba5e3818644  .v31final/part05
-          6e9b51dbbcb56dc2f12d60eb65d91bb14bde22af2f907ff574fb8c67a8b32ae7  .v31final/part06
-          EOF
-          sha256sum --check /tmp/v31-final-parts.sha256
-          cat .v31final/part{00..06} | base64 --decode > /tmp/v31-final.tar.xz
-          xz -t /tmp/v31-final.tar.xz
-          echo "4476709f5b30fef15c9ed6baf02ea2b986810da06e348ab4e2c9b7ea3ab211e5  /tmp/v31-final.tar.xz" | sha256sum --check
-          tar -xJf /tmp/v31-final.tar.xz -C .
-          git checkout HEAD -- .github/workflows/android-build.yml
-          rm -rf .v31final .v31patch .v31fixed .v31remain
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-      - name: Commit final v3.1 source
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Finalize v3.1 conversational assistant"
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git push origin "HEAD:${BRANCH}"
+      - name: Prepare offline Hey Iron engine
+        run: bash scripts/prepare_sherpa_kws.sh
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Build arm64 debug APK
+        run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: iron-music-420-ai-v3.1.0-conversation-ui
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
