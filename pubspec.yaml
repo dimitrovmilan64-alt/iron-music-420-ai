@@ -2,7 +2,7 @@ name: ironmusic420ai
 description: Iron Music 420 AI - Bulgarian rap assistant with Gemini, voice and Rap Studio.
 publish_to: 'none'
 
-version: 3.1.0+34
+version: 3.1.1+35
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -18,14 +18,3 @@ dependencies:
 
 dependency_overrides:
   # Current Flutter versions require the newer Matrix4 API.
-  vector_math: 2.4.2
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^4.0.0
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/images/hud_core_exact.png
