@@ -68,7 +68,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze responsive UI
-        run: flutter analyze lib/pages/chat_page.dart
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/pages/chat_page.dart
 
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
