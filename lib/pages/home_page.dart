@@ -7,7 +7,11 @@ class HomePage extends StatefulWidget {
   final LocalStore store;
   final ValueChanged<int> onOpenSection;
 
-  const HomePage({super.key, required this.store, required this.onOpenSection});
+  const HomePage({
+    super.key,
+    required this.store,
+    required this.onOpenSection,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -22,7 +26,7 @@ class _HomePageState extends State<HomePage>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 2600),
     )..repeat(reverse: true);
   }
 
@@ -32,95 +36,309 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
+  Future<void> _continueLastProject() async {
+    if (widget.store.songProjects.isEmpty) {
+      await widget.store.startNewStudioProject();
+    } else {
+      await widget.store.loadSongIntoStudio(widget.store.songProjects.first);
+    }
+    widget.onOpenSection(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     return IronBackground(
       child: AnimatedBuilder(
         animation: Listenable.merge([_controller, widget.store]),
         builder: (context, _) {
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              final compact = constraints.maxHeight < 760 || width < 390;
-              final coreSize = (width * (compact ? 0.66 : 0.76))
-                  .clamp(210.0, compact ? 238.0 : 292.0)
-                  .toDouble();
-
-              return SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 14 : 18,
-                  compact ? 4 : 10,
-                  compact ? 14 : 18,
-                  compact ? 8 : 18,
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 112),
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: ironPanelRaised.withOpacity(0.9),
+                      border: Border.all(
+                        color: ironGreen.withOpacity(0.28),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.graphic_eq,
+                      color: ironGreen,
+                      size: 21,
+                    ),
+                  ),
+                  const Spacer(),
+                  NeonPill(
+                    text: widget.store.hasApiKey ? 'AI ONLINE' : 'API KEY',
+                    icon: widget.store.hasApiKey
+                        ? Icons.cloud_done_outlined
+                        : Icons.key_outlined,
+                    active: widget.store.hasApiKey,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Colors.white, Color(0xFFD5FFE2), ironGreenSoft],
+                  stops: [0.0, 0.52, 1.0],
+                ).createShader(bounds),
+                child: const Text(
+                  'IRON MUSIC',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.2,
+                    height: 1,
+                  ),
                 ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 620),
-                    child: Column(
-                      children: [
-                        _TopHudBar(
-                          online: widget.store.hasApiKey,
-                          onMenu: () => widget.onOpenSection(4),
-                          compact: compact,
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                '420 AI',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: ironGreen,
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 3,
+                  height: 1.05,
+                  shadows: [
+                    Shadow(color: ironGreen, blurRadius: 18),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'ТВОЯТ AI РАП ПРОДУЦЕНТ',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: ironGreen.withOpacity(0.78),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Center(
+                child: CannabisCore(
+                  progress: _controller.value,
+                  size: 224,
+                ),
+              ),
+              const SizedBox(height: 4),
+              IronCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: ironGreen.withOpacity(0.1),
+                        border: Border.all(
+                          color: ironGreen.withOpacity(0.35),
                         ),
-                        SizedBox(height: compact ? 2 : 7),
-                        _ExactTitle(compact: compact),
-                        SizedBox(height: compact ? 1 : 5),
-                        CannabisCore(
-                          progress: _controller.value,
-                          size: coreSize,
-                        ),
-                        SizedBox(height: compact ? 1 : 4),
-                        _ApiStatusCard(
-                          hasApiKey: widget.store.hasApiKey,
-                          compact: compact,
-                        ),
-                        SizedBox(height: compact ? 8 : 12),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          mainAxisSpacing: compact ? 8 : 10,
-                          crossAxisSpacing: compact ? 8 : 10,
-                          childAspectRatio: compact ? 1.84 : 1.72,
-                          children: [
-                            _ExactActionCard(
-                              icon: Icons.chat_bubble_outline_rounded,
-                              title: 'ЧАТ',
-                              subtitle: 'Говори с AI',
-                              compact: compact,
-                              onTap: () => widget.onOpenSection(3),
+                      ),
+                      child: Icon(
+                        widget.store.hasApiKey
+                            ? Icons.verified_user_outlined
+                            : Icons.key_off_outlined,
+                        color: widget.store.hasApiKey
+                            ? ironGreen
+                            : Colors.orangeAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.store.hasApiKey
+                                ? 'API ключът е запазен'
+                                : 'Gemini API ключ липсва',
+                            style: const TextStyle(
+                              color: ironGreenSoft,
+                              fontWeight: FontWeight.w800,
                             ),
-                            _ExactActionCard(
-                              icon: Icons.mic_none_rounded,
-                              title: 'RAP STUDIO',
-                              subtitle: 'Пиши и генерирай',
-                              compact: compact,
-                              onTap: () => widget.onOpenSection(1),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Gemini Flash • Български глас • Локално',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
                             ),
-                            _ExactActionCard(
-                              icon: Icons.music_note_rounded,
-                              title: 'ПЕСНИ',
-                              subtitle: 'Моите проекти',
-                              compact: compact,
-                              onTap: () => widget.onOpenSection(2),
-                            ),
-                            _ExactActionCard(
-                              icon: Icons.graphic_eq_rounded,
-                              title: 'IRON',
-                              subtitle: 'Хей, Iron',
-                              compact: compact,
-                              onTap: () => widget.onOpenSection(4),
-                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.store.hasApiKey
+                            ? ironGreen
+                            : Colors.orangeAccent,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (widget.store.hasApiKey
+                                    ? ironGreen
+                                    : Colors.orangeAccent)
+                                .withOpacity(0.8),
+                            blurRadius: 9,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MetricBox(
+                      icon: Icons.library_music_outlined,
+                      value: '${widget.store.songProjects.length}',
+                      label: 'Песни',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MetricBox(
+                      icon: Icons.forum_outlined,
+                      value: '${widget.store.chatHistory.length}',
+                      label: 'Съобщения',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Text(
+                    'Бърз старт',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            ironGreen.withOpacity(0.48),
+                            Colors.transparent,
                           ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 11),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.17,
+                children: [
+                  _QuickAction(
+                    icon: Icons.chat_bubble_outline,
+                    title: 'ЧАТ',
+                    subtitle: 'Говори с AI',
+                    onTap: () => widget.onOpenSection(3),
+                  ),
+                  _QuickAction(
+                    icon: Icons.mic_external_on_outlined,
+                    title: 'RAP STUDIO',
+                    subtitle: 'Пиши и генерирай',
+                    onTap: () => widget.onOpenSection(1),
+                  ),
+                  _QuickAction(
+                    icon: Icons.library_music_outlined,
+                    title: 'ПЕСНИ',
+                    subtitle: 'Моите проекти',
+                    onTap: () => widget.onOpenSection(2),
+                  ),
+                  _QuickAction(
+                    icon: Icons.graphic_eq,
+                    title: 'IRON',
+                    subtitle: 'Хей, Iron',
+                    onTap: () => widget.onOpenSection(4),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              IronButton(
+                text: widget.store.songProjects.isEmpty
+                    ? 'ЗАПОЧНИ НОВ ПРОЕКТ'
+                    : 'ПРОДЪЛЖИ ПОСЛЕДНИЯ ПРОЕКТ',
+                icon: widget.store.songProjects.isEmpty
+                    ? Icons.add
+                    : Icons.play_arrow_rounded,
+                onPressed: _continueLastProject,
+              ),
+              const SizedBox(height: 14),
+              IronCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Версия 2.6.2',
+                          style: TextStyle(
+                            color: ironGreen,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const Spacer(),
+                        NeonPill(
+                          text: '420 CORE',
+                          icon: Icons.bolt,
+                          active: true,
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 9),
+                    const StatusLine(
+                      icon: Icons.auto_awesome,
+                      text: 'Нов неонов HUD интерфейс и AI ядро',
+                    ),
+                    const StatusLine(
+                      icon: Icons.music_note,
+                      text: 'Lyrics, Style of Music и Exclude за Suno',
+                    ),
+                    const StatusLine(
+                      icon: Icons.save_outlined,
+                      text: 'Автозапазване, библиотека и TXT експорт',
+                    ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ],
           );
         },
       ),
@@ -128,240 +346,63 @@ class _HomePageState extends State<HomePage>
   }
 }
 
-class _TopHudBar extends StatelessWidget {
-  final bool online;
-  final VoidCallback onMenu;
-  final bool compact;
+class _MetricBox extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
 
-  const _TopHudBar({
-    required this.online,
-    required this.onMenu,
-    required this.compact,
+  const _MetricBox({
+    required this.icon,
+    required this.value,
+    required this.label,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: compact ? 34 : 42,
-      child: Row(
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onMenu,
-              borderRadius: BorderRadius.circular(18),
-              child: Padding(
-                padding: EdgeInsets.all(compact ? 6 : 8),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: List.generate(
-                    3,
-                    (index) => Container(
-                      width: index == 1
-                          ? (compact ? 23 : 27)
-                          : (compact ? 29 : 34),
-                      height: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: ironGreenSoft,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: const [
-                          BoxShadow(color: ironGreen, blurRadius: 7),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const Spacer(),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: online ? ironGreenSoft : Colors.orangeAccent,
-              boxShadow: [
-                BoxShadow(
-                  color: (online ? ironGreen : Colors.orangeAccent).withOpacity(
-                    0.9,
-                  ),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExactTitle extends StatelessWidget {
-  final bool compact;
-
-  const _ExactTitle({required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ShaderMask(
-          blendMode: BlendMode.srcIn,
-          shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white,
-              Color(0xFFE9F0EC),
-              Color(0xFF9BA8A0),
-              Colors.white,
-            ],
-            stops: [0, 0.38, 0.72, 1],
-          ).createShader(bounds),
-          child: Text(
-            'IRON MUSIC',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: compact ? 31 : 38,
-              height: 0.95,
-              fontWeight: FontWeight.w900,
-              letterSpacing: compact ? 1.3 : 1.7,
-              shadows: const [
-                Shadow(
-                  color: Colors.black,
-                  blurRadius: 5,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: compact ? 1 : 3),
-        Text(
-          '420 AI',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: ironGreen,
-            fontSize: compact ? 40 : 49,
-            height: 0.94,
-            fontWeight: FontWeight.w900,
-            letterSpacing: compact ? 2.8 : 3.6,
-            shadows: const [
-              Shadow(color: ironGreen, blurRadius: 22),
-              Shadow(color: ironGreen, blurRadius: 7),
-            ],
-          ),
-        ),
-        SizedBox(height: compact ? 5 : 8),
-        Text(
-          'ТВОЯТ AI РАП ПРОДУЦЕНТ',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: ironGreenSoft.withOpacity(0.88),
-            fontSize: compact ? 9.5 : 11,
-            fontWeight: FontWeight.w900,
-            letterSpacing: compact ? 1.9 : 2.5,
-            shadows: const [Shadow(color: ironGreen, blurRadius: 8)],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ApiStatusCard extends StatelessWidget {
-  final bool hasApiKey;
-  final bool compact;
-
-  const _ApiStatusCard({required this.hasApiKey, required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = hasApiKey ? ironGreen : Colors.orangeAccent;
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 13 : 16,
-        vertical: compact ? 8 : 11,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xE805100A),
-        borderRadius: BorderRadius.circular(compact ? 16 : 18),
-        border: Border.all(color: accent.withOpacity(0.46)),
-        boxShadow: [
-          BoxShadow(color: accent.withOpacity(0.11), blurRadius: 20),
-          const BoxShadow(
-            color: Colors.black54,
-            blurRadius: 12,
-            offset: Offset(0, 7),
-          ),
-        ],
+        gradient: LinearGradient(
+          colors: [
+            ironPanelRaised.withOpacity(0.94),
+            ironPanel.withOpacity(0.96),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: ironGreen.withOpacity(0.28)),
       ),
       child: Row(
         children: [
           Container(
-            width: compact ? 36 : 42,
-            height: compact ? 36 : 42,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: accent.withOpacity(0.08),
-              border: Border.all(color: accent.withOpacity(0.5)),
+              color: ironGreen.withOpacity(0.09),
             ),
-            child: Icon(
-              hasApiKey ? Icons.verified_user_outlined : Icons.key_off_outlined,
-              color: accent,
-              size: compact ? 21 : 25,
-            ),
+            child: Icon(icon, color: ironGreen, size: 20),
           ),
-          SizedBox(width: compact ? 10 : 12),
+          const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    hasApiKey
-                        ? 'API ключът е запазен'
-                        : 'Gemini API ключ липсва',
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: compact ? 14 : 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: ironGreen,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 2),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Gemini Flash • Български глас',
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: Colors.white60,
-                      fontSize: compact ? 10.5 : 12,
-                    ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
                   ),
                 ),
               ],
-            ),
-          ),
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: accent,
-              boxShadow: [BoxShadow(color: accent, blurRadius: 10)],
             ),
           ),
         ],
@@ -370,142 +411,98 @@ class _ApiStatusCard extends StatelessWidget {
   }
 }
 
-class _ExactActionCard extends StatelessWidget {
+class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool compact;
   final VoidCallback onTap;
 
-  const _ExactActionCard({
+  const _QuickAction({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.compact,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final iconBox = compact ? 39.0 : 46.0;
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
         child: Ink(
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xF00A2915), Color(0xF004160B), Color(0xF0010905)],
+              colors: [
+                const Color(0xFF0A2814).withOpacity(0.92),
+                ironPanel.withOpacity(0.98),
+                const Color(0xFF010904),
+              ],
             ),
-            border: Border.all(color: ironGreen.withOpacity(0.72)),
+            border: Border.all(color: ironGreen.withOpacity(0.42)),
             boxShadow: [
               BoxShadow(
-                color: ironGreen.withOpacity(0.17),
-                blurRadius: 18,
-                spreadRadius: 0.2,
-              ),
-              const BoxShadow(
-                color: Colors.black54,
-                blurRadius: 10,
-                offset: Offset(0, 7),
+                color: ironGreen.withOpacity(0.08),
+                blurRadius: 17,
               ),
             ],
           ),
           child: Stack(
             children: [
               Positioned(
-                left: 11,
-                right: 11,
-                top: 0,
-                child: Container(
-                  height: 1.3,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        ironGreenSoft.withOpacity(0.95),
-                        Colors.transparent,
-                      ],
-                    ),
-                    boxShadow: const [
-                      BoxShadow(color: ironGreen, blurRadius: 7),
-                    ],
-                  ),
+                right: -9,
+                bottom: -12,
+                child: Icon(
+                  icon,
+                  size: 72,
+                  color: ironGreen.withOpacity(0.035),
                 ),
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: iconBox,
-                      height: iconBox,
-                      decoration: BoxDecoration(
-                        color: ironGreen.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(compact ? 12 : 14),
-                        border: Border.all(color: ironGreen.withOpacity(0.28)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: ironGreen.withOpacity(0.1),
-                            blurRadius: 12,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        icon,
-                        color: ironGreen,
-                        size: compact ? 25 : 29,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 39,
+                    height: 39,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: ironGreen.withOpacity(0.1),
+                      border: Border.all(
+                        color: ironGreen.withOpacity(0.32),
                       ),
                     ),
-                    SizedBox(width: compact ? 8 : 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                title,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: compact ? 12.5 : 14,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: compact ? 2 : 4),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                subtitle,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: compact ? 9.5 : 11,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: Icon(icon, color: ironGreen, size: 23),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
