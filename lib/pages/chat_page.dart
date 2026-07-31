@@ -18,7 +18,8 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage>
+    with SingleTickerProviderStateMixin {
   static const _welcomeText =
       'Аз съм Iron. Говори ми естествено на български — помня разговора и мога да продължавам по контекста.';
 
@@ -29,6 +30,7 @@ class _ChatPageState extends State<ChatPage> {
   final stt.SpeechToText _speechToText = stt.SpeechToText();
   final GeminiService _gemini = GeminiService();
   final AutomationService _automation = AutomationService();
+  late final AnimationController _coreController;
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
@@ -50,6 +52,10 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _coreController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
     _apiKeyController = TextEditingController(text: widget.store.apiKey);
     _showApiBox = !widget.store.hasApiKey;
     _messages = List<ChatMessage>.from(widget.store.chatHistory);
@@ -77,6 +83,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    _coreController.dispose();
     _flutterTts.stop();
     _speechToText.stop();
     _gemini.dispose();
@@ -754,136 +761,235 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  String get _coreStatus {
+    if (_isListening) return 'СЛУШАМ';
+    if (_isLoading) return 'МИСЛЯ';
+    if (_conversationMode) return 'РАЗГОВОРЪТ Е АКТИВЕН';
+    return 'ГОТОВ СЪМ';
+  }
+
+  Widget _coreControl({
+    required IconData icon,
+    required String tooltip,
+    required bool active,
+    required VoidCallback? onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(24),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active
+                ? ironGreen.withOpacity(0.16)
+                : Colors.black.withOpacity(0.28),
+            border: Border.all(
+              color: ironGreen.withOpacity(active ? 0.72 : 0.24),
+            ),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: ironGreen.withOpacity(0.18),
+                      blurRadius: 16,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            color: active ? ironGreen : Colors.white54,
+            size: 21,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final showLargeCore = _messages.length <= 2;
+
     return IronBackground(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
-            child: PageTitle(
-              eyebrow: 'IRON',
-              title: 'Iron AI',
-              subtitle: _gemini.activeModel == null
-                  ? 'Говори естествено. Не са нужни точни команди.'
-                  : 'Разговорен режим • ${_gemini.activeModel}',
-              trailing: PopupMenuButton<String>(
-                tooltip: 'Настройки',
-                icon: const Icon(Icons.more_vert, color: ironGreen),
-                onSelected: (value) {
-                  if (value == 'api') {
-                    setState(() => _showApiBox = !_showApiBox);
-                  } else if (value == 'history') {
-                    _clearHistory();
-                  } else if (value == 'voice') {
-                    _openVoiceSettings();
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'api',
-                    child: Text('API ключ'),
-                  ),
-                  PopupMenuItem(
-                    value: 'voice',
-                    child: Text('Настройки на гласа'),
-                  ),
-                  PopupMenuItem(
-                    value: 'history',
-                    child: Text('Изчисти историята'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 6,
+            padding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
+            child: Row(
               children: [
-                ActionChip(
-                  avatar: Icon(
-                    _conversationMode ? Icons.forum : Icons.forum_outlined,
-                    size: 18,
-                    color: _conversationMode ? ironGreen : Colors.white54,
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'IRON MUSIC 420 AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Личен AI асистент',
+                        style: TextStyle(
+                          color: ironGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
                   ),
-                  label: Text(_conversationMode ? 'Разговор активен' : 'Разговор'),
-                  onPressed: _toggleConversationMode,
                 ),
-                ActionChip(
-                  avatar: Icon(
-                    _ironActive ? Icons.hearing : Icons.hearing_disabled,
-                    size: 18,
-                    color: _ironActive ? ironGreen : Colors.white54,
-                  ),
-                  label: Text(
-                    _ironBusy
-                        ? 'Iron...'
-                        : (_ironActive ? 'Hey Iron активен' : 'Hey Iron спрян'),
-                  ),
-                  onPressed: _ironBusy ? null : _toggleIron,
-                ),
-                ActionChip(
-                  avatar: Icon(
-                    widget.store.voiceRepliesEnabled
-                        ? Icons.volume_up
-                        : Icons.volume_off,
-                    size: 18,
-                    color: ironGreen,
-                  ),
-                  label: Text(
-                    widget.store.voiceRepliesEnabled ? 'Глас' : 'Без глас',
-                  ),
-                  onPressed: _toggleVoiceReplies,
+                PopupMenuButton<String>(
+                  tooltip: 'Настройки',
+                  icon: const Icon(Icons.more_horiz, color: ironGreen),
+                  onSelected: (value) {
+                    if (value == 'api') {
+                      setState(() => _showApiBox = !_showApiBox);
+                    } else if (value == 'history') {
+                      _clearHistory();
+                    } else if (value == 'voice') {
+                      _openVoiceSettings();
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'api', child: Text('API ключ')),
+                    PopupMenuItem(
+                      value: 'voice',
+                      child: Text('Настройки на гласа'),
+                    ),
+                    PopupMenuItem(
+                      value: 'history',
+                      child: Text('Изчисти историята'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOut,
+            height: showLargeCore ? 246 : 174,
+            child: AnimatedBuilder(
+              animation: _coreController,
+              builder: (context, _) {
+                final activityBoost = (_isListening || _isLoading) ? 0.22 : 0.0;
+                final progress =
+                    (_coreController.value * 0.72 + activityBoost).clamp(0.0, 1.0);
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: _isLoading ? null : _toggleListening,
+                      child: AnimatedScale(
+                        duration: const Duration(milliseconds: 220),
+                        scale: _isListening ? 1.08 : 1.0,
+                        child: CannabisCore(
+                          progress: progress,
+                          size: showLargeCore ? 184 : 126,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _coreStatus,
+                      style: TextStyle(
+                        color: _isListening ? ironGreenSoft : ironGreen,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.0,
+                        shadows: const [
+                          Shadow(color: ironGreen, blurRadius: 10),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _coreControl(
+                          icon: _conversationMode
+                              ? Icons.forum
+                              : Icons.forum_outlined,
+                          tooltip: 'Продължаващ разговор',
+                          active: _conversationMode,
+                          onPressed: _toggleConversationMode,
+                        ),
+                        const SizedBox(width: 12),
+                        _coreControl(
+                          icon: _ironActive
+                              ? Icons.hearing
+                              : Icons.hearing_disabled,
+                          tooltip: 'Hey Iron',
+                          active: _ironActive,
+                          onPressed: _ironBusy ? null : _toggleIron,
+                        ),
+                        const SizedBox(width: 12),
+                        _coreControl(
+                          icon: widget.store.voiceRepliesEnabled
+                              ? Icons.volume_up
+                              : Icons.volume_off,
+                          tooltip: 'Гласови отговори',
+                          active: widget.store.voiceRepliesEnabled,
+                          onPressed: _toggleVoiceReplies,
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
           _buildApiSection(),
-          const SizedBox(height: 4),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
                   return const Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
-                      padding: EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: ironGreen,
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            'Iron Music 420 AI мисли...',
-                            style: TextStyle(color: ironGreen),
-                          ),
-                        ],
+                      padding: EdgeInsets.only(left: 6, bottom: 12),
+                      child: Text(
+                        'Iron мисли...',
+                        style: TextStyle(
+                          color: ironGreen,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   );
                 }
 
-                final message = _messages[index];
-                return _ChatBubble(message: message);
+                return _ChatBubble(message: _messages[index]);
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+          Container(
+            margin: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+            padding: const EdgeInsets.fromLTRB(10, 7, 7, 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF010A05).withOpacity(0.98),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: ironGreen.withOpacity(0.30)),
+              boxShadow: [
+                BoxShadow(
+                  color: ironGreen.withOpacity(0.08),
+                  blurRadius: 20,
+                ),
+              ],
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -894,41 +1000,27 @@ class _ChatPageState extends State<ChatPage> {
                     maxLines: 5,
                     textCapitalization: TextCapitalization.sentences,
                     style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
+                    decoration: InputDecoration.collapsed(
                       hintText: _isListening
-                          ? 'Слушам на български...'
-                          : 'Питай Iron Music 420 AI...',
+                          ? 'Слушам... кажи всичко спокойно'
+                          : 'Говори или напиши на Iron...',
                       hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF010A05).withOpacity(0.94),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide:
-                            BorderSide(color: ironGreen.withOpacity(0.28)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide:
-                            const BorderSide(color: ironGreen, width: 1.5),
-                      ),
                     ),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-                const SizedBox(width: 5),
-                IconButton.filledTonal(
-                  tooltip: 'Български микрофон',
+                IconButton(
+                  tooltip: 'Микрофон',
                   onPressed: _isLoading ? null : _toggleListening,
                   icon: Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
+                    _isListening ? Icons.stop_circle : Icons.mic_rounded,
                     color: _isListening ? Colors.redAccent : ironGreen,
                   ),
                 ),
-                const SizedBox(width: 3),
                 IconButton.filled(
                   tooltip: 'Изпрати',
                   onPressed: _isLoading ? null : _sendMessage,
-                  icon: const Icon(Icons.send),
+                  icon: const Icon(Icons.arrow_upward_rounded),
                 ),
               ],
             ),
@@ -937,6 +1029,7 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
+
 }
 
 class _ChatBubble extends StatelessWidget {
