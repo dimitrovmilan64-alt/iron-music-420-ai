@@ -45,6 +45,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.0.0-ai-voice-mode
+          name: iron-music-420-ai-v3.1.0-conversation-ui
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error

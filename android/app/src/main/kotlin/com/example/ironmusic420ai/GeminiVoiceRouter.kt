@@ -60,6 +60,7 @@ class GeminiVoiceRouter(private val context: Context) {
         private const val SYSTEM_PROMPT = """
 Ти си мозъкът на Iron Music 420 AI — личен Android гласов асистент.
 Потребителят говори естествено на български. Разбери намерението, без да изискваш точна команда.
+Ще получаваш контекст от предишните реплики в текущия разговор. Разбирай кратки продължения като „не, другото“, „направи го по-кратко“ и „сега отвори това“ според контекста.
 
 Върни САМО валиден JSON обект с точно тези полета:
 {"action":"...","argument":"...","reply":"..."}
@@ -109,11 +110,23 @@ class GeminiVoiceRouter(private val context: Context) {
     class MissingApiKeyException : Exception()
     class AiUnavailableException(message: String) : Exception(message)
 
+    private data class ConversationTurn(
+        val role: String,
+        val text: String,
+    )
+
     private val preferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val conversation = mutableListOf<ConversationTurn>()
 
     fun hasApiKey(): Boolean = apiKey().isNotBlank()
 
+    @Synchronized
+    fun resetConversation() {
+        conversation.clear()
+    }
+
+    @Synchronized
     fun route(utterance: String): Decision {
         val key = apiKey()
         if (key.isBlank()) throw MissingApiKeyException()
@@ -133,6 +146,7 @@ class GeminiVoiceRouter(private val context: Context) {
             when {
                 result.statusCode == 200 && result.body.isNotBlank() -> {
                     val decision = parseDecision(result.body)
+                    rememberTurn(utterance, decision)
                     preferences.edit().putString(KEY_ACTIVE_MODEL, model).apply()
                     return decision
                 }
@@ -195,17 +209,26 @@ class GeminiVoiceRouter(private val context: Context) {
                     JSONArray().put(JSONObject().put("text", SYSTEM_PROMPT)),
                 ),
             )
-            put(
-                "contents",
-                JSONArray().put(
+            val contents = JSONArray()
+            conversation.forEach { turn ->
+                contents.put(
                     JSONObject()
-                        .put("role", "user")
+                        .put("role", turn.role)
                         .put(
                             "parts",
-                            JSONArray().put(JSONObject().put("text", utterance)),
+                            JSONArray().put(JSONObject().put("text", turn.text)),
                         ),
-                ),
+                )
+            }
+            contents.put(
+                JSONObject()
+                    .put("role", "user")
+                    .put(
+                        "parts",
+                        JSONArray().put(JSONObject().put("text", utterance)),
+                    ),
             )
+            put("contents", contents)
             val generationConfig = JSONObject()
                 .put("maxOutputTokens", 500)
             if (!model.startsWith("gemini-3.5") &&
@@ -280,6 +303,20 @@ class GeminiVoiceRouter(private val context: Context) {
         }
 
         return Decision(action, argument, reply)
+    }
+
+    private fun rememberTurn(utterance: String, decision: Decision) {
+        val modelContext = JSONObject()
+            .put("action", decision.action)
+            .put("argument", decision.argument)
+            .put("reply", decision.reply)
+            .toString()
+
+        conversation.add(ConversationTurn("user", utterance.trim()))
+        conversation.add(ConversationTurn("model", modelContext))
+        while (conversation.size > 12) {
+            conversation.removeAt(0)
+        }
     }
 
     private fun extractError(body: String): String {

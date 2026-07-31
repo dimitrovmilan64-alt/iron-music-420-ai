@@ -20,7 +20,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   static const _welcomeText =
-      'Готов съм. Запази Gemini API ключа и ме попитай на български.';
+      'Аз съм Iron. Говори ми естествено на български — помня разговора и мога да продължавам по контекста.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
@@ -37,6 +37,9 @@ class _ChatPageState extends State<ChatPage> {
   bool _speechAvailable = false;
   bool _voiceReady = false;
   bool _speechSendTriggered = false;
+  bool _conversationMode = false;
+  bool _ironActive = false;
+  bool _ironBusy = false;
   String _bulgarianLocale = 'bg_BG';
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
@@ -69,6 +72,7 @@ class _ChatPageState extends State<ChatPage> {
     _selectedVoiceLocale = widget.store.ttsVoiceLocale;
     _configureBulgarianVoice();
     _prepareSpeechRecognition();
+    _loadIronStatus();
   }
 
   @override
@@ -413,6 +417,51 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _loadIronStatus() async {
+    final active = await _automation.isIronVoiceActive();
+    if (!mounted) return;
+    setState(() => _ironActive = active);
+  }
+
+  Future<void> _toggleIron() async {
+    if (_ironBusy) return;
+    setState(() => _ironBusy = true);
+    final result = await _automation.execute(
+      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
+    );
+    if (!mounted) return;
+    setState(() {
+      _ironBusy = false;
+      if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
+  }
+
+  Future<void> _toggleConversationMode() async {
+    final enabled = !_conversationMode;
+    setState(() => _conversationMode = enabled);
+
+    if (!enabled) {
+      await _speechToText.stop();
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+
+    if (!_isLoading && !_speechToText.isListening) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (mounted && _conversationMode) await _toggleListening();
+    }
+  }
+
+  void _scheduleConversationListening() {
+    if (!_conversationMode) return;
+    Future<void>.delayed(const Duration(milliseconds: 650)).then((_) async {
+      if (!mounted || !_conversationMode || _isLoading) return;
+      if (_speechToText.isListening || _isListening) return;
+      await _toggleListening();
+    });
+  }
+
   Future<void> _sendRecognizedSpeech() async {
     if (_speechSendTriggered || _isLoading) return;
     if (_messageController.text.trim().isEmpty) return;
@@ -453,8 +502,8 @@ class _ChatPageState extends State<ChatPage> {
     try {
       await _speechToText.listen(
         localeId: _bulgarianLocale,
-        listenFor: const Duration(seconds: 45),
-        pauseFor: const Duration(seconds: 4),
+        listenFor: const Duration(seconds: 90),
+        pauseFor: const Duration(seconds: 7),
         partialResults: true,
         cancelOnError: true,
         listenMode: stt.ListenMode.dictation,
@@ -566,6 +615,7 @@ class _ChatPageState extends State<ChatPage> {
       if (mounted) {
         setState(() => _isLoading = false);
         _scrollToBottom();
+        _scheduleConversationListening();
       }
     }
   }
@@ -713,10 +763,10 @@ class _ChatPageState extends State<ChatPage> {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: PageTitle(
               eyebrow: 'IRON',
-              title: 'Чат',
+              title: 'Iron AI',
               subtitle: _gemini.activeModel == null
-                  ? 'Пиши или говори'
-                  : 'Модел: ${_gemini.activeModel}',
+                  ? 'Говори естествено. Не са нужни точни команди.'
+                  : 'Разговорен режим • ${_gemini.activeModel}',
               trailing: PopupMenuButton<String>(
                 tooltip: 'Настройки',
                 icon: const Icon(Icons.more_vert, color: ironGreen),
@@ -754,6 +804,28 @@ class _ChatPageState extends State<ChatPage> {
               children: [
                 ActionChip(
                   avatar: Icon(
+                    _conversationMode ? Icons.forum : Icons.forum_outlined,
+                    size: 18,
+                    color: _conversationMode ? ironGreen : Colors.white54,
+                  ),
+                  label: Text(_conversationMode ? 'Разговор активен' : 'Разговор'),
+                  onPressed: _toggleConversationMode,
+                ),
+                ActionChip(
+                  avatar: Icon(
+                    _ironActive ? Icons.hearing : Icons.hearing_disabled,
+                    size: 18,
+                    color: _ironActive ? ironGreen : Colors.white54,
+                  ),
+                  label: Text(
+                    _ironBusy
+                        ? 'Iron...'
+                        : (_ironActive ? 'Hey Iron активен' : 'Hey Iron спрян'),
+                  ),
+                  onPressed: _ironBusy ? null : _toggleIron,
+                ),
+                ActionChip(
+                  avatar: Icon(
                     widget.store.voiceRepliesEnabled
                         ? Icons.volume_up
                         : Icons.volume_off,
@@ -761,9 +833,7 @@ class _ChatPageState extends State<ChatPage> {
                     color: ironGreen,
                   ),
                   label: Text(
-                    widget.store.voiceRepliesEnabled
-                        ? (_voiceReady ? 'Глас включен' : 'Системен глас')
-                        : 'Глас изключен',
+                    widget.store.voiceRepliesEnabled ? 'Глас' : 'Без глас',
                   ),
                   onPressed: _toggleVoiceReplies,
                 ),

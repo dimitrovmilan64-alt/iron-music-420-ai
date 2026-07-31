@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'pages/chat_page.dart';
-import 'pages/commands_page.dart';
-import 'pages/home_page.dart';
 import 'pages/rap_studio_page.dart';
 import 'pages/songs_page.dart';
 import 'services/automation_service.dart';
@@ -172,9 +170,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   static const _navItems = <IronNavItem>[
     IronNavItem(
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home_rounded,
-      label: 'Начало',
+      icon: Icons.auto_awesome_outlined,
+      selectedIcon: Icons.auto_awesome,
+      label: 'AI',
     ),
     IronNavItem(
       icon: Icons.mic_external_on_outlined,
@@ -186,16 +184,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       selectedIcon: Icons.library_music,
       label: 'Песни',
     ),
-    IronNavItem(
-      icon: Icons.chat_bubble_outline,
-      selectedIcon: Icons.chat_bubble,
-      label: 'Чат',
-    ),
-    IronNavItem(
-      icon: Icons.graphic_eq_outlined,
-      selectedIcon: Icons.graphic_eq,
-      label: 'Iron',
-    ),
   ];
 
   @override
@@ -203,11 +191,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _pages = [
-      HomePage(store: widget.store, onOpenSection: _openSection),
+      ChatPage(store: widget.store),
       RapStudioPage(store: widget.store),
       SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
-      ChatPage(store: widget.store),
-      CommandsPage(store: widget.store, onOpenSection: _openSection),
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
   }
@@ -227,9 +213,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Future<void> _openPendingSection() async {
     final section = await _automation.consumeIronSection();
-    if (section != null) {
-      _openSection(section);
-    }
+    if (section == null) return;
+
+    // Native actions still use the original section IDs. The compact v3.1
+    // navigation maps every assistant/home request to the main AI screen.
+    final compactIndex = switch (section) {
+      1 => 1,
+      2 => 2,
+      _ => 0,
+    };
+    _openSection(compactIndex);
   }
 
   void _openSection(int index) {
