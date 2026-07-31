@@ -55,6 +55,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var isSpeaking = false
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
+    private var foregroundStarted = false
 
     private val restartListening = Runnable {
         startListening()
@@ -80,7 +81,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return START_NOT_STICKY
         }
 
-        startAsForeground("Iron е активен • кажи „Хей, Iron“")
+        if (!foregroundStarted) {
+            startAsForeground("Iron е активен • кажи „Хей, Iron“")
+            foregroundStarted = true
+        }
         initializeRecognizer()
         scheduleListening(350)
         return START_STICKY
@@ -99,6 +103,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         isListening = false
         isSpeaking = false
         isRunning = false
+        foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -128,41 +133,29 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "bg-BG")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
-            putExtra(
-                RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                10_000L,
-            )
-            putExtra(
-                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                2_500L,
-            )
-            putExtra(
-                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                2_500L,
-            )
         }
 
         try {
             isListening = true
             currentRecognizer.startListening(recognitionIntent)
-            updateNotification(
-                if (voiceState == VoiceState.WAITING_FOR_WAKE) {
-                    "Iron е активен • кажи „Хей, Iron“"
-                } else {
-                    "Iron слуша командата"
-                },
-            )
         } catch (_: Exception) {
             isListening = false
-            scheduleListening(2_000)
+            resetRecognizer()
+            scheduleListening(1_200)
         }
     }
 
-    private fun scheduleListening(delayMillis: Long = 1_500) {
+    private fun scheduleListening(delayMillis: Long = 700) {
         handler.removeCallbacks(restartListening)
         if (isRunning && !isSpeaking) {
             handler.postDelayed(restartListening, delayMillis)
         }
+    }
+
+    private fun resetRecognizer() {
+        recognizer?.destroy()
+        recognizer = null
+        initializeRecognizer()
     }
 
     private fun processRecognition(results: Bundle?, isFinal: Boolean) {
@@ -453,7 +446,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        updateNotification(text)
         textToSpeech?.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
@@ -581,6 +573,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onError(error: Int) {
         isListening = false
         if (isSpeaking) return
+        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+            stopSelf()
+            return
+        }
         if (
             voiceState == VoiceState.WAITING_FOR_COMMAND &&
             (error == SpeechRecognizer.ERROR_NO_MATCH ||
@@ -592,17 +588,27 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             }
             return
         }
+        if (
+            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+            error == SpeechRecognizer.ERROR_AUDIO ||
+            error == SpeechRecognizer.ERROR_CLIENT ||
+            error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+        ) {
+            resetRecognizer()
+        }
         scheduleListening(
             when (error) {
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 3_000
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1_200
                 SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 1_500
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 700
                 SpeechRecognizer.ERROR_AUDIO,
                 SpeechRecognizer.ERROR_CLIENT,
                 SpeechRecognizer.ERROR_NETWORK,
                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
-                SpeechRecognizer.ERROR_SERVER -> 4_000
-                else -> 2_500
+                SpeechRecognizer.ERROR_SERVER,
+                SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> 2_000
+                SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> 10_000
+                else -> 1_500
             },
         )
     }
