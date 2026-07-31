@@ -40,9 +40,33 @@ class MainActivity : FlutterActivity() {
                         result.success(pendingIronSection)
                         pendingIronSection = null
                     }
+                    "syncGeminiApiKey" -> {
+                        syncGeminiApiKey(
+                            call.argument<String>("apiKey").orEmpty(),
+                            result,
+                        )
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun syncGeminiApiKey(
+        apiKey: String,
+        result: MethodChannel.Result,
+    ) {
+        val editor = getSharedPreferences(
+            GeminiVoiceRouter.PREFS_NAME,
+            Context.MODE_PRIVATE,
+        ).edit()
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isEmpty()) {
+            editor.remove(GeminiVoiceRouter.KEY_GEMINI_API_KEY)
+        } else {
+            editor.putString(GeminiVoiceRouter.KEY_GEMINI_API_KEY, cleanKey)
+        }
+        editor.apply()
+        result.success(true)
     }
 
     override fun onNewIntent(intent: Intent) {

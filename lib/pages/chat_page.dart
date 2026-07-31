@@ -4,6 +4,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/chat_message.dart';
+import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
@@ -27,6 +28,7 @@ class _ChatPageState extends State<ChatPage> {
   final FlutterTts _flutterTts = FlutterTts();
   final stt.SpeechToText _speechToText = stt.SpeechToText();
   final GeminiService _gemini = GeminiService();
+  final AutomationService _automation = AutomationService();
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
@@ -486,6 +488,7 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     await widget.store.setApiKey(value);
+    await _automation.syncGeminiApiKey(value);
     _gemini.resetModel();
     if (!mounted) return;
     setState(() => _showApiBox = false);
@@ -495,6 +498,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _clearApiKey() async {
     _apiKeyController.clear();
     await widget.store.setApiKey('');
+    await _automation.syncGeminiApiKey('');
     _gemini.resetModel();
     if (!mounted) return;
     setState(() => _showApiBox = true);
@@ -510,6 +514,7 @@ class _ChatPageState extends State<ChatPage> {
     final typedKey = _apiKeyController.text.trim();
     if (typedKey.isNotEmpty && typedKey != widget.store.apiKey) {
       await widget.store.setApiKey(typedKey);
+      await _automation.syncGeminiApiKey(typedKey);
       _gemini.resetModel();
     }
 
