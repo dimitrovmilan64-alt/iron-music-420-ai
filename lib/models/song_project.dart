@@ -208,7 +208,7 @@ class SongProject {
         ..writeln();
     }
 
-    buffer.writeln('Създадено с Iron Music 420 AI v2.6.1');
+    buffer.writeln('Създадено с Iron Music 420 AI v2.6.2');
     return buffer.toString().trim();
   }
 }
