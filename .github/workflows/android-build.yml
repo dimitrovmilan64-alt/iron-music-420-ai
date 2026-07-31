@@ -30,11 +30,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install Android SDK components
-        run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973"
-
       - name: Get Flutter packages
         run: flutter pub get
 
