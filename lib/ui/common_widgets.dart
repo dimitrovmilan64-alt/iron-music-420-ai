@@ -578,79 +578,76 @@ class IronBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black,
-      padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF010A05).withOpacity(0.98),
+        border: Border(
+          top: BorderSide(color: ironGreen.withOpacity(0.18)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: ironGreen.withOpacity(0.08),
+            blurRadius: 22,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
       child: SafeArea(
         top: false,
-        child: Container(
-          height: 68,
-          decoration: BoxDecoration(
-            color: const Color(0xFF010A05).withOpacity(0.99),
-            borderRadius: BorderRadius.circular(29),
-            border: Border.all(color: ironGreen.withOpacity(0.20)),
-            boxShadow: [
-              BoxShadow(
-                color: ironGreen.withOpacity(0.08),
-                blurRadius: 22,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
+        child: SizedBox(
+          height: 70,
           child: Row(
             children: List.generate(items.length, (index) {
               final item = items[index];
               final selected = index == selectedIndex;
               return Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: () => onSelected(index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 230),
-                      curve: Curves.easeOutCubic,
-                      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? ironGreen.withOpacity(0.12)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(23),
-                        border: selected
-                            ? Border.all(color: ironGreen.withOpacity(0.34))
-                            : null,
-                        boxShadow: selected
-                            ? [
-                                BoxShadow(
-                                  color: ironGreen.withOpacity(0.14),
-                                  blurRadius: 13,
-                                ),
-                              ]
-                            : null,
+                child: InkWell(
+                  onTap: () => onSelected(index),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        width: selected ? 50 : 38,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? ironGreen.withOpacity(0.14)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(18),
+                          border: selected
+                              ? Border.all(
+                                  color: ironGreen.withOpacity(0.22),
+                                )
+                              : null,
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                    color: ironGreen.withOpacity(0.12),
+                                    blurRadius: 12,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Icon(
+                          selected ? item.selectedIcon : item.icon,
+                          color: selected ? ironGreen : Colors.white54,
+                          size: 22,
+                        ),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            selected ? item.selectedIcon : item.icon,
-                            color: selected ? ironGreen : Colors.white54,
-                            size: selected ? 24 : 22,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            item.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: selected ? ironGreen : Colors.white60,
-                              fontWeight: selected
-                                  ? FontWeight.w900
-                                  : FontWeight.w600,
-                              fontSize: 9.5,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected ? ironGreen : Colors.white60,
+                          fontWeight:
+                              selected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 10,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               );
