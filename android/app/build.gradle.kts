@@ -24,6 +24,10 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {
@@ -33,6 +37,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            pickFirsts += setOf("**/libc++_shared.so")
+        }
         resources {
             excludes += setOf(
                 "META-INF/DEPENDENCIES",
@@ -46,7 +53,7 @@ android {
 }
 
 dependencies {
-    implementation("ai.picovoice:porcupine-android:4.0.2")
+    implementation(files("libs/sherpa-onnx-1.13.4.aar"))
 }
 
 flutter {
