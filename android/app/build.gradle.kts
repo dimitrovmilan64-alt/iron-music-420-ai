@@ -45,6 +45,10 @@ android {
     }
 }
 
+dependencies {
+    implementation("ai.picovoice:porcupine-android:4.0.2")
+}
+
 flutter {
     source = "../.."
 }
