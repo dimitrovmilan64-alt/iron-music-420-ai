@@ -12,7 +12,10 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,8 +30,12 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
-import ai.picovoice.porcupine.PorcupineManager
-import java.io.File
+import com.k2fsa.sherpa.onnx.FeatureConfig
+import com.k2fsa.sherpa.onnx.KeywordSpotter
+import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
+import com.k2fsa.sherpa.onnx.OnlineModelConfig
+import com.k2fsa.sherpa.onnx.OnlineStream
+import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import java.util.Locale
 
 class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitListener {
@@ -36,17 +43,16 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         const val ACTION_START = "com.example.ironmusic420ai.START_IRON_VOICE"
         const val ACTION_STOP = "com.example.ironmusic420ai.STOP_IRON_VOICE"
 
-        const val PREFS_NAME = "iron_wake_word"
-        const val PREF_ACCESS_KEY = "picovoice_access_key"
-        const val WAKE_MODEL_FILE = "hey_iron_android.ppn"
-
         @Volatile
         var isRunning = false
             private set
 
         private const val CHANNEL_ID = "iron_voice_service"
         private const val NOTIFICATION_ID = 2420
-        private const val WAKE_SENSITIVITY = 0.58f
+        private const val WAKE_SAMPLE_RATE = 16_000
+        private const val WAKE_FRAME_SAMPLES = 1_600
+        private const val MODEL_DIR =
+            "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
     }
 
     private enum class VoiceState {
@@ -56,15 +62,23 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
-    private var porcupineManager: PorcupineManager? = null
+    private var keywordSpotter: KeywordSpotter? = null
+    private var keywordStream: OnlineStream? = null
+    private var wakeAudioRecord: AudioRecord? = null
+    private var wakeThread: Thread? = null
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
     private var isListening = false
     private var isSpeaking = false
-    private var wakeWordActive = false
+    private var foregroundStarted = false
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
-    private var foregroundStarted = false
+
+    @Volatile
+    private var wakeWordActive = false
+
+    @Volatile
+    private var wakeEngineLoading = false
 
     private val beginSpeechRecognition = Runnable {
         startListening()
@@ -75,8 +89,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private val recognitionTimeout = Runnable {
         if (!isListening || isSpeaking) return@Runnable
         isListening = false
-        recognizer?.cancel()
         voiceState = VoiceState.WAITING_FOR_WAKE
+        recognizer?.cancel()
         speak("Не чух команда.") {
             scheduleWakeWordListening(450)
         }
@@ -102,17 +116,13 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return START_NOT_STICKY
         }
 
-        if (!hasWakeWordConfiguration()) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         if (!foregroundStarted) {
-            startAsForeground("Iron е активен • кажи „Hey Iron“")
+            startAsForeground("Iron зарежда офлайн „Hey Iron“…")
             foregroundStarted = true
         }
+
         initializeRecognizer()
-        scheduleWakeWordListening(350)
+        initializeWakeEngineAsync()
         return START_STICKY
     }
 
@@ -121,7 +131,25 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onDestroy() {
         isRunning = false
         handler.removeCallbacksAndMessages(null)
-        stopWakeWordListening(deleteManager = true)
+        stopWakeWordListening()
+
+        val thread = wakeThread
+        if (thread != null && thread !== Thread.currentThread()) {
+            try {
+                thread.join(600)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+        if (thread?.isAlive != true) {
+            try {
+                keywordSpotter?.release()
+            } catch (_: Exception) {
+                // Native resources may already be released.
+            }
+        }
+        keywordSpotter = null
+
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
@@ -135,15 +163,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         super.onDestroy()
     }
 
-    private fun hasWakeWordConfiguration(): Boolean {
-        val accessKey = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(PREF_ACCESS_KEY, null)
-            ?.trim()
-            .orEmpty()
-        val model = File(filesDir, WAKE_MODEL_FILE)
-        return accessKey.isNotBlank() && model.exists() && model.length() > 0L
-    }
-
     private fun initializeRecognizer() {
         if (recognizer != null) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -155,91 +174,82 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
     }
 
-    private fun initializeWakeWordEngine(): Boolean {
-        if (porcupineManager != null) return true
-
-        val accessKey = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(PREF_ACCESS_KEY, null)
-            ?.trim()
-            .orEmpty()
-        val model = File(filesDir, WAKE_MODEL_FILE)
-        if (accessKey.isBlank() || !model.exists() || model.length() <= 0L) {
-            updateNotification("„Hey Iron“ не е настроен")
-            return false
+    private fun initializeWakeEngineAsync() {
+        if (keywordSpotter != null) {
+            scheduleWakeWordListening(100)
+            return
         }
+        if (wakeEngineLoading || !isRunning) return
 
-        return try {
-            porcupineManager = PorcupineManager.Builder()
-                .setAccessKey(accessKey)
-                .setKeywordPath(model.absolutePath)
-                .setSensitivity(WAKE_SENSITIVITY)
-                .build(this) { _ ->
-                    handler.post {
-                        onWakeWordDetected()
-                    }
+        wakeEngineLoading = true
+        updateNotification("Iron зарежда офлайн модела за „Hey Iron“…")
+        Thread(
+            {
+                var engine: KeywordSpotter? = null
+                var failed = false
+                try {
+                    engine = KeywordSpotter(
+                        assetManager = assets,
+                        config = createKeywordSpotterConfig(),
+                    )
+                } catch (_: Exception) {
+                    failed = true
                 }
-            true
-        } catch (_: Exception) {
-            porcupineManager = null
-            updateNotification("Грешка при зареждане на „Hey Iron“")
-            false
+
+                handler.post {
+                    wakeEngineLoading = false
+                    if (!isRunning) {
+                        try {
+                            engine?.release()
+                        } catch (_: Exception) {
+                            // Service was stopped while the model was loading.
+                        }
+                        return@post
+                    }
+                    if (failed || engine == null) {
+                        updateNotification("Липсва офлайн моделът за „Hey Iron“")
+                        stopSelf()
+                        return@post
+                    }
+                    keywordSpotter = engine
+                    scheduleWakeWordListening(100)
+                }
+            },
+            "HeyIronModelLoader",
+        ).apply {
+            isDaemon = true
+            start()
         }
     }
 
-    private fun startWakeWordListening() {
-        handler.removeCallbacks(beginWakeWordListening)
-        if (
-            !isRunning ||
-            isSpeaking ||
-            isListening ||
-            wakeWordActive ||
-            voiceState != VoiceState.WAITING_FOR_WAKE
-        ) {
-            return
-        }
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            stopSelf()
-            return
-        }
-
-        if (!initializeWakeWordEngine()) {
-            stopSelf()
-            return
-        }
-
-        try {
-            porcupineManager?.start()
-            wakeWordActive = true
-            updateNotification("Iron чака „Hey Iron“")
-        } catch (_: Exception) {
-            wakeWordActive = false
-            stopWakeWordListening(deleteManager = true)
-            scheduleWakeWordListening(2_000)
-        }
-    }
-
-    private fun stopWakeWordListening(deleteManager: Boolean = false) {
-        handler.removeCallbacks(beginWakeWordListening)
-        if (wakeWordActive) {
-            try {
-                porcupineManager?.stop()
-            } catch (_: Exception) {
-                // Porcupine may already be stopped by Android audio focus changes.
-            }
-        }
-        wakeWordActive = false
-
-        if (deleteManager) {
-            try {
-                porcupineManager?.delete()
-            } catch (_: Exception) {
-                // Native resources may already be released.
-            }
-            porcupineManager = null
-        }
+    private fun createKeywordSpotterConfig(): KeywordSpotterConfig {
+        val modelConfig = OnlineModelConfig(
+            transducer = OnlineTransducerModelConfig(
+                encoder =
+                    "$MODEL_DIR/encoder-epoch-13-avg-2-chunk-8-left-64.int8.onnx",
+                decoder =
+                    "$MODEL_DIR/decoder-epoch-13-avg-2-chunk-8-left-64.onnx",
+                joiner =
+                    "$MODEL_DIR/joiner-epoch-13-avg-2-chunk-8-left-64.int8.onnx",
+            ),
+            tokens = "$MODEL_DIR/tokens.txt",
+            numThreads = 2,
+            debug = false,
+            provider = "cpu",
+        )
+        return KeywordSpotterConfig(
+            featConfig = FeatureConfig(
+                sampleRate = WAKE_SAMPLE_RATE,
+                featureDim = 80,
+                dither = 0.0f,
+            ),
+            modelConfig = modelConfig,
+            maxActivePaths = 4,
+            keywordsFile = "$MODEL_DIR/keywords.txt",
+            keywordsScore = 2.0f,
+            keywordsThreshold = 0.30f,
+            numTrailingBlanks = 2,
+        )
     }
 
     private fun scheduleWakeWordListening(delayMillis: Long = 500) {
@@ -255,6 +265,187 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
     }
 
+    private fun startWakeWordListening() {
+        handler.removeCallbacks(beginWakeWordListening)
+        if (
+            !isRunning ||
+            isSpeaking ||
+            isListening ||
+            wakeWordActive ||
+            wakeThread?.isAlive == true ||
+            voiceState != VoiceState.WAITING_FOR_WAKE
+        ) {
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            stopSelf()
+            return
+        }
+
+        val spotter = keywordSpotter
+        if (spotter == null) {
+            initializeWakeEngineAsync()
+            return
+        }
+
+        val stream = try {
+            spotter.createStream()
+        } catch (_: Exception) {
+            scheduleWakeWordListening(2_000)
+            return
+        }
+        if (stream.ptr == 0L) {
+            stream.release()
+            scheduleWakeWordListening(2_000)
+            return
+        }
+
+        val minimumBufferSize = AudioRecord.getMinBufferSize(
+            WAKE_SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minimumBufferSize <= 0) {
+            stream.release()
+            scheduleWakeWordListening(2_000)
+            return
+        }
+
+        val recorder = try {
+            AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(WAKE_SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build(),
+                )
+                .setBufferSizeInBytes(maxOf(minimumBufferSize * 2, 6_400))
+                .build()
+        } catch (_: Exception) {
+            stream.release()
+            scheduleWakeWordListening(2_000)
+            return
+        }
+
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            stream.release()
+            scheduleWakeWordListening(2_000)
+            return
+        }
+
+        try {
+            recorder.startRecording()
+        } catch (_: Exception) {
+            recorder.release()
+            stream.release()
+            scheduleWakeWordListening(2_000)
+            return
+        }
+
+        keywordStream = stream
+        wakeAudioRecord = recorder
+        wakeWordActive = true
+        updateNotification("Iron чака „Hey Iron“")
+
+        val worker = Thread(
+            {
+                var detected = false
+                val buffer = ShortArray(WAKE_FRAME_SAMPLES)
+                try {
+                    while (isRunning && wakeWordActive) {
+                        val count = recorder.read(
+                            buffer,
+                            0,
+                            buffer.size,
+                            AudioRecord.READ_BLOCKING,
+                        )
+                        if (count <= 0) continue
+
+                        val samples = FloatArray(count) { index ->
+                            buffer[index] / 32768.0f
+                        }
+                        stream.acceptWaveform(
+                            samples,
+                            sampleRate = WAKE_SAMPLE_RATE,
+                        )
+
+                        while (wakeWordActive && spotter.isReady(stream)) {
+                            spotter.decode(stream)
+                            val keyword = spotter.getResult(stream).keyword
+                            if (keyword.isNotBlank()) {
+                                spotter.reset(stream)
+                                detected = true
+                                wakeWordActive = false
+                                break
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Android can interrupt AudioRecord when audio focus changes.
+                } finally {
+                    try {
+                        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                            recorder.stop()
+                        }
+                    } catch (_: Exception) {
+                        // Recorder may already be stopped.
+                    }
+                    recorder.release()
+                    try {
+                        stream.release()
+                    } catch (_: Exception) {
+                        // Stream may already be released after a native failure.
+                    }
+
+                    val finishedThread = Thread.currentThread()
+                    handler.post {
+                        if (wakeAudioRecord === recorder) wakeAudioRecord = null
+                        if (keywordStream === stream) keywordStream = null
+                        if (wakeThread === finishedThread) wakeThread = null
+                        wakeWordActive = false
+
+                        if (
+                            detected &&
+                            isRunning &&
+                            !isSpeaking &&
+                            voiceState == VoiceState.WAITING_FOR_WAKE
+                        ) {
+                            onWakeWordDetected()
+                        } else if (isRunning) {
+                            scheduleWakeWordListening(1_000)
+                        }
+                    }
+                }
+            },
+            "HeyIronKeywordSpotter",
+        ).apply {
+            isDaemon = true
+        }
+        wakeThread = worker
+        worker.start()
+    }
+
+    private fun stopWakeWordListening() {
+        handler.removeCallbacks(beginWakeWordListening)
+        wakeWordActive = false
+        val recorder = wakeAudioRecord
+        wakeAudioRecord = null
+        try {
+            if (recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                recorder.stop()
+            }
+        } catch (_: Exception) {
+            // Stopping AudioRecord is only used to unblock the worker thread.
+        }
+        wakeThread?.interrupt()
+    }
+
     private fun onWakeWordDetected() {
         if (
             !isRunning ||
@@ -264,9 +455,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        stopWakeWordListening()
         voiceState = VoiceState.WAITING_FOR_COMMAND
-        updateNotification("Hey Iron е разпознат • слушам командата")
+        updateNotification("„Hey Iron“ е разпознат • слушам командата")
         speak("Слушам") {
             scheduleCommandListening(180)
         }
@@ -638,7 +828,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             "Iron гласов режим",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Показва, когато Iron слуша за „Hey Iron“."
+            description = "Показва, когато Iron слуша офлайн за „Hey Iron“."
             setSound(null, null)
             enableVibration(false)
         }
