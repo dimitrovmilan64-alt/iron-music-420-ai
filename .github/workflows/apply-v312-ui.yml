@@ -1,0 +1,38 @@
+name: Apply v3.1.2 responsive UI
+
+on:
+  push:
+    branches:
+      - agent/v3-1-2-responsive-ui
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-v312-responsive-ui
+  cancel-in-progress: true
+
+jobs:
+  apply-responsive-ui:
+    if: ${{ !contains(github.event.head_commit.message, '[v312-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout v3.1.2 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v3-1-2-responsive-ui
+          fetch-depth: 0
+
+      - name: Apply and validate responsive UI
+        run: python3 scripts/apply_v312_responsive_ui.py
+
+      - name: Commit responsive UI source
+        shell: bash
+        run: |
+          rm scripts/apply_v312_responsive_ui.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/pages/chat_page.dart pubspec.yaml CHANGELOG_V312_RESPONSIVE_UI.txt scripts/apply_v312_responsive_ui.py
+          git diff --cached --check
+          git commit -m "[v312-applied] Fix responsive chat layout professionally"
+          git push origin HEAD:agent/v3-1-2-responsive-ui
