@@ -200,6 +200,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ChatPage(
         store: widget.store,
         onOpenTools: () => _openSection(4),
+        onSendToStudio: (text) async {
+          await widget.store.sendTextToStudio(text);
+          _openSection(1);
+        },
       ),
       RapStudioPage(store: widget.store),
       SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),

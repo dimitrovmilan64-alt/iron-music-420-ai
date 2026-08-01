@@ -12,11 +12,13 @@ import '../ui/common_widgets.dart';
 class ChatPage extends StatefulWidget {
   final LocalStore store;
   final VoidCallback? onOpenTools;
+  final Future<void> Function(String text)? onSendToStudio;
 
   const ChatPage({
     super.key,
     required this.store,
     this.onOpenTools,
+    this.onSendToStudio,
   });
 
   @override
@@ -433,6 +435,59 @@ class _ChatPageState extends State<ChatPage>
     await _sendMessage();
   }
 
+  bool _requestsStudioTransfer(String value) {
+    final text = value.toLowerCase();
+    final mentionsStudio = text.contains('рап студио') ||
+        text.contains('rap studio') ||
+        text.contains('студиото') ||
+        text.contains('студио');
+    final asksTransfer = text.contains('прехвърли') ||
+        text.contains('прати') ||
+        text.contains('изпрати') ||
+        text.contains('сложи') ||
+        text.contains('вкарай') ||
+        text.contains('отвори го');
+    return mentionsStudio && asksTransfer;
+  }
+
+  bool _isDirectStudioTransferCommand(String value) {
+    if (!_requestsStudioTransfer(value)) return false;
+    final text = value.toLowerCase();
+    final asksCreation = text.contains('напиши') ||
+        text.contains('направи') ||
+        text.contains('създай') ||
+        text.contains('генерирай') ||
+        text.contains('измисли') ||
+        text.contains('редактирай');
+    return !asksCreation;
+  }
+
+  ChatMessage? _lastAssistantMessage() {
+    for (final message in _messages.reversed) {
+      if (!message.isUser && !message.isLocalNotice && message.text.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _sendTextToStudio(String text) async {
+    final cleanText = cleanMarkdownForDisplay(text).trim();
+    if (cleanText.isEmpty) {
+      _showMessage('Няма текст за прехвърляне.');
+      return;
+    }
+    final callback = widget.onSendToStudio;
+    if (callback == null) {
+      _showMessage('Рап студиото не е достъпно.');
+      return;
+    }
+    await callback(cleanText);
+    if (mounted) {
+      _showMessage('Текстът е прехвърлен в Рап студио.');
+    }
+  }
+
   Future<void> _syncNativeAiSettings() {
     return _automation.syncAiProviderSettings(
       geminiApiKey: widget.store.apiKey,
@@ -522,6 +577,18 @@ class _ChatPageState extends State<ChatPage>
       if (mounted) setState(() => _isListening = false);
     }
 
+    final wantsStudioTransfer = _requestsStudioTransfer(text);
+    if (_isDirectStudioTransferCommand(text)) {
+      final previous = _lastAssistantMessage();
+      _messageController.clear();
+      if (previous == null) {
+        _showMessage('Първо нека напиша текст, който да прехвърля.');
+        return;
+      }
+      await _sendTextToStudio(previous.text);
+      return;
+    }
+
     final apiKey = widget.store.apiKey.trim();
     if (!widget.store.hasAnyAiProvider) {
       await _openApiKeySheet();
@@ -558,6 +625,9 @@ class _ChatPageState extends State<ChatPage>
       setState(() => _messages.add(aiMessage));
       await widget.store.replaceChatHistory(_messages);
       _scrollToBottom();
+      if (wantsStudioTransfer) {
+        await _sendTextToStudio(reply);
+      }
       await _speak(reply);
     } on GeminiException catch (error) {
       if (!mounted) return;
@@ -1069,7 +1139,13 @@ class _ChatPageState extends State<ChatPage>
                     ),
                   );
                 }
-                return _ChatBubble(message: _messages[index]);
+                final message = _messages[index];
+                return _ChatBubble(
+                  message: message,
+                  onSendToStudio: !message.isUser && !message.isLocalNotice
+                      ? () => _sendTextToStudio(message.text)
+                      : null,
+                );
               },
             ),
           ),
@@ -1133,8 +1209,12 @@ class _ChatPageState extends State<ChatPage>
 
 class _ChatBubble extends StatelessWidget {
   final ChatMessage message;
+  final VoidCallback? onSendToStudio;
 
-  const _ChatBubble({required this.message});
+  const _ChatBubble({
+    required this.message,
+    this.onSendToStudio,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1192,6 +1272,24 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onSendToStudio != null) ...[
+                  Tooltip(
+                    message: 'В Рап студио',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: onSendToStudio,
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.mic_external_on_rounded,
+                          size: 16,
+                          color: ironGreen,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                ],
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () async {

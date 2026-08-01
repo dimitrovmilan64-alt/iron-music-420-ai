@@ -293,6 +293,22 @@ class LocalStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> sendTextToStudio(String text) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+
+    _activeSongId = '';
+    _rapDraft = cleanText;
+    _rapResult = cleanText;
+    _studioRevision++;
+    await Future.wait([
+      _preferences.setString(_rapDraftKey, _rapDraft),
+      _preferences.setString(_rapResultKey, _rapResult),
+      _preferences.remove(_activeSongIdKey),
+    ]);
+    notifyListeners();
+  }
+
   Future<void> loadSongIntoStudio(SongProject song) async {
     _activeSongId = song.id;
     _rapDraft = song.lyrics;

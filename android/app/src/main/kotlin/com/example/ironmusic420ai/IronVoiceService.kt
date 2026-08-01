@@ -50,7 +50,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         var isRunning = false
             private set
 
-        private const val CHANNEL_ID = "iron_voice_service"
+        private const val CHANNEL_ID = "iron_voice_service_silent_v3"
         private const val NOTIFICATION_ID = 2420
         private const val WAKE_SAMPLE_RATE = 16_000
         private const val WAKE_FRAME_SAMPLES = 1_600
@@ -1276,22 +1276,28 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel("iron_voice_service")
+
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Iron гласов режим",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Показва, когато Iron слуша офлайн за „Hey Iron“."
+            description = "Постоянен безшумен режим за офлайн „Hey Iron“."
             setSound(null, null)
             enableVibration(false)
+            enableLights(false)
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
         }
 
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+        manager.createNotificationChannel(channel)
     }
 
     private fun startAsForeground(status: String) {
-        val notification = buildNotification(status)
+        if (status.isBlank()) return
+        val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -1304,13 +1310,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun updateNotification(status: String) {
-        if (!isRunning || !foregroundStarted) return
-
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(status))
+        if (!isRunning || !foregroundStarted || status.isBlank()) return
+        // The foreground notification intentionally stays unchanged. Rebuilding it
+        // for every microphone state caused repeated alerts on some Android skins.
     }
 
-    private fun buildNotification(status: String): Notification {
+    private fun buildNotification(): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
@@ -1336,10 +1341,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         return builder
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Iron е активен")
-            .setContentText(status)
+            .setContentText("Iron е активен • готов за „Hey Iron“")
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setWhen(0)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(
