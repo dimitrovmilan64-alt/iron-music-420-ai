@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/chat_message.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
-import '../services/speech_error_policy.dart';
 import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
@@ -36,7 +34,6 @@ class _ChatPageState extends State<ChatPage>
   late final TextEditingController _backupModelController;
   final ScrollController _scrollController = ScrollController();
   final FlutterTts _flutterTts = FlutterTts();
-  final stt.SpeechToText _speechToText = stt.SpeechToText();
   final GeminiService _gemini = GeminiService();
   final AutomationService _automation = AutomationService();
   late final AnimationController _coreController;
@@ -44,13 +41,7 @@ class _ChatPageState extends State<ChatPage>
   late List<ChatMessage> _messages;
   bool _isLoading = false;
   bool _isListening = false;
-  bool _speechAvailable = false;
   bool _voiceReady = false;
-  bool _speechSendTriggered = false;
-  bool _speechHeard = false;
-  bool _speechRetryScheduled = false;
-  int _speechTimeoutRetryCount = 0;
-  String _bulgarianLocale = 'bg_BG';
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
   String _selectedVoiceLocale = '';
@@ -90,14 +81,23 @@ class _ChatPageState extends State<ChatPage>
     _selectedVoiceName = widget.store.ttsVoiceName;
     _selectedVoiceLocale = widget.store.ttsVoiceLocale;
     _configureBulgarianVoice();
-    _prepareSpeechRecognition();
+    _automation.setNativeSpeechPartialListener((recognized) {
+      if (!mounted || !_isListening) return;
+      setState(() {
+        _messageController.text = recognized;
+        _messageController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _messageController.text.length),
+        );
+      });
+    });
   }
 
   @override
   void dispose() {
     _coreController.dispose();
     _flutterTts.stop();
-    _speechToText.stop();
+    _automation.setNativeSpeechPartialListener(null);
+    _automation.cancelNativeSpeechRecognition();
     _gemini.dispose();
     _messageController.dispose();
     _apiKeyController.dispose();
@@ -362,50 +362,6 @@ class _ChatPageState extends State<ChatPage>
     if (mounted) _showMessage('Настройките на гласа са запазени.');
   }
 
-  Future<void> _prepareSpeechRecognition() async {
-    try {
-      final available = await _speechToText.initialize(
-        options: [stt.SpeechToText.androidNoBluetooth],
-        onStatus: (status) {
-          if (!mounted) return;
-          if (status == 'done' || status == 'notListening') {
-            final shouldAutoSend = _isListening &&
-                !_speechSendTriggered &&
-                _messageController.text.trim().isNotEmpty;
-            setState(() => _isListening = false);
-            if (shouldAutoSend) {
-              Future.microtask(_sendRecognizedSpeech);
-            }
-          }
-        },
-        onError: (error) {
-          _handleSpeechError(error.errorMsg);
-        },
-      );
-
-      String localeId = 'bg_BG';
-      if (available) {
-        final locales = await _speechToText.locales();
-        for (final locale in locales) {
-          final normalized = locale.localeId.toLowerCase();
-          if (normalized == 'bg_bg' || normalized.startsWith('bg')) {
-            localeId = locale.localeId;
-            break;
-          }
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _speechAvailable = available;
-        _bulgarianLocale = localeId;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _speechAvailable = false);
-    }
-  }
-
   Future<void> _speak(String text) async {
     if (!widget.store.voiceRepliesEnabled) return;
 
@@ -437,122 +393,43 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  Future<void> _sendRecognizedSpeech() async {
-    if (_speechSendTriggered || _isLoading) return;
-    if (_messageController.text.trim().isEmpty) return;
+  Future<void> _toggleListening() async {
+    if (_isLoading) return;
 
-    _speechSendTriggered = true;
-    if (mounted) setState(() => _isListening = false);
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    if (!mounted) return;
-    await _sendMessage();
-  }
-
-  void _handleSpeechError(String errorMessage) {
-    if (!mounted) return;
-
-    final canRetry = SpeechErrorPolicy.shouldRetry(errorMessage) &&
-        !_speechHeard &&
-        !_speechSendTriggered &&
-        !_isLoading &&
-        _speechTimeoutRetryCount < 1 &&
-        !_speechRetryScheduled;
-
-    setState(() => _isListening = false);
-
-    if (canRetry) {
-      _speechTimeoutRetryCount++;
-      _speechRetryScheduled = true;
-      Future<void>.delayed(const Duration(milliseconds: 550), () async {
-        if (!mounted) return;
-        _speechRetryScheduled = false;
-        if (_isLoading || _speechSendTriggered) return;
-
-        try {
-          await _speechToText.cancel();
-        } catch (_) {
-          // Android may already have closed the timed-out recognizer.
-        }
-        if (!mounted) return;
-        await _startSpeechListening(isRetry: true);
-      });
+    if (_isListening) {
+      await _automation.stopNativeSpeechRecognition();
       return;
     }
 
-    _speechRetryScheduled = false;
-    _showMessage(SpeechErrorPolicy.friendlyMessage(errorMessage));
-  }
-
-  Future<void> _startSpeechListening({required bool isRetry}) async {
-    if (!mounted || _isLoading) return;
-
     await _flutterTts.stop();
-    await Future<void>.delayed(
-      Duration(milliseconds: isRetry ? 450 : 300),
-    );
+    FocusManager.instance.primaryFocus?.unfocus();
     if (!mounted) return;
 
-    if (!_speechAvailable) {
-      await _prepareSpeechRecognition();
-    }
+    setState(() => _isListening = true);
+    final result = await _automation.startNativeSpeechRecognition();
+    if (!mounted) return;
 
-    if (!_speechAvailable) {
-      if (mounted) {
-        _showMessage(
-          'Разпознаването на реч не е налично. Разреши микрофона и провери Google Speech Services.',
-        );
+    setState(() => _isListening = false);
+    if (!result.success) {
+      if (result.message.trim().isNotEmpty) {
+        _showMessage(result.message.trim());
       }
       return;
     }
 
-    if (!isRetry) _speechTimeoutRetryCount = 0;
-    _speechHeard = false;
-    _speechSendTriggered = false;
-    setState(() => _isListening = true);
-
-    try {
-      await _speechToText.listen(
-        localeId: _bulgarianLocale,
-        listenFor: const Duration(seconds: 45),
-        pauseFor: const Duration(seconds: 4),
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: stt.ListenMode.dictation,
-        onResult: (result) {
-          if (!mounted) return;
-          final recognized = result.recognizedWords.trim();
-          if (recognized.isNotEmpty) _speechHeard = true;
-          setState(() {
-            _messageController.text = recognized;
-            _messageController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _messageController.text.length),
-            );
-          });
-
-          if (result.finalResult && recognized.isNotEmpty) {
-            Future.microtask(_sendRecognizedSpeech);
-          }
-        },
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isListening = false);
-      _showMessage(
-        SpeechErrorPolicy.friendlyMessage('error_recognizer_busy'),
-      );
-    }
-  }
-
-  Future<void> _toggleListening() async {
-    if (_speechToText.isListening) {
-      _speechRetryScheduled = false;
-      await _speechToText.stop();
-      if (mounted) setState(() => _isListening = false);
-      await _sendRecognizedSpeech();
+    final recognized = result.text.trim();
+    if (recognized.isEmpty) {
+      _showMessage('Не чух думи. Натисни микрофона и говори след сигнала.');
       return;
     }
 
-    await _startSpeechListening(isRetry: false);
+    setState(() {
+      _messageController.text = recognized;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length),
+      );
+    });
+    await _sendMessage();
   }
 
   Future<void> _syncNativeAiSettings() {
@@ -635,7 +512,10 @@ class _ChatPageState extends State<ChatPage>
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading) return;
 
-    await _speechToText.stop();
+    if (_isListening) {
+      await _automation.cancelNativeSpeechRecognition();
+      if (mounted) setState(() => _isListening = false);
+    }
 
     final apiKey = widget.store.apiKey.trim();
     if (!widget.store.hasAnyAiProvider) {
