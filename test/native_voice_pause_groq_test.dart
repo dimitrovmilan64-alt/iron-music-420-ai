@@ -11,9 +11,27 @@ void main() {
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
 
-    expect(activity, contains('ACTION_PAUSE_WAKE'));
-    expect(activity, contains('ACTION_RESUME_WAKE'));
-    expect(activity, isNot(contains('stopService(')));
+    final prepareStart = activity.indexOf(
+      'private fun prepareChatSpeechRecognition()',
+    );
+    final launchStart = activity.indexOf(
+      'private fun launchChatSpeechRecognizer()',
+    );
+    expect(prepareStart, greaterThanOrEqualTo(0));
+    expect(launchStart, greaterThan(prepareStart));
+    final prepareBlock = activity.substring(prepareStart, launchStart);
+
+    final finishStart = activity.indexOf('private fun finishChatSpeech(');
+    final syncStart = activity.indexOf('private fun syncGeminiApiKey(');
+    expect(finishStart, greaterThanOrEqualTo(0));
+    expect(syncStart, greaterThan(finishStart));
+    final finishBlock = activity.substring(finishStart, syncStart);
+
+    expect(prepareBlock, contains('ACTION_PAUSE_WAKE'));
+    expect(prepareBlock, isNot(contains('ACTION_STOP')));
+    expect(prepareBlock, isNot(contains('stopService(')));
+    expect(finishBlock, contains('ACTION_RESUME_WAKE'));
+    expect(finishBlock, isNot(contains('ACTION_START')));
     expect(service, contains('pausedForChatSpeech'));
     expect(service, contains('pauseForChatSpeech()'));
     expect(service, contains('resumeAfterChatSpeech()'));
