@@ -46,6 +46,15 @@ jobs:
         shell: bash
         run: |
           rm scripts/apply_v334_stable_voice_groq.py
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in (
+              'CHANGELOG_V334_STABLE_VOICE_GROQ.md',
+              'test/native_voice_pause_groq_test.dart',
+          ):
+              path = Path(name)
+              path.write_text(path.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
