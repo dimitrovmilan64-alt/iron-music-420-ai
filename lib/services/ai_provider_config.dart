@@ -1,6 +1,6 @@
 class AiProviderConfig {
-  static const defaultBackupBaseUrl = 'https://api.openai.com/v1';
-  static const defaultBackupModel = 'gpt-4.1-mini';
+  static const defaultBackupBaseUrl = 'https://api.groq.com/openai/v1';
+  static const defaultBackupModel = 'openai/gpt-oss-20b';
 
   final String backupApiKey;
   final String backupBaseUrl;

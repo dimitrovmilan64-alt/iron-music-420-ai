@@ -126,14 +126,14 @@ class MainActivity : FlutterActivity() {
     private fun prepareChatSpeechRecognition() {
         restoreIronVoiceAfterChatSpeech = IronVoiceService.isRunning
         if (restoreIronVoiceAfterChatSpeech) {
-            stopService(
+            startService(
                 Intent(this, IronVoiceService::class.java).apply {
-                    action = IronVoiceService.ACTION_STOP
+                    action = IronVoiceService.ACTION_PAUSE_WAKE
                 },
             )
         }
 
-        val releaseDelay = if (restoreIronVoiceAfterChatSpeech) 950L else 120L
+        val releaseDelay = if (restoreIronVoiceAfterChatSpeech) 550L else 120L
         mainHandler.postDelayed({ launchChatSpeechRecognizer() }, releaseDelay)
     }
 
@@ -376,14 +376,13 @@ class MainActivity : FlutterActivity() {
         ) {
             mainHandler.postDelayed(
                 {
-                    ContextCompat.startForegroundService(
-                        this,
+                    startService(
                         Intent(this, IronVoiceService::class.java).apply {
-                            action = IronVoiceService.ACTION_START
+                            action = IronVoiceService.ACTION_RESUME_WAKE
                         },
                     )
                 },
-                350L,
+                250L,
             )
         }
     }

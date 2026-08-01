@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../models/chat_message.dart';
+import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
@@ -444,8 +445,12 @@ class _ChatPageState extends State<ChatPage>
   Future<bool> _saveAiProviders() async {
     final geminiKey = _apiKeyController.text.trim();
     final backupKey = _backupApiKeyController.text.trim();
-    final backupBaseUrl = _backupBaseUrlController.text.trim();
-    final backupModel = _backupModelController.text.trim();
+    final backupBaseUrl = backupKey.isEmpty
+        ? _backupBaseUrlController.text.trim()
+        : AiProviderConfig.defaultBackupBaseUrl;
+    final backupModel = backupKey.isEmpty
+        ? _backupModelController.text.trim()
+        : AiProviderConfig.defaultBackupModel;
 
     if (geminiKey.isEmpty && backupKey.isEmpty) {
       _showMessage('Добави Gemini или резервен AI API ключ.');
@@ -480,7 +485,7 @@ class _ChatPageState extends State<ChatPage>
     _gemini.resetModel();
     if (!mounted) return false;
     setState(() {});
-    _showMessage('AI доставчиците са запазени локално на телефона.');
+    _showMessage('Gemini и Groq са запазени локално на телефона.');
     return true;
   }
 
@@ -505,7 +510,7 @@ class _ChatPageState extends State<ChatPage>
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
-    _showMessage('Резервният AI ключ е премахнат.');
+    _showMessage('Groq ключът е премахнат.');
   }
 
   Future<void> _sendMessage() async {
@@ -698,7 +703,7 @@ class _ChatPageState extends State<ChatPage>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Iron използва Gemini първо. При лимит или недостъпност автоматично преминава към резервния OpenAI-съвместим доставчик. Ключовете се пазят само локално на телефона.',
+                    'Iron използва Gemini първо. При лимит или недостъпност автоматично преминава към Groq. Ключовете се пазят само локално на телефона.',
                     style: TextStyle(color: Colors.white60, height: 1.35),
                   ),
                   const SizedBox(height: 20),
@@ -724,7 +729,7 @@ class _ChatPageState extends State<ChatPage>
                   const Divider(color: Colors.white12),
                   const SizedBox(height: 14),
                   const Text(
-                    '2. Резервен · OpenAI-съвместим',
+                    '2. Резервен доставчик · Groq',
                     style: TextStyle(
                       color: ironGreen,
                       fontWeight: FontWeight.w800,
@@ -732,7 +737,7 @@ class _ChatPageState extends State<ChatPage>
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'По подразбиране е OpenAI. Адресът и моделът могат да се сменят за друг съвместим доставчик.',
+                    'Постави само Groq API ключа. Адресът и моделът се настройват автоматично.',
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
@@ -741,37 +746,25 @@ class _ChatPageState extends State<ChatPage>
                     obscureText: true,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
-                      labelText: 'Резервен API ключ',
-                      hintText: 'sk-...',
+                      labelText: 'Groq API ключ',
+                      hintText: 'gsk_...',
                       prefixIcon: Icon(Icons.shield_outlined),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _backupBaseUrlController,
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'API адрес',
-                      hintText: 'https://api.openai.com/v1',
-                      prefixIcon: Icon(Icons.link_rounded),
+                  const Container(
+                    padding: EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Color(0x3300FF77),
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _backupModelController,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      labelText: 'Модел',
-                      hintText: 'gpt-4.1-mini',
-                      prefixIcon: Icon(Icons.memory_rounded),
+                    child: Text(
+                      'Groq Free · openai/gpt-oss-20b',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    onSubmitted: (_) async {
-                      final saved = await _saveAiProviders();
-                      if (saved && sheetContext.mounted) {
-                        Navigator.pop(sheetContext);
-                      }
-                    },
                   ),
                   const SizedBox(height: 18),
                   FilledButton.icon(

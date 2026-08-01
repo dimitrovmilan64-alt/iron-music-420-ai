@@ -43,6 +43,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     companion object {
         const val ACTION_START = "com.example.ironmusic420ai.START_IRON_VOICE"
         const val ACTION_STOP = "com.example.ironmusic420ai.STOP_IRON_VOICE"
+        const val ACTION_PAUSE_WAKE = "com.example.ironmusic420ai.PAUSE_IRON_WAKE"
+        const val ACTION_RESUME_WAKE = "com.example.ironmusic420ai.RESUME_IRON_WAKE"
 
         @Volatile
         var isRunning = false
@@ -89,6 +91,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var ignoreNextRecognitionError = false
 
     @Volatile
+    private var pausedForChatSpeech = false
+
+    @Volatile
     private var wakeWordActive = false
 
     @Volatile
@@ -129,9 +134,19 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_PAUSE_WAKE -> {
+                pauseForChatSpeech()
+                return START_STICKY
+            }
+            ACTION_RESUME_WAKE -> {
+                resumeAfterChatSpeech()
+                return START_STICKY
+            }
         }
 
         if (
@@ -189,6 +204,47 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
+    }
+
+    private fun pauseForChatSpeech() {
+        if (pausedForChatSpeech) return
+        pausedForChatSpeech = true
+        handler.removeCallbacks(beginWakeWordListening)
+        handler.removeCallbacks(beginSpeechRecognition)
+        handler.removeCallbacks(finalizePendingCommand)
+        handler.removeCallbacks(recognitionTimeout)
+        pendingCommandParts.clear()
+        afterSpeech = null
+        isAiProcessing = false
+        if (isListening) {
+            ignoreNextRecognitionError = true
+            try {
+                recognizer?.cancel()
+            } catch (_: Exception) {
+                // The recognizer may already be stopping.
+            }
+        }
+        isListening = false
+        if (isSpeaking) {
+            try {
+                textToSpeech?.stop()
+            } catch (_: Exception) {
+                // TTS may already be complete.
+            }
+        }
+        isSpeaking = false
+        voiceState = VoiceState.WAITING_FOR_WAKE
+        stopWakeWordListening()
+        updateNotification("Iron е активен • диктовка в приложението")
+    }
+
+    private fun resumeAfterChatSpeech() {
+        if (!pausedForChatSpeech) return
+        pausedForChatSpeech = false
+        if (!isRunning) return
+        voiceState = VoiceState.WAITING_FOR_WAKE
+        updateNotification("Iron е готов • кажи „Hey Iron“")
+        scheduleWakeWordListening(650)
     }
 
     private fun initializeRecognizer() {
@@ -290,6 +346,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginWakeWordListening)
         if (
             isRunning &&
+            !pausedForChatSpeech &&
             !isSpeaking &&
             !isListening &&
             !isAiProcessing &&
@@ -356,6 +413,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginWakeWordListening)
         if (
             !isRunning ||
+            pausedForChatSpeech ||
             isSpeaking ||
             isListening ||
             wakeWordActive ||
@@ -487,11 +545,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                         if (
                             detected &&
                             isRunning &&
+                            !pausedForChatSpeech &&
                             !isSpeaking &&
                             voiceState == VoiceState.WAITING_FOR_WAKE
                         ) {
                             onWakeWordDetected()
-                        } else if (isRunning) {
+                        } else if (isRunning && !pausedForChatSpeech) {
                             scheduleWakeWordListening(800)
                         }
                     }

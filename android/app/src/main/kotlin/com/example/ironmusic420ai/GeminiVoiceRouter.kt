@@ -20,8 +20,8 @@ class GeminiVoiceRouter(private val context: Context) {
         const val KEY_BACKUP_API_KEY = "backup_api_key"
         const val KEY_BACKUP_BASE_URL = "backup_base_url"
         const val KEY_BACKUP_MODEL = "backup_model"
-        const val DEFAULT_BACKUP_BASE_URL = "https://api.openai.com/v1"
-        const val DEFAULT_BACKUP_MODEL = "gpt-4.1-mini"
+        const val DEFAULT_BACKUP_BASE_URL = "https://api.groq.com/openai/v1"
+        const val DEFAULT_BACKUP_MODEL = "openai/gpt-oss-20b"
 
         private const val KEY_ACTIVE_MODEL = "gemini_voice_active_model"
         private const val GEMINI_BASE_URL =
