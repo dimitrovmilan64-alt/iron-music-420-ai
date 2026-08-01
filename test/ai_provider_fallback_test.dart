@@ -52,8 +52,10 @@ void main() {
         );
       }
 
-      expect(request.url.toString(),
-          'https://api.openai.com/v1/chat/completions');
+      expect(
+        request.url.toString(),
+        'https://api.openai.com/v1/chat/completions',
+      );
       expect(request.headers['Authorization'], 'Bearer sk-test-backup');
       final payload = jsonDecode(request.body) as Map<String, dynamic>;
       expect(payload['model'], 'gpt-4.1-mini');
@@ -104,8 +106,8 @@ void main() {
     );
     addTearDown(service.dispose);
 
-    expect(
-      () => service.generateChat(
+    await expectLater(
+      service.generateChat(
         apiKey: '',
         history: [
           ChatMessage(
