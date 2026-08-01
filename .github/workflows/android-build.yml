@@ -37,6 +37,10 @@ jobs:
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Fix v3.3.6 migration quoting
+        if: steps.migration.outputs.needed == 'true'
+        run: python3 scripts/fix_v336_script_quotes.py
+
       - name: Apply chat music actions migration
         if: steps.migration.outputs.needed == 'true'
         run: python3 scripts/apply_v336_chat_music_actions.py
@@ -45,7 +49,7 @@ jobs:
         if: steps.migration.outputs.needed == 'true'
         shell: bash
         run: |
-          rm scripts/apply_v336_chat_music_actions.py
+          rm scripts/apply_v336_chat_music_actions.py scripts/fix_v336_script_quotes.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
