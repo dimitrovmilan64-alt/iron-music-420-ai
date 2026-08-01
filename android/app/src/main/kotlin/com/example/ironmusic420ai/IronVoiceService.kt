@@ -737,7 +737,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         if (!aiRouter.hasApiKey()) {
             val localReply = executeCommand(normalizedCommand)
             val reply = if (localReply == "Не разбрах командата. Опитай пак.") {
-                "За свободния AI режим отвори приложението и запази Gemini API ключа."
+                "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
             } else {
                 localReply
             }
@@ -776,7 +776,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     val reply = when {
                         localReply != "Не разбрах командата. Опитай пак." -> localReply
                         error is GeminiVoiceRouter.MissingApiKeyException ->
-                            "За свободния AI режим отвори приложението и запази Gemini API ключа."
+                            "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
                         error is GeminiVoiceRouter.AiUnavailableException ->
                             error.message ?: "AI временно не отговаря. Опитай пак."
                         else -> "AI временно не отговаря. Опитай пак."

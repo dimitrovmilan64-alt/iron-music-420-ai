@@ -46,6 +46,15 @@ class MainActivity : FlutterActivity() {
                             result,
                         )
                     }
+                    "syncAiProviderSettings" -> {
+                        syncAiProviderSettings(
+                            geminiApiKey = call.argument<String>("geminiApiKey").orEmpty(),
+                            backupApiKey = call.argument<String>("backupApiKey").orEmpty(),
+                            backupBaseUrl = call.argument<String>("backupBaseUrl").orEmpty(),
+                            backupModel = call.argument<String>("backupModel").orEmpty(),
+                            result = result,
+                        )
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -65,6 +74,43 @@ class MainActivity : FlutterActivity() {
         } else {
             editor.putString(GeminiVoiceRouter.KEY_GEMINI_API_KEY, cleanKey)
         }
+        editor.apply()
+        result.success(true)
+    }
+
+    private fun syncAiProviderSettings(
+        geminiApiKey: String,
+        backupApiKey: String,
+        backupBaseUrl: String,
+        backupModel: String,
+        result: MethodChannel.Result,
+    ) {
+        val editor = getSharedPreferences(
+            GeminiVoiceRouter.PREFS_NAME,
+            Context.MODE_PRIVATE,
+        ).edit()
+
+        val cleanGeminiKey = geminiApiKey.trim()
+        val cleanBackupKey = backupApiKey.trim()
+        val cleanBaseUrl = backupBaseUrl.trim().ifBlank {
+            GeminiVoiceRouter.DEFAULT_BACKUP_BASE_URL
+        }
+        val cleanModel = backupModel.trim().ifBlank {
+            GeminiVoiceRouter.DEFAULT_BACKUP_MODEL
+        }
+
+        if (cleanGeminiKey.isEmpty()) {
+            editor.remove(GeminiVoiceRouter.KEY_GEMINI_API_KEY)
+        } else {
+            editor.putString(GeminiVoiceRouter.KEY_GEMINI_API_KEY, cleanGeminiKey)
+        }
+        if (cleanBackupKey.isEmpty()) {
+            editor.remove(GeminiVoiceRouter.KEY_BACKUP_API_KEY)
+        } else {
+            editor.putString(GeminiVoiceRouter.KEY_BACKUP_API_KEY, cleanBackupKey)
+        }
+        editor.putString(GeminiVoiceRouter.KEY_BACKUP_BASE_URL, cleanBaseUrl)
+        editor.putString(GeminiVoiceRouter.KEY_BACKUP_MODEL, cleanModel)
         editor.apply()
         result.success(true)
     }

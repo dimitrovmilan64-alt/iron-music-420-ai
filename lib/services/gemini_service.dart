@@ -554,7 +554,8 @@ class GeminiService {
     } catch (_) {
       // Връщаме суровия текст само ако JSON не може да се прочете.
     }
-    return body.replaceAll(RegExp(r'\s+'), ' ').trim().take(400);
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return compact.length > 400 ? compact.substring(0, 400) : compact;
   }
 
   String _friendlyGeminiError(int statusCode, String rawMessage) {

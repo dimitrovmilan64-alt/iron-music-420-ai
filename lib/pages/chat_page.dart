@@ -26,10 +26,13 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage>
     with SingleTickerProviderStateMixin {
   static const _welcomeText =
-      'Готов съм. Запази Gemini API ключа и ме попитай на български.';
+      'Готов съм. Добави поне един AI доставчик и ме попитай на български.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
+  late final TextEditingController _backupApiKeyController;
+  late final TextEditingController _backupBaseUrlController;
+  late final TextEditingController _backupModelController;
   final ScrollController _scrollController = ScrollController();
   final FlutterTts _flutterTts = FlutterTts();
   final stt.SpeechToText _speechToText = stt.SpeechToText();
@@ -58,6 +61,12 @@ class _ChatPageState extends State<ChatPage>
       duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
     _apiKeyController = TextEditingController(text: widget.store.apiKey);
+    _backupApiKeyController =
+        TextEditingController(text: widget.store.backupApiKey);
+    _backupBaseUrlController =
+        TextEditingController(text: widget.store.backupBaseUrl);
+    _backupModelController =
+        TextEditingController(text: widget.store.backupModel);
     _messages = List<ChatMessage>.from(widget.store.chatHistory);
 
     if (_messages.isEmpty) {
@@ -88,6 +97,9 @@ class _ChatPageState extends State<ChatPage>
     _gemini.dispose();
     _messageController.dispose();
     _apiKeyController.dispose();
+    _backupApiKeyController.dispose();
+    _backupBaseUrlController.dispose();
+    _backupModelController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -490,30 +502,80 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  Future<bool> _saveApiKey() async {
-    final value = _apiKeyController.text.trim();
-    if (value.isEmpty) {
-      _showMessage('Постави Gemini API ключ.');
+  Future<void> _syncNativeAiSettings() {
+    return _automation.syncAiProviderSettings(
+      geminiApiKey: widget.store.apiKey,
+      backupApiKey: widget.store.backupApiKey,
+      backupBaseUrl: widget.store.backupBaseUrl,
+      backupModel: widget.store.backupModel,
+    );
+  }
+
+  Future<bool> _saveAiProviders() async {
+    final geminiKey = _apiKeyController.text.trim();
+    final backupKey = _backupApiKeyController.text.trim();
+    final backupBaseUrl = _backupBaseUrlController.text.trim();
+    final backupModel = _backupModelController.text.trim();
+
+    if (geminiKey.isEmpty && backupKey.isEmpty) {
+      _showMessage('Добави Gemini или резервен AI API ключ.');
       return false;
     }
 
-    await widget.store.setApiKey(value);
-    await _automation.syncGeminiApiKey(value);
+    if (backupKey.isNotEmpty) {
+      final normalizedBase = backupBaseUrl.endsWith('/chat/completions')
+          ? backupBaseUrl
+          : '${backupBaseUrl.replaceFirst(RegExp(r'/+$'), '')}/chat/completions';
+      final endpoint = Uri.tryParse(normalizedBase);
+      if (endpoint == null ||
+          !endpoint.hasScheme ||
+          endpoint.host.isEmpty ||
+          (endpoint.scheme != 'https' && endpoint.scheme != 'http')) {
+        _showMessage('Адресът на резервния AI доставчик не е валиден.');
+        return false;
+      }
+      if (backupModel.isEmpty) {
+        _showMessage('Въведи модел за резервния AI доставчик.');
+        return false;
+      }
+    }
+
+    await widget.store.setApiKey(geminiKey);
+    await widget.store.setBackupProvider(
+      apiKey: backupKey,
+      baseUrl: backupBaseUrl,
+      model: backupModel,
+    );
+    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return false;
     setState(() {});
-    _showMessage('API ключът е запазен локално на телефона.');
+    _showMessage('AI доставчиците са запазени локално на телефона.');
     return true;
   }
 
-  Future<void> _clearApiKey() async {
+  Future<void> _clearGeminiApiKey() async {
     _apiKeyController.clear();
     await widget.store.setApiKey('');
-    await _automation.syncGeminiApiKey('');
+    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
-    _showMessage('API ключът е премахнат.');
+    _showMessage('Gemini ключът е премахнат.');
+  }
+
+  Future<void> _clearBackupProvider() async {
+    _backupApiKeyController.clear();
+    await widget.store.setBackupProvider(
+      apiKey: '',
+      baseUrl: _backupBaseUrlController.text,
+      model: _backupModelController.text,
+    );
+    await _syncNativeAiSettings();
+    _gemini.resetModel();
+    if (!mounted) return;
+    setState(() {});
+    _showMessage('Резервният AI ключ е премахнат.');
   }
 
   Future<void> _sendMessage() async {
@@ -522,15 +584,8 @@ class _ChatPageState extends State<ChatPage>
 
     await _speechToText.stop();
 
-    final typedKey = _apiKeyController.text.trim();
-    if (typedKey.isNotEmpty && typedKey != widget.store.apiKey) {
-      await widget.store.setApiKey(typedKey);
-      await _automation.syncGeminiApiKey(typedKey);
-      _gemini.resetModel();
-    }
-
     final apiKey = widget.store.apiKey.trim();
-    if (apiKey.isEmpty) {
+    if (!widget.store.hasAnyAiProvider) {
       await _openApiKeySheet();
       return;
     }
@@ -653,6 +708,9 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _openApiKeySheet() async {
     FocusManager.instance.primaryFocus?.unfocus();
     _apiKeyController.text = widget.store.apiKey;
+    _backupApiKeyController.text = widget.store.backupApiKey;
+    _backupBaseUrlController.text = widget.store.backupBaseUrl;
+    _backupModelController.text = widget.store.backupModel;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -691,11 +749,11 @@ class _ChatPageState extends State<ChatPage>
                   const SizedBox(height: 18),
                   const Row(
                     children: [
-                      Icon(Icons.key_rounded, color: ironGreen),
+                      Icon(Icons.hub_rounded, color: ironGreen),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Gemini API ключ',
+                          'AI доставчици',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 20,
@@ -707,49 +765,122 @@ class _ChatPageState extends State<ChatPage>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Ключът се пази само локално на телефона и не се записва в GitHub.',
+                    'Iron използва Gemini първо. При лимит или недостъпност автоматично преминава към резервния OpenAI-съвместим доставчик. Ключовете се пазят само локално на телефона.',
                     style: TextStyle(color: Colors.white60, height: 1.35),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
+                  const Text(
+                    '1. Основен доставчик · Gemini',
+                    style: TextStyle(
+                      color: ironGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _apiKeyController,
-                    autofocus: !widget.store.hasApiKey,
                     obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Gemini API ключ',
+                      hintText: 'AIza...',
+                      prefixIcon: Icon(Icons.key_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '2. Резервен · OpenAI-съвместим',
+                    style: TextStyle(
+                      color: ironGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'По подразбиране е OpenAI. Адресът и моделът могат да се сменят за друг съвместим доставчик.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _backupApiKeyController,
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Резервен API ключ',
+                      hintText: 'sk-...',
+                      prefixIcon: Icon(Icons.shield_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _backupBaseUrlController,
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'API адрес',
+                      hintText: 'https://api.openai.com/v1',
+                      prefixIcon: Icon(Icons.link_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _backupModelController,
                     textInputAction: TextInputAction.done,
+                    decoration: const InputDecoration(
+                      labelText: 'Модел',
+                      hintText: 'gpt-4.1-mini',
+                      prefixIcon: Icon(Icons.memory_rounded),
+                    ),
                     onSubmitted: (_) async {
-                      final saved = await _saveApiKey();
+                      final saved = await _saveAiProviders();
                       if (saved && sheetContext.mounted) {
                         Navigator.pop(sheetContext);
                       }
                     },
-                    decoration: const InputDecoration(
-                      labelText: 'API ключ',
-                      hintText: 'AIza...',
-                      prefixIcon: Icon(Icons.lock_outline_rounded),
-                    ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   FilledButton.icon(
                     onPressed: () async {
-                      final saved = await _saveApiKey();
+                      final saved = await _saveAiProviders();
                       if (saved && sheetContext.mounted) {
                         Navigator.pop(sheetContext);
                       }
                     },
                     icon: const Icon(Icons.save_rounded),
-                    label: const Text('Запази ключа'),
+                    label: const Text('Запази AI доставчиците'),
                   ),
-                  if (widget.store.hasApiKey) ...[
+                  if (widget.store.hasApiKey ||
+                      widget.store.hasBackupProvider) ...[
                     const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await _clearApiKey();
-                        if (sheetContext.mounted) {
-                          Navigator.pop(sheetContext);
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Премахни ключа'),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (widget.store.hasApiKey)
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await _clearGeminiApiKey();
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('Премахни Gemini'),
+                          ),
+                        if (widget.store.hasBackupProvider)
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await _clearBackupProvider();
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('Премахни резервния'),
+                          ),
+                      ],
                     ),
                   ],
                 ],
@@ -870,8 +1001,8 @@ class _ChatPageState extends State<ChatPage>
                 const SizedBox(width: 12),
                 _roundAction(
                   icon: Icons.key_rounded,
-                  tooltip: 'Gemini API ключ',
-                  active: widget.store.hasApiKey,
+                  tooltip: 'AI доставчици',
+                  active: widget.store.hasAnyAiProvider,
                   onPressed: _openApiKeySheet,
                 ),
               ],
@@ -913,9 +1044,9 @@ class _ChatPageState extends State<ChatPage>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.store.hasApiKey
+                        widget.store.hasAnyAiProvider
                             ? 'Личен AI асистент'
-                            : 'Добави Gemini ключ от менюто',
+                            : 'Добави AI доставчик от менюто',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -944,7 +1075,7 @@ class _ChatPageState extends State<ChatPage>
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'api',
-                      child: Text('API ключ'),
+                      child: Text('AI доставчици'),
                     ),
                     const PopupMenuItem(
                       value: 'voice',

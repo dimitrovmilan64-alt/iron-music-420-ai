@@ -48,7 +48,12 @@ Future<void> main() async {
 
   final store = LocalStore();
   await store.initialize();
-  await AutomationService().syncGeminiApiKey(store.apiKey);
+  await AutomationService().syncAiProviderSettings(
+    geminiApiKey: store.apiKey,
+    backupApiKey: store.backupApiKey,
+    backupBaseUrl: store.backupBaseUrl,
+    backupModel: store.backupModel,
+  );
   runApp(IronMusic420App(store: store));
 }
 
