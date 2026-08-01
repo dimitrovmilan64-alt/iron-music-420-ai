@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/chat_message.dart';
+import 'ai_provider_config.dart';
 
 class GeminiException implements Exception {
   final String message;
@@ -13,8 +14,16 @@ class GeminiException implements Exception {
   String toString() => message;
 }
 
+class _AiMessage {
+  final String role;
+  final String text;
+
+  const _AiMessage(this.role, this.text);
+}
+
 class GeminiService {
-  static const _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+  static const _geminiBaseUrl =
+      'https://generativelanguage.googleapis.com/v1beta';
 
   static const _preferredModels = <String>[
     'gemini-3.6-flash',
@@ -27,6 +36,7 @@ class GeminiService {
 
   final http.Client _client;
   String? _activeModel;
+  String? _activeGeminiModel;
   String? _modelForKeyFingerprint;
 
   GeminiService({http.Client? client}) : _client = client ?? http.Client();
@@ -39,6 +49,7 @@ class GeminiService {
 
   void resetModel() {
     _activeModel = null;
+    _activeGeminiModel = null;
     _modelForKeyFingerprint = null;
   }
 
@@ -64,21 +75,19 @@ class GeminiService {
         ? contextMessages.sublist(contextMessages.length - 24)
         : contextMessages;
 
-    final List<Map<String, dynamic>> contents = limitedHistory
-        .map<Map<String, dynamic>>(
-          (message) => {
-            'role': message.isUser ? 'user' : 'model',
-            'parts': [
-              {'text': message.text},
-            ],
-          },
+    final messages = limitedHistory
+        .map(
+          (message) => _AiMessage(
+            message.isUser ? 'user' : 'assistant',
+            message.text,
+          ),
         )
         .toList(growable: false);
 
-    return _generate(
-      apiKey: apiKey,
+    return _generateWithFallback(
+      geminiApiKey: apiKey,
       systemPrompt: systemPrompt,
-      contents: contents,
+      messages: messages,
       maxOutputTokens: 3600,
       temperature: 0.82,
     );
@@ -97,34 +106,81 @@ class GeminiService {
 Никога не прекъсвай текста по средата на ред или изречение. При цяла песен завърши всички поискани части; ако е нужно, направи куплетите по-кратки, но дай завършен финал.
 ''';
 
-    return _generate(
-      apiKey: apiKey,
+    return _generateWithFallback(
+      geminiApiKey: apiKey,
       systemPrompt: systemPrompt,
-      contents: [
-        {
-          'role': 'user',
-          'parts': [
-            {'text': instruction},
-          ],
-        },
-      ],
+      messages: [_AiMessage('user', instruction)],
       maxOutputTokens: 7000,
       temperature: 0.92,
     );
   }
 
-  Future<String> _generate({
-    required String apiKey,
+  Future<String> _generateWithFallback({
+    required String geminiApiKey,
     required String systemPrompt,
-    required List<Map<String, dynamic>> contents,
+    required List<_AiMessage> messages,
     required int maxOutputTokens,
     required double temperature,
   }) async {
-    if (apiKey.trim().isEmpty) {
-      throw const GeminiException('Липсва Gemini API ключ.');
+    final cleanGeminiKey = geminiApiKey.trim();
+    final backup = AiProviderConfig.current;
+    GeminiException? geminiError;
+    GeminiException? backupError;
+
+    if (cleanGeminiKey.isNotEmpty) {
+      try {
+        return await _generateGemini(
+          apiKey: cleanGeminiKey,
+          systemPrompt: systemPrompt,
+          messages: messages,
+          maxOutputTokens: maxOutputTokens,
+          temperature: temperature,
+        );
+      } on GeminiException catch (error) {
+        geminiError = error;
+      }
     }
 
-    final resolvedModel = await _resolveModel(apiKey);
+    if (backup.hasBackup) {
+      try {
+        return await _generateBackup(
+          config: backup,
+          systemPrompt: systemPrompt,
+          messages: messages,
+          maxOutputTokens: maxOutputTokens,
+          temperature: temperature,
+        );
+      } on GeminiException catch (error) {
+        backupError = error;
+      }
+    }
+
+    if (cleanGeminiKey.isEmpty && !backup.hasBackup) {
+      throw const GeminiException(
+        'Добави Gemini или резервен AI API ключ от настройките.',
+      );
+    }
+
+    if (geminiError != null && backupError != null) {
+      throw GeminiException(
+        '${geminiError.message}\nРезервният доставчик също не отговори: '
+        '${backupError.message}',
+      );
+    }
+
+    throw backupError ??
+        geminiError ??
+        const GeminiException('AI доставчиците временно не отговарят.');
+  }
+
+  Future<String> _generateGemini({
+    required String apiKey,
+    required String systemPrompt,
+    required List<_AiMessage> messages,
+    required int maxOutputTokens,
+    required double temperature,
+  }) async {
+    final resolvedModel = await _resolveGeminiModel(apiKey);
     final modelsToTry = <String>[
       resolvedModel,
       ..._preferredModels,
@@ -133,19 +189,20 @@ class GeminiService {
     GeminiException? lastError;
 
     for (final model in modelsToTry) {
-      final uri = Uri.parse('$_baseUrl/models/$model:generateContent');
+      final uri = Uri.parse(
+        '$_geminiBaseUrl/models/$model:generateContent',
+      );
       final generationConfig = <String, dynamic>{
         'maxOutputTokens': maxOutputTokens,
       };
 
-      // Gemini 3.5/3.6 no longer need the older sampling fields.
       if (!model.startsWith('gemini-3.5') &&
           !model.startsWith('gemini-3.6')) {
         generationConfig['temperature'] = temperature;
         generationConfig['topP'] = 0.95;
       }
 
-      for (var attempt = 0; attempt < 3; attempt++) {
+      for (var attempt = 0; attempt < 2; attempt++) {
         http.Response response;
 
         try {
@@ -154,7 +211,7 @@ class GeminiService {
                 uri,
                 headers: {
                   'Content-Type': 'application/json',
-                  'x-goog-api-key': apiKey.trim(),
+                  'x-goog-api-key': apiKey,
                 },
                 body: jsonEncode({
                   'systemInstruction': {
@@ -162,64 +219,82 @@ class GeminiService {
                       {'text': systemPrompt},
                     ],
                   },
-                  'contents': contents,
+                  'contents': messages
+                      .map(
+                        (message) => {
+                          'role': message.role == 'assistant'
+                              ? 'model'
+                              : 'user',
+                          'parts': [
+                            {'text': message.text},
+                          ],
+                        },
+                      )
+                      .toList(growable: false),
                   'generationConfig': generationConfig,
                 }),
               )
               .timeout(const Duration(seconds: 70));
         } catch (_) {
-          if (attempt < 2) {
-            await Future<void>.delayed(Duration(seconds: 1 << attempt));
+          if (attempt == 0) {
+            await Future<void>.delayed(const Duration(seconds: 1));
             continue;
           }
-          lastError = const GeminiException(
-            'Няма връзка с Gemini. Провери интернет връзката и опитай пак.',
+          throw const GeminiException(
+            'Няма връзка с Gemini. Преминавам към резервния доставчик.',
           );
-          break;
         }
 
         if (response.statusCode == 200) {
-          final text = _extractText(response.body);
+          final text = _extractGeminiText(response.body);
           if (text.isEmpty) {
-            lastError = const GeminiException(
-              'Gemini върна празен отговор. Опитай с по-кратка заявка.',
-            );
-            break;
+            throw const GeminiException('Gemini върна празен отговор.');
           }
-          _activeModel = model;
+          _activeGeminiModel = model;
+          _activeModel = 'Gemini · $model';
           _modelForKeyFingerprint = _fingerprint(apiKey);
           return text;
         }
 
         final message = _extractError(response.body);
-        lastError = GeminiException(
-          _friendlyError(response.statusCode, message),
-        );
+
+        if (response.statusCode == 404) {
+          lastError = const GeminiException(
+            'Избраният Gemini модел не е наличен.',
+          );
+          break;
+        }
+
+        if (response.statusCode == 429) {
+          throw const GeminiException(
+            'Лимитът на Gemini е достигнат. Преминавам към резервния доставчик.',
+          );
+        }
+
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw const GeminiException(
+            'Gemini API ключът не е валиден или няма разрешение.',
+          );
+        }
 
         final transient = response.statusCode == 408 ||
-            response.statusCode == 429 ||
             response.statusCode == 500 ||
             response.statusCode == 502 ||
             response.statusCode == 503 ||
             response.statusCode == 504;
-
-        if (transient && attempt < 2) {
-          final retryAfter = int.tryParse(
-            response.headers['retry-after'] ?? '',
-          );
-          final delaySeconds = retryAfter ?? (1 << attempt);
-          await Future<void>.delayed(
-            Duration(seconds: delaySeconds.clamp(1, 8).toInt()),
-          );
+        if (transient && attempt == 0) {
+          await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
-
-        // При липсващ/натоварен/лимитиран модел пробваме следващ Flash модел.
-        if (response.statusCode == 404 || transient) {
-          break;
+        if (transient) {
+          throw const GeminiException(
+            'Gemini временно не отговаря. Преминавам към резервния доставчик.',
+          );
         }
 
-        throw lastError;
+        throw GeminiException(
+          _friendlyGeminiError(response.statusCode, message),
+        );
       }
     }
 
@@ -227,17 +302,140 @@ class GeminiService {
         const GeminiException('Не е намерен работещ Gemini модел.');
   }
 
-  Future<String> _resolveModel(String apiKey) async {
+  Future<String> _generateBackup({
+    required AiProviderConfig config,
+    required String systemPrompt,
+    required List<_AiMessage> messages,
+    required int maxOutputTokens,
+    required double temperature,
+  }) async {
+    final uri = config.chatCompletionsUri;
+    if (uri == null) {
+      throw const GeminiException(
+        'Адресът на резервния AI доставчик не е валиден.',
+      );
+    }
+
+    final model = config.backupModel.trim();
+    if (model.isEmpty) {
+      throw const GeminiException('Липсва модел за резервния AI доставчик.');
+    }
+
+    final payload = <String, dynamic>{
+      'model': model,
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        ...messages.map(
+          (message) => {
+            'role': message.role,
+            'content': message.text,
+          },
+        ),
+      ],
+    };
+
+    final lowerModel = model.toLowerCase();
+    final reasoningModel = lowerModel.startsWith('gpt-5') ||
+        lowerModel.startsWith('o1') ||
+        lowerModel.startsWith('o3') ||
+        lowerModel.startsWith('o4');
+    if (reasoningModel) {
+      payload['max_completion_tokens'] = maxOutputTokens;
+    } else {
+      payload['max_tokens'] = maxOutputTokens;
+      payload['temperature'] = temperature;
+    }
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      http.Response response;
+      try {
+        response = await _client
+            .post(
+              uri,
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ${config.backupApiKey.trim()}',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 70));
+      } catch (_) {
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+          continue;
+        }
+        throw const GeminiException(
+          'Няма връзка с резервния AI доставчик.',
+        );
+      }
+
+      if (response.statusCode == 200) {
+        final text = _extractBackupText(response.body);
+        if (text.isEmpty) {
+          throw const GeminiException(
+            'Резервният AI доставчик върна празен отговор.',
+          );
+        }
+        _activeModel = 'Резервен · $model';
+        return text;
+      }
+
+      final transient = response.statusCode == 408 ||
+          response.statusCode == 500 ||
+          response.statusCode == 502 ||
+          response.statusCode == 503 ||
+          response.statusCode == 504;
+      if (transient && attempt == 0) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        continue;
+      }
+
+      final raw = _extractError(response.body);
+      switch (response.statusCode) {
+        case 401:
+        case 403:
+          throw const GeminiException(
+            'Резервният API ключ не е валиден или няма разрешение.',
+          );
+        case 404:
+          throw GeminiException(
+            'Резервният модел „$model“ не е наличен.',
+          );
+        case 429:
+          throw const GeminiException(
+            'Лимитът на резервния AI доставчик също е достигнат.',
+          );
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          throw const GeminiException(
+            'Резервният AI доставчик временно не отговаря.',
+          );
+        default:
+          throw GeminiException(
+            'Резервният AI върна грешка ${response.statusCode}: $raw',
+          );
+      }
+    }
+
+    throw const GeminiException(
+      'Резервният AI доставчик временно не отговаря.',
+    );
+  }
+
+  Future<String> _resolveGeminiModel(String apiKey) async {
     final fingerprint = _fingerprint(apiKey);
-    if (_activeModel != null && _modelForKeyFingerprint == fingerprint) {
-      return _activeModel!;
+    if (_activeGeminiModel != null &&
+        _modelForKeyFingerprint == fingerprint) {
+      return _activeGeminiModel!;
     }
 
     try {
-      final uri = Uri.parse('$_baseUrl/models?pageSize=1000');
+      final uri = Uri.parse('$_geminiBaseUrl/models?pageSize=1000');
       final response = await _client.get(
         uri,
-        headers: {'x-goog-api-key': apiKey.trim()},
+        headers: {'x-goog-api-key': apiKey},
       ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode != 200) {
@@ -265,7 +463,7 @@ class GeminiService {
 
       for (final preferred in _preferredModels) {
         if (available.contains(preferred)) {
-          _activeModel = preferred;
+          _activeGeminiModel = preferred;
           _modelForKeyFingerprint = fingerprint;
           return preferred;
         }
@@ -286,7 +484,7 @@ class GeminiService {
         ..sort((a, b) => b.compareTo(a));
 
       if (stableFlash.isNotEmpty) {
-        _activeModel = stableFlash.first;
+        _activeGeminiModel = stableFlash.first;
         _modelForKeyFingerprint = fingerprint;
         return stableFlash.first;
       }
@@ -297,7 +495,7 @@ class GeminiService {
     return 'gemini-2.5-flash';
   }
 
-  String _extractText(String body) {
+  String _extractGeminiText(String body) {
     try {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final candidates = decoded['candidates'] as List<dynamic>?;
@@ -321,6 +519,31 @@ class GeminiService {
     }
   }
 
+  String _extractBackupText(String body) {
+    try {
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final choices = decoded['choices'] as List<dynamic>?;
+      if (choices == null || choices.isEmpty) return '';
+      final first = choices.first;
+      if (first is! Map) return '';
+      final message = first['message'];
+      if (message is! Map) return '';
+      final content = message['content'];
+      if (content is String) return content.trim();
+      if (content is List) {
+        return content
+            .whereType<Map>()
+            .map((part) => part['text']?.toString() ?? '')
+            .where((text) => text.trim().isNotEmpty)
+            .join('\n')
+            .trim();
+      }
+    } catch (_) {
+      return '';
+    }
+    return '';
+  }
+
   String _extractError(String body) {
     try {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
@@ -331,26 +554,17 @@ class GeminiService {
     } catch (_) {
       // Връщаме суровия текст само ако JSON не може да се прочете.
     }
-    return body;
+    return body.replaceAll(RegExp(r'\s+'), ' ').trim().take(400);
   }
 
-  String _friendlyError(int statusCode, String rawMessage) {
+  String _friendlyGeminiError(int statusCode, String rawMessage) {
     final compact = rawMessage.replaceAll(RegExp(r'\s+'), ' ').trim();
     switch (statusCode) {
       case 400:
-        return 'Gemini отхвърли заявката. Провери API ключа или съкрати текста. $compact';
+        return 'Gemini отхвърли заявката. Провери ключа или съкрати текста. $compact';
       case 401:
       case 403:
-        return 'API ключът не е валиден или няма разрешение за Gemini API.';
-      case 404:
-        return 'Избраният Gemini модел не е наличен.';
-      case 429:
-        return 'Достигнат е лимитът на Gemini API. Изчакай малко и опитай пак.';
-      case 500:
-      case 502:
-      case 503:
-      case 504:
-        return 'Gemini временно не отговаря. Опитай отново след малко.';
+        return 'Gemini API ключът не е валиден или няма разрешение.';
       default:
         return 'Gemini грешка $statusCode: $compact';
     }
