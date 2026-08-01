@@ -7,6 +7,7 @@ import '../models/chat_message.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
+import '../services/speech_error_policy.dart';
 import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
@@ -46,6 +47,9 @@ class _ChatPageState extends State<ChatPage>
   bool _speechAvailable = false;
   bool _voiceReady = false;
   bool _speechSendTriggered = false;
+  bool _speechHeard = false;
+  bool _speechRetryScheduled = false;
+  int _speechTimeoutRetryCount = 0;
   String _bulgarianLocale = 'bg_BG';
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
@@ -375,9 +379,7 @@ class _ChatPageState extends State<ChatPage>
           }
         },
         onError: (error) {
-          if (!mounted) return;
-          setState(() => _isListening = false);
-          _showMessage('Проблем с микрофона: ${error.errorMsg}');
+          _handleSpeechError(error.errorMsg);
         },
       );
 
@@ -446,15 +448,49 @@ class _ChatPageState extends State<ChatPage>
     await _sendMessage();
   }
 
-  Future<void> _toggleListening() async {
-    if (_speechToText.isListening) {
-      await _speechToText.stop();
-      if (mounted) setState(() => _isListening = false);
-      await _sendRecognizedSpeech();
+  void _handleSpeechError(String errorMessage) {
+    if (!mounted) return;
+
+    final canRetry = SpeechErrorPolicy.shouldRetry(errorMessage) &&
+        !_speechHeard &&
+        !_speechSendTriggered &&
+        !_isLoading &&
+        _speechTimeoutRetryCount < 1 &&
+        !_speechRetryScheduled;
+
+    setState(() => _isListening = false);
+
+    if (canRetry) {
+      _speechTimeoutRetryCount++;
+      _speechRetryScheduled = true;
+      Future<void>.delayed(const Duration(milliseconds: 550), () async {
+        if (!mounted) return;
+        _speechRetryScheduled = false;
+        if (_isLoading || _speechSendTriggered) return;
+
+        try {
+          await _speechToText.cancel();
+        } catch (_) {
+          // Android may already have closed the timed-out recognizer.
+        }
+        if (!mounted) return;
+        await _startSpeechListening(isRetry: true);
+      });
       return;
     }
 
+    _speechRetryScheduled = false;
+    _showMessage(SpeechErrorPolicy.friendlyMessage(errorMessage));
+  }
+
+  Future<void> _startSpeechListening({required bool isRetry}) async {
+    if (!mounted || _isLoading) return;
+
     await _flutterTts.stop();
+    await Future<void>.delayed(
+      Duration(milliseconds: isRetry ? 450 : 300),
+    );
+    if (!mounted) return;
 
     if (!_speechAvailable) {
       await _prepareSpeechRecognition();
@@ -469,6 +505,8 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
+    if (!isRetry) _speechTimeoutRetryCount = 0;
+    _speechHeard = false;
     _speechSendTriggered = false;
     setState(() => _isListening = true);
 
@@ -483,6 +521,7 @@ class _ChatPageState extends State<ChatPage>
         onResult: (result) {
           if (!mounted) return;
           final recognized = result.recognizedWords.trim();
+          if (recognized.isNotEmpty) _speechHeard = true;
           setState(() {
             _messageController.text = recognized;
             _messageController.selection = TextSelection.fromPosition(
@@ -498,8 +537,22 @@ class _ChatPageState extends State<ChatPage>
     } catch (_) {
       if (!mounted) return;
       setState(() => _isListening = false);
-      _showMessage('Микрофонът не можа да стартира.');
+      _showMessage(
+        SpeechErrorPolicy.friendlyMessage('error_recognizer_busy'),
+      );
     }
+  }
+
+  Future<void> _toggleListening() async {
+    if (_speechToText.isListening) {
+      _speechRetryScheduled = false;
+      await _speechToText.stop();
+      if (mounted) setState(() => _isListening = false);
+      await _sendRecognizedSpeech();
+      return;
+    }
+
+    await _startSpeechListening(isRetry: false);
   }
 
   Future<void> _syncNativeAiSettings() {
