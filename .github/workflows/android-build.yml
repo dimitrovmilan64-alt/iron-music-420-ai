@@ -41,24 +41,31 @@ jobs:
         if: steps.migration.outputs.needed == 'true'
         run: python3 scripts/apply_v330_provider_fallback.py
 
+      - name: Apply v3.3 source preflight fix
+        if: steps.migration.outputs.needed == 'true'
+        run: python3 scripts/fix_v330_source.py
+
       - name: Commit provider fallback source
         if: steps.migration.outputs.needed == 'true'
         shell: bash
         run: |
           rm scripts/apply_v330_provider_fallback.py
+          rm scripts/fix_v330_source.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A \
             lib/main.dart \
             lib/pages/chat_page.dart \
             lib/pages/rap_studio_page.dart \
+            lib/services/gemini_service.dart \
             lib/services/local_store.dart \
             android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt \
             android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt \
             pubspec.yaml \
             test/chat_layout_test.dart \
             CHANGELOG_V330_PROVIDER_FALLBACK.md \
-            scripts/apply_v330_provider_fallback.py
+            scripts/apply_v330_provider_fallback.py \
+            scripts/fix_v330_source.py
           git diff --cached --check
           git commit -m "Complete v3.3 provider fallback"
           git push origin HEAD:${{ github.head_ref }}
