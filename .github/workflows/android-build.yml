@@ -8,9 +8,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-
 concurrency:
   group: android-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -21,41 +18,8 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout speech timeout fix branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
-
-      - name: Detect pending v3.3.1 migration
-        id: migration
-        shell: bash
-        run: |
-          if grep -q '^version: 3.3.1+39$' pubspec.yaml; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Apply v3.3.1 microphone timeout fix
-        if: steps.migration.outputs.needed == 'true'
-        run: python3 scripts/apply_v331_speech_timeout_fix.py
-
-      - name: Commit v3.3.1 source
-        if: steps.migration.outputs.needed == 'true'
-        shell: bash
-        run: |
-          rm scripts/apply_v331_speech_timeout_fix.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A \
-            lib/pages/chat_page.dart \
-            pubspec.yaml \
-            CHANGELOG_V331_SPEECH_TIMEOUT.md \
-            scripts/apply_v331_speech_timeout_fix.py
-          git diff --cached --check
-          git commit -m "Fix Android speech timeout handling in v3.3.1"
-          git push origin HEAD:${{ github.head_ref }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -80,6 +44,11 @@ jobs:
           flutter analyze --no-fatal-warnings --no-fatal-infos
           lib/main.dart
           lib/pages/chat_page.dart
+          lib/pages/rap_studio_page.dart
+          lib/services/ai_provider_config.dart
+          lib/services/gemini_service.dart
+          lib/services/local_store.dart
+          lib/services/automation_service.dart
           lib/services/speech_error_policy.dart
           test/speech_error_policy_test.dart
           test/ai_provider_fallback_test.dart
