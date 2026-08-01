@@ -75,8 +75,13 @@ jobs:
       - name: Verify stable APK certificate
         shell: bash
         run: |
-          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-debug.apk \
-            | grep -F 'SHA256: 8C:04:DC:89:B1:66:16:B0:03:8F:66:C6:06:27:0A:13:25:F0:4D:57:FE:8E:F7:04:99:F4:77:27:4F:4C:73:B3'
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
+            | tee /tmp/iron-apk-certificate.txt
+          grep -Fi \
+            'Signer #1 certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
+            /tmp/iron-apk-certificate.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
