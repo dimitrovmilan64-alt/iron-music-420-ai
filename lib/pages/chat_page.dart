@@ -752,7 +752,7 @@ class _ChatPageState extends State<ChatPage>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Container(
+                  Container(
                     padding: EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Color(0x3300FF77),
