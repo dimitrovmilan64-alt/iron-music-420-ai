@@ -21,6 +21,24 @@ class AutomationService {
     }
   }
 
+  Future<void> syncAiProviderSettings({
+    required String geminiApiKey,
+    required String backupApiKey,
+    required String backupBaseUrl,
+    required String backupModel,
+  }) async {
+    try {
+      await _channel.invokeMethod<bool>('syncAiProviderSettings', {
+        'geminiApiKey': geminiApiKey.trim(),
+        'backupApiKey': backupApiKey.trim(),
+        'backupBaseUrl': backupBaseUrl.trim(),
+        'backupModel': backupModel.trim(),
+      });
+    } catch (_) {
+      // Flutter chat and studio remain usable even if native sync is unavailable.
+    }
+  }
+
   Future<bool> isIronVoiceActive() async {
     try {
       final state = await _channel.invokeMethod<String>('execute', {
@@ -57,7 +75,9 @@ class AutomationService {
       );
     } catch (_) {
       return const AutomationResult(
-          false, 'Възникна проблем при изпълнението.');
+        false,
+        'Възникна проблем при изпълнението.',
+      );
     }
   }
 }
