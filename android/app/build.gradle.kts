@@ -18,6 +18,15 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    signingConfigs {
+        create("ironTest") {
+            storeFile = file("iron-test-key.jks")
+            storePassword = "iron420test"
+            keyAlias = "iron-test"
+            keyPassword = "iron420test"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.ironmusic420ai"
         minSdk = 24
@@ -31,8 +40,11 @@ android {
     }
 
     buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("ironTest")
+        }
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("ironTest")
         }
     }
 
