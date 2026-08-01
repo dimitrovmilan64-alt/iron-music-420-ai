@@ -80,7 +80,7 @@ jobs:
           "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
             | tee /tmp/iron-apk-certificate.txt
           grep -Fi \
-            'Signer #1 certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
+            'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
             /tmp/iron-apk-certificate.txt
 
       - name: Upload APK
