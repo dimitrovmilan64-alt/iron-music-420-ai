@@ -56,7 +56,7 @@ void main() {
         request.url.toString(),
         'https://api.openai.com/v1/chat/completions',
       );
-      expect(request.headers['Authorization'], 'Bearer sk-test-backup');
+      expect(request.headers['authorization'], 'Bearer sk-test-backup');
       final payload = jsonDecode(request.body) as Map<String, dynamic>;
       expect(payload['model'], 'gpt-4.1-mini');
 
