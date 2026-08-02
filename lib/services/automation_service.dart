@@ -19,6 +19,18 @@ class NativeSpeechResult {
   });
 }
 
+class StudioVoiceRequest {
+  final String prompt;
+  final String outputType;
+  final bool autoGenerate;
+
+  const StudioVoiceRequest({
+    required this.prompt,
+    required this.outputType,
+    required this.autoGenerate,
+  });
+}
+
 class AutomationService {
   static const MethodChannel _channel =
       MethodChannel('iron_music_420/automations');
@@ -131,6 +143,24 @@ class AutomationService {
   Future<int?> consumeIronSection() async {
     try {
       return await _channel.invokeMethod<int>('consumeIronSection');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<StudioVoiceRequest?> consumeStudioVoiceRequest() async {
+    try {
+      final value = await _channel.invokeMethod<dynamic>(
+        'consumeStudioVoiceRequest',
+      );
+      if (value is! Map) return null;
+      final prompt = value['prompt']?.toString().trim() ?? '';
+      if (prompt.isEmpty) return null;
+      return StudioVoiceRequest(
+        prompt: prompt,
+        outputType: value['outputType']?.toString().trim() ?? '',
+        autoGenerate: value['autoGenerate'] == true,
+      );
     } catch (_) {
       return null;
     }

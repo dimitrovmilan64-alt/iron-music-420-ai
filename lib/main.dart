@@ -226,6 +226,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openPendingSection() async {
+    final studioRequest = await _automation.consumeStudioVoiceRequest();
+    if (studioRequest != null) {
+      await widget.store.queueStudioVoiceRequest(
+        prompt: studioRequest.prompt,
+        outputType: studioRequest.outputType,
+        autoGenerate: studioRequest.autoGenerate,
+      );
+      _openSection(1);
+      return;
+    }
+
     final section = await _automation.consumeIronSection();
     if (section != null) {
       _openSection(section);

@@ -103,6 +103,13 @@ for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
                 )
             )
 
+# Common recognition variant: „Hey Aaron“ / „Хей Аарън“.
+for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
+    for aaron_index, aaron in enumerate(lexicon.get("AARON", []), start=1):
+        candidates.append(
+            (f"HEY_AARON_LEX_{hey_index}_{aaron_index}", hey + aaron, 4.8, 0.04)
+        )
+
 # Bulgarian-accented, relaxed and compressed variants of „Хей Айрън“.
 candidates.extend(
     [
@@ -116,6 +123,9 @@ candidates.extend(
         ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 4.7, 0.04),
         ("HEY_IRON_NO_H_O", ["EY1", "AY1", "R", "AO0", "N"], 4.5, 0.04),
         ("HEY_IRON_NO_H_OW", ["EY1", "AY1", "R", "OW0", "N"], 4.5, 0.04),
+        ("HEY_AARON_BG", ["HH", "EY1", "EH1", "R", "AH0", "N"], 4.6, 0.04),
+        ("HEY_AARON_BG_FAST", ["HH", "EY1", "EH1", "R", "N"], 4.5, 0.05),
+        ("HEY_AARON_NO_H", ["EY1", "EH1", "R", "AH0", "N"], 4.4, 0.05),
         # Fallback for cases where the accented „Hey“ is missed. It remains
         # slightly stricter than the full phrase to avoid accidental triggers.
         ("IRON_LEX", ["AY1", "ER0", "N"], 4.2, 0.05),

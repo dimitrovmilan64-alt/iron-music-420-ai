@@ -138,6 +138,9 @@ class _RapStudioPageState extends State<RapStudioPage> {
       controller.addListener(_markChanged);
     }
     widget.store.addListener(_handleStoreChange);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _applyPendingStudioVoiceRequest();
+    });
   }
 
   @override
@@ -197,6 +200,39 @@ class _RapStudioPageState extends State<RapStudioPage> {
       }
     });
     _restoring = false;
+    _applyPendingStudioVoiceRequest();
+  }
+
+  void _applyPendingStudioVoiceRequest() {
+    if (!mounted) return;
+    final prompt = widget.store.pendingStudioPrompt.trim();
+    if (prompt.isEmpty) return;
+
+    final requestedType = widget.store.pendingStudioOutputType.trim();
+    final autoGenerate = widget.store.pendingStudioAutoGenerate;
+    widget.store.clearPendingStudioVoiceRequest();
+
+    _restoring = true;
+    setState(() {
+      _themeController.text = prompt;
+      if (_outputTypes.contains(requestedType)) {
+        _outputType = requestedType;
+      }
+      _saveStatus = 'Гласова команда заредена';
+    });
+    _restoring = false;
+
+    if (!autoGenerate) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.store.hasAnyAiProvider) {
+        _generateWithAi();
+      } else {
+        _showMessage(
+          'Командата е заредена. Добави Gemini или Groq, за да генерирам текста.',
+        );
+      }
+    });
   }
 
   void _markChanged() {

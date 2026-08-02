@@ -29,6 +29,9 @@ class MainActivity : FlutterActivity() {
     private var pendingFlashEnabled = false
     private var pendingVoiceResult: MethodChannel.Result? = null
     private var pendingIronSection: Int? = null
+    private var pendingStudioPrompt = ""
+    private var pendingStudioOutputType = ""
+    private var pendingStudioAutoGenerate = false
     private var automationChannel: MethodChannel? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var chatSpeechRecognizer: SpeechRecognizer? = null
@@ -60,6 +63,22 @@ class MainActivity : FlutterActivity() {
                     "consumeIronSection" -> {
                         result.success(pendingIronSection)
                         pendingIronSection = null
+                    }
+                    "consumeStudioVoiceRequest" -> {
+                        if (pendingStudioPrompt.isBlank()) {
+                            result.success(null)
+                        } else {
+                            result.success(
+                                mapOf(
+                                    "prompt" to pendingStudioPrompt,
+                                    "outputType" to pendingStudioOutputType,
+                                    "autoGenerate" to pendingStudioAutoGenerate,
+                                ),
+                            )
+                            pendingStudioPrompt = ""
+                            pendingStudioOutputType = ""
+                            pendingStudioAutoGenerate = false
+                        }
                     }
                     "syncGeminiApiKey" -> {
                         syncGeminiApiKey(
@@ -452,6 +471,15 @@ class MainActivity : FlutterActivity() {
         val section = intent?.getIntExtra("iron_section", -1) ?: -1
         if (section in 0..4) {
             pendingIronSection = section
+        }
+
+        val studioPrompt = intent?.getStringExtra("iron_studio_prompt").orEmpty().trim()
+        if (studioPrompt.isNotEmpty()) {
+            pendingStudioPrompt = studioPrompt
+            pendingStudioOutputType =
+                intent?.getStringExtra("iron_studio_output_type").orEmpty().trim()
+            pendingStudioAutoGenerate =
+                intent?.getBooleanExtra("iron_studio_auto_generate", false) == true
         }
     }
 

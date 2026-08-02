@@ -43,6 +43,9 @@ class LocalStore extends ChangeNotifier {
   List<SongProject> _songProjects = const [];
   String _activeSongId = '';
   int _studioRevision = 0;
+  String _pendingStudioPrompt = '';
+  String _pendingStudioOutputType = '';
+  bool _pendingStudioAutoGenerate = false;
   Set<String> _favoriteAutomationIds = <String>{};
   List<CustomAutomation> _customAutomations = const [];
   List<AutomationHistoryEntry> _automationHistory = const [];
@@ -175,6 +178,9 @@ class LocalStore extends ChangeNotifier {
   List<SongProject> get songProjects => List.unmodifiable(_songProjects);
   String get activeSongId => _activeSongId;
   int get studioRevision => _studioRevision;
+  String get pendingStudioPrompt => _pendingStudioPrompt;
+  String get pendingStudioOutputType => _pendingStudioOutputType;
+  bool get pendingStudioAutoGenerate => _pendingStudioAutoGenerate;
   Set<String> get favoriteAutomationIds =>
       Set.unmodifiable(_favoriteAutomationIds);
   List<CustomAutomation> get customAutomations =>
@@ -307,6 +313,35 @@ class LocalStore extends ChangeNotifier {
       _preferences.remove(_activeSongIdKey),
     ]);
     notifyListeners();
+  }
+
+  Future<void> queueStudioVoiceRequest({
+    required String prompt,
+    required String outputType,
+    required bool autoGenerate,
+  }) async {
+    final cleanPrompt = prompt.trim();
+    if (cleanPrompt.isEmpty) return;
+
+    _activeSongId = '';
+    _rapDraft = cleanPrompt;
+    _rapResult = '';
+    _pendingStudioPrompt = cleanPrompt;
+    _pendingStudioOutputType = outputType.trim();
+    _pendingStudioAutoGenerate = autoGenerate;
+    _studioRevision++;
+    await Future.wait([
+      _preferences.setString(_rapDraftKey, _rapDraft),
+      _preferences.remove(_rapResultKey),
+      _preferences.remove(_activeSongIdKey),
+    ]);
+    notifyListeners();
+  }
+
+  void clearPendingStudioVoiceRequest() {
+    _pendingStudioPrompt = '';
+    _pendingStudioOutputType = '';
+    _pendingStudioAutoGenerate = false;
   }
 
   Future<void> loadSongIntoStudio(SongProject song) async {

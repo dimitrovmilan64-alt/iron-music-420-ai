@@ -793,6 +793,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
+        val localCommand = LocalVoiceCommandParser.parse(originalCommand)
+        if (localCommand != null) {
+            val reply = executeLocalVoiceCommand(localCommand)
+            speak(reply) {
+                continueConversationOrWake(650)
+            }
+            return
+        }
+
         if (!aiRouter.hasApiKey()) {
             val localReply = executeCommand(normalizedCommand)
             val reply = if (localReply == "Не разбрах командата. Опитай пак.") {
@@ -849,6 +858,26 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         ).apply {
             isDaemon = true
             start()
+        }
+    }
+
+    private fun executeLocalVoiceCommand(command: LocalVoiceCommand): String {
+        return when (command.action) {
+            "studio_generate" -> {
+                openIronStudioRequest(
+                    prompt = command.argument,
+                    outputType = command.studioOutputType,
+                )
+                command.reply.ifBlank { "Отварям Рап студио." }
+            }
+            "clarify" -> command.reply.ifBlank { "Кажи какво точно да направя." }
+            else -> executeAiDecision(
+                GeminiVoiceRouter.Decision(
+                    action = command.action,
+                    argument = command.argument,
+                    reply = command.reply,
+                ),
+            )
         }
     }
 
@@ -1192,6 +1221,18 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun launch(intent: Intent) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
+    }
+
+    private fun openIronStudioRequest(prompt: String, outputType: String) {
+        launch(
+            Intent(this, MainActivity::class.java).apply {
+                putExtra("iron_section", 1)
+                putExtra("iron_studio_prompt", prompt.trim())
+                putExtra("iron_studio_output_type", outputType.trim())
+                putExtra("iron_studio_auto_generate", true)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
     }
 
     private fun openIronSection(section: Int) {
