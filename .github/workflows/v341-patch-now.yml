@@ -103,3 +103,5 @@ jobs:
             --title 'Iron Music 420 AI v3.4.1' \
             --notes 'Verified patch, analysis, tests and arm64 release build passed.'
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "v3.4.1 build completed successfully. Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v3.4.1"
+
+# retrigger verified patch build: 2026-08-06T23:47:27+03:00
