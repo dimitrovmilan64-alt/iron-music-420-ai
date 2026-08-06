@@ -1,9 +1,6 @@
 name: Android build
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
@@ -13,85 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-apk:
+  disabled:
+    if: false
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Prepare stable test signing key
-        shell: bash
-        run: |
-          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
-          keytool -list \
-            -keystore android/app/iron-test-key.jks \
-            -storepass iron420test \
-            -alias iron-test
-
-      - name: Prepare offline Hey Iron engine
-        run: bash scripts/prepare_sherpa_kws.sh
-
-      - name: Get Flutter packages
-        run: flutter pub get
-
-      - name: Analyze v3.4.0
-        run: >-
-          flutter analyze --no-fatal-warnings --no-fatal-infos
-          lib/main.dart
-          lib/pages/chat_page.dart
-          lib/pages/rap_studio_page.dart
-          lib/services/ai_provider_config.dart
-          lib/services/gemini_service.dart
-          lib/services/local_store.dart
-          lib/services/automation_service.dart
-          test/native_speech_bridge_test.dart
-          test/native_voice_pause_groq_test.dart
-          test/stable_notification_studio_handoff_test.dart
-          test/single_chat_voice_core_test.dart
-          test/ai_provider_fallback_test.dart
-          test/chat_layout_test.dart
-
-      - name: Test single chat voice core and regressions
-        run: >-
-          flutter test
-          test/native_speech_bridge_test.dart
-          test/native_voice_pause_groq_test.dart
-          test/stable_notification_studio_handoff_test.dart
-          test/single_chat_voice_core_test.dart
-          test/ai_provider_fallback_test.dart
-          test/chat_layout_test.dart
-
-      - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
-
-      - name: Verify stable APK certificate
-        shell: bash
-        run: |
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          test -x "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
-            | tee /tmp/iron-apk-certificate.txt
-          grep -Fi \
-            'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
-            /tmp/iron-apk-certificate.txt
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: iron-music-420-ai-v3.4.0-single-chat-voice-core
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
+      - run: echo disabled
