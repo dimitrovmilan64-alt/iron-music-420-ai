@@ -1,0 +1,41 @@
+name: Apply v3.4.1 update
+
+on:
+  push:
+    branches:
+      - agent/v3-4-1-unified-assistant-core
+
+permissions:
+  contents: write
+
+env:
+  PATCH_SHA256: f8548618840c49561441f0c9b43cc8cc3e76a62b083e9c58d98ccce0616d87f3
+
+jobs:
+  apply-update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified source patch
+        shell: bash
+        run: |
+          if [[ ! -f .v341-update/READY ]]; then
+            echo 'Patch parts are still being uploaded.'
+            exit 0
+          fi
+          cat .v341-update/part-*.txt | base64 --decode | gzip --decompress > /tmp/v341.patch
+          echo "$PATCH_SHA256  /tmp/v341.patch" | sha256sum --check --strict
+          git apply --check /tmp/v341.patch
+          git apply /tmp/v341.patch
+          rm -rf .v341-update
+          rm -f .github/workflows/apply-v341-update.yml
+          git add --all
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
+          git push origin HEAD:agent/v3-4-1-unified-assistant-core
