@@ -14,17 +14,22 @@ concurrency:
 
 env:
   PATCH_SHA256: f8548618840c49561441f0c9b43cc8cc3e76a62b083e9c58d98ccce0616d87f3
+  WORK_BRANCH: agent/v3-4-1-unified-assistant-core
 
 jobs:
   apply-update:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout working branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/v3-4-1-unified-assistant-core
-          fetch-depth: 0
+      - name: Fetch working branch without marketplace actions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$WORK_BRANCH"
+          git checkout -B "$WORK_BRANCH" FETCH_HEAD
 
       - name: Apply verified source patch
         shell: bash
@@ -40,4 +45,4 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
-          git push origin HEAD:agent/v3-4-1-unified-assistant-core
+          git push origin HEAD:"$WORK_BRANCH"
