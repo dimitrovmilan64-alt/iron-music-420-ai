@@ -1,0 +1,26 @@
+name: Source snapshot
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  upload-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Package source
+        shell: bash
+        run: |
+          mkdir -p /tmp/iron-source
+          rsync -a --exclude='.git' --exclude='build' --exclude='.dart_tool' ./ /tmp/iron-source/
+          cd /tmp
+          zip -qr iron-music-420-ai-v3.4.1-source.zip iron-source
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: iron-music-420-ai-v3.4.1-source-snapshot
+          path: /tmp/iron-music-420-ai-v3.4.1-source.zip
+          if-no-files-found: error
