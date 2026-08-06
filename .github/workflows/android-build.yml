@@ -1,41 +1,64 @@
-name: One-shot Iron Music 420 AI v3.4.1 release
+name: Iron Music 420 AI v3.4.1 release command
 
 on:
-  push:
-    branches:
-      - main
+  issue_comment:
+    types:
+      - created
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
-  group: iron-v341-one-shot
-  cancel-in-progress: true
-
-env:
-  WORK_BRANCH: agent/v3-4-1-unified-assistant-direct
-  ARCHIVE_SHA256: 26543a6a95961fb0b31a3b8e54611303d65552a44d446389bb6a75042b11f87c
+  group: iron-v341-release-command
+  cancel-in-progress: false
 
 jobs:
   build-v341:
+    if: ${{ github.event.issue.pull_request && github.event.issue.number == 15 && github.event.comment.body == '/build-v341' }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 75
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK_BRANCH: agent/v3-4-1-unified-assistant-direct
+      ARCHIVE_SHA256: 26543a6a95961fb0b31a3b8e54611303d65552a44d446389bb6a75042b11f87c
+      RELEASE_TAG: v3.4.1
+      PR_NUMBER: '15'
 
     steps:
-      - name: Fetch verified v3.4.1 branch
+      - name: Verify, test, build and publish v3.4.1
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          set -Eeuo pipefail
+          exec > >(tee /tmp/iron-v341-build.log) 2>&1
+          STAGE='initialization'
+
+          report_failure() {
+            code=$?
+            trap - ERR
+            tail -n 80 /tmp/iron-v341-build.log > /tmp/iron-v341-tail.log || true
+            {
+              echo "v3.4.1 build failed during: ${STAGE}."
+              echo
+              echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              echo
+              echo '```text'
+              cat /tmp/iron-v341-tail.log
+              echo '```'
+            } > /tmp/iron-v341-comment.md
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/iron-v341-comment.md || true
+            exit "$code"
+          }
+          trap report_failure ERR
+
+          STAGE='fetching the direct source branch'
           git init .
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$WORK_BRANCH"
           git checkout -B "$WORK_BRANCH" FETCH_HEAD
 
-      - name: Reconstruct and verify source archive
-        shell: bash
-        run: |
-          set -euo pipefail
+          STAGE='reconstructing and verifying the source archive'
           test "$(find .v341-direct -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 12
           sha256sum .v341-direct/part-* | tee /tmp/v341-part-checksums.txt
           {
@@ -51,60 +74,64 @@ jobs:
           rm -rf .v341-direct
           rm -f .github/workflows/apply-v341-direct.yml
 
-      - name: Install Flutter stable
-        shell: bash
-        run: |
+          STAGE='installing Flutter stable'
           git clone --depth=1 --branch stable https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
-          "$RUNNER_TEMP/flutter/bin/flutter" --version
+          export PATH="$RUNNER_TEMP/flutter/bin:$PATH"
+          flutter config --no-analytics
+          flutter --version
           java -version
 
-      - name: Prepare signing key and offline wake engine
-        shell: bash
-        run: |
+          STAGE='preparing signing and offline wake assets'
           base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
-          keytool -list \
-            -keystore android/app/iron-test-key.jks \
-            -storepass iron420test \
-            -alias iron-test
+          keytool -list -keystore android/app/iron-test-key.jks -storepass iron420test -alias iron-test
           bash scripts/prepare_sherpa_kws.sh
 
-      - name: Resolve Flutter packages
-        run: flutter pub get
+          STAGE='resolving Flutter packages'
+          flutter pub get
 
-      - name: Analyze v3.4.1
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+          STAGE='static analysis'
+          flutter analyze --no-fatal-warnings --no-fatal-infos
 
-      - name: Run all tests
-        run: flutter test
+          STAGE='Flutter and bridge tests'
+          flutter test
 
-      - name: Build arm64 release APK
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+          STAGE='arm64 release compilation'
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
 
-      - name: Verify APK and commit final source
-        shell: bash
-        run: |
-          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          STAGE='APK verification'
+          APK='build/app/outputs/flutter-apk/app-arm64-v8a-release.apk'
           test -s "$APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/apk-certificate.txt
           sha256sum "$APK" | tee build/iron-music-420-ai-v3.4.1.sha256
           cp "$APK" build/Iron-Music-420-AI-v3.4.1-Unified-Assistant-Core.apk
-          git add --all ':!build'
+
+          STAGE='committing the final v3.4.1 source'
+          git add --all ':!build' ':!android/app/iron-test-key.jks'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
           git push origin HEAD:"$WORK_BRANCH"
+          FINAL_SHA="$(git rev-parse HEAD)"
 
-      - name: Upload v3.4.1 release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: iron-music-420-ai-v3.4.1-unified-assistant-core
-          path: |
-            build/Iron-Music-420-AI-v3.4.1-Unified-Assistant-Core.apk
-            build/iron-music-420-ai-v3.4.1.sha256
-            build/apk-certificate.txt
-          if-no-files-found: error
-          retention-days: 30
+          STAGE='publishing the APK release'
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "$RELEASE_TAG" \
+            build/Iron-Music-420-AI-v3.4.1-Unified-Assistant-Core.apk \
+            build/iron-music-420-ai-v3.4.1.sha256 \
+            build/apk-certificate.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$FINAL_SHA" \
+            --title 'Iron Music 420 AI v3.4.1 — Unified Assistant Core' \
+            --notes 'Verified arm64 release build. Static analysis and all Flutter tests passed before publishing.'
+
+          trap - ERR
+          {
+            echo 'Iron Music 420 AI v3.4.1 is ready.'
+            echo
+            echo "Source commit: ${FINAL_SHA}"
+            echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+            echo "Build run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > /tmp/iron-v341-success.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/iron-v341-success.md
