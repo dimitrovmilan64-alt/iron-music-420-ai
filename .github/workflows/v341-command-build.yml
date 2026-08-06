@@ -1,0 +1,101 @@
+name: Build v3.4.1 from PR command
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    if: ${{ github.event.issue.pull_request && github.event.issue.number == 14 && github.event.comment.body == '/build-v341-patch' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK_BRANCH: agent/v3-4-1-unified-assistant-core
+      PATCH_SHA256: f8548618840c49561441f0c9b43cc8cc3e76a62b083e9c58d98ccce0616d87f3
+      SNAPSHOT_SHA: cb354d54ba7057cdf0fa6458cf442c6f201e990c
+      PR_NUMBER: '14'
+    steps:
+      - name: Verify patch, test and build APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee /tmp/v341.log) 2>&1
+          STAGE='start'
+          fail() {
+            code=$?
+            trap - ERR
+            tail -n 120 /tmp/v341.log > /tmp/v341-tail.log || true
+            {
+              echo "v3.4.1 build failed during: ${STAGE}."
+              echo
+              echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              echo
+              echo '```text'
+              cat /tmp/v341-tail.log
+              echo '```'
+            } > /tmp/fail.md
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/fail.md || true
+            exit "$code"
+          }
+          trap fail ERR
+
+          printf 'v3.4.1 build started.\n\nRun: https://github.com/%s/actions/runs/%s\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > /tmp/start.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/start.md
+
+          STAGE='fetching source branch'
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$WORK_BRANCH"
+          git checkout -B "$WORK_BRANCH" FETCH_HEAD
+          git fetch --depth=1 origin "$SNAPSHOT_SHA"
+          git checkout FETCH_HEAD -- .github/workflows/android-build.yml .github/workflows/source-snapshot.yml
+
+          STAGE='reconstructing verified patch'
+          test -f .v341-update/READY
+          test "$(find .v341-update -maxdepth 1 -type f -name 'part-*.txt' | wc -l)" -eq 9
+          cat .v341-update/part-*.txt | tr -cd 'A-Za-z0-9+/=' | base64 --decode | gzip --decompress > /tmp/v341.patch
+          echo "$PATCH_SHA256  /tmp/v341.patch" | sha256sum --check --strict
+          git apply --check /tmp/v341.patch
+          git apply /tmp/v341.patch
+          rm -rf .v341-update
+          rm -f .github/workflows/apply-v341-update.yml
+
+          STAGE='installing Flutter'
+          git clone --depth=1 --branch stable https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          export PATH="$RUNNER_TEMP/flutter/bin:$PATH"
+          flutter config --no-analytics
+
+          STAGE='preparing project'
+          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
+          bash scripts/prepare_sherpa_kws.sh
+          flutter pub get
+
+          STAGE='static analysis'
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+
+          STAGE='tests'
+          flutter test
+
+          STAGE='release APK build'
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          APK='build/app/outputs/flutter-apk/app-arm64-v8a-release.apk'
+          test -s "$APK"
+          cp "$APK" build/Iron-Music-420-AI-v3.4.1.apk
+          sha256sum "$APK" > build/iron-music-420-ai-v3.4.1.sha256
+
+          STAGE='publishing source and APK'
+          git add --all ':!build' ':!android/app/iron-test-key.jks'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
+          git push origin HEAD:"$WORK_BRANCH"
+          FINAL_SHA="$(git rev-parse HEAD)"
+          gh release delete v3.4.1 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create v3.4.1 build/Iron-Music-420-AI-v3.4.1.apk build/iron-music-420-ai-v3.4.1.sha256 --repo "$GITHUB_REPOSITORY" --target "$FINAL_SHA" --title 'Iron Music 420 AI v3.4.1' --notes 'Analysis, tests and arm64 release build passed.'
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "v3.4.1 build completed successfully. Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v3.4.1"
