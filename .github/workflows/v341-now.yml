@@ -146,4 +146,4 @@ jobs:
           } > /tmp/iron-v341-success.md
           comment_file /tmp/iron-v341-success.md
 
-# retrigger: 2026-08-06T22:27:41+03:00
+# retrigger after Actions permissions update: 2026-08-06T23:03:31+03:00
