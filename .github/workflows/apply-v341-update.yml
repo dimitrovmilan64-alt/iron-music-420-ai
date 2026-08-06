@@ -15,7 +15,7 @@ concurrency:
 env:
   PATCH_SHA256: f8548618840c49561441f0c9b43cc8cc3e76a62b083e9c58d98ccce0616d87f3
   WORK_BRANCH: agent/v3-4-1-unified-assistant-core
-  V340_SHA: a0ecd22806e0fd3073770b313683e7211b18c013
+  SNAPSHOT_SHA: cb354d54ba7057cdf0fa6458cf442c6f201e990c
 
 jobs:
   apply-update:
@@ -31,7 +31,7 @@ jobs:
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$WORK_BRANCH"
           git checkout -B "$WORK_BRANCH" FETCH_HEAD
-          git fetch --depth=1 origin "$V340_SHA"
+          git fetch --depth=1 origin "$SNAPSHOT_SHA"
           git checkout FETCH_HEAD -- .github/workflows/android-build.yml .github/workflows/source-snapshot.yml
 
       - name: Apply verified source patch
