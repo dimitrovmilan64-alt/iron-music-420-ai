@@ -1,0 +1,83 @@
+name: v3.4.1 diagnostic build
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/v341-diagnostic-build.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: agent/v3-4-1-unified-assistant-core
+      PATCH_SHA256: f8548618840c49561441f0c9b43cc8cc3e76a62b083e9c58d98ccce0616d87f3
+    steps:
+      - name: Run verified build with diagnostics
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee /tmp/v341.log) 2>&1
+          STAGE=initialization
+          fail() {
+            code=$?
+            trap - ERR
+            { echo "v3.4.1 failed at: $STAGE"; echo; echo "Run: https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID"; echo '```text'; tail -n 120 /tmp/v341.log; echo '```'; } >/tmp/fail.md
+            gh pr comment 14 --repo "$REPO" --body-file /tmp/fail.md || true
+            exit $code
+          }
+          trap fail ERR
+          gh pr comment 14 --repo "$REPO" --body "v3.4.1 diagnostic build started: https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID" || true
+          STAGE='fetch branch'
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+          STAGE='decode patch'
+          test "$(find .v341-update -maxdepth 1 -name 'part-*.txt' -type f | wc -l)" -eq 9
+          cat .v341-update/part-*.txt | tr -cd 'A-Za-z0-9+/=' | base64 --decode | gzip -dc > /tmp/v341.patch
+          echo "$PATCH_SHA256  /tmp/v341.patch" | sha256sum -c -
+          STAGE='apply patch'
+          git apply --check /tmp/v341.patch
+          git apply /tmp/v341.patch
+          rm -rf .v341-update
+          rm -f .github/workflows/apply-v341-update.yml
+          STAGE='install flutter'
+          git clone --depth=1 --branch stable https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          export PATH="$RUNNER_TEMP/flutter/bin:$PATH"
+          flutter config --no-analytics
+          STAGE='dependencies'
+          flutter pub get
+          STAGE='analysis'
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+          STAGE='tests'
+          flutter test
+          STAGE='signing assets'
+          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
+          bash scripts/prepare_sherpa_kws.sh
+          STAGE='build apk'
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          APK=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          test -s "$APK"
+          cp "$APK" build/Iron-Music-420-AI-v3.4.1.apk
+          sha256sum "$APK" > build/Iron-Music-420-AI-v3.4.1.sha256
+          STAGE='commit source'
+          git add --all ':!build' ':!android/app/iron-test-key.jks'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
+          git push origin HEAD:"$BRANCH"
+          FINAL_SHA=$(git rev-parse HEAD)
+          STAGE='publish release'
+          gh release delete v3.4.1 --repo "$REPO" --yes --cleanup-tag || true
+          gh release create v3.4.1 build/Iron-Music-420-AI-v3.4.1.apk build/Iron-Music-420-AI-v3.4.1.sha256 --repo "$REPO" --target "$FINAL_SHA" --title 'Iron Music 420 AI v3.4.1' --notes 'Verified analysis, tests and arm64 release build.'
+          trap - ERR
+          gh pr comment 14 --repo "$REPO" --body "v3.4.1 is ready: https://github.com/$REPO/releases/tag/v3.4.1"
