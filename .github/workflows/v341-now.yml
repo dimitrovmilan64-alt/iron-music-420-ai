@@ -145,3 +145,5 @@ jobs:
             echo "Build run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } > /tmp/iron-v341-success.md
           comment_file /tmp/iron-v341-success.md
+
+# retrigger: 2026-08-06T22:27:41+03:00
