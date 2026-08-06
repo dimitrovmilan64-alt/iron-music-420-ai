@@ -38,7 +38,10 @@ jobs:
         shell: bash
         run: |
           test -f .v341-update/READY
-          cat .v341-update/part-*.txt | base64 --decode | gzip --decompress > /tmp/v341.patch
+          cat .v341-update/part-*.txt \
+            | tr -cd 'A-Za-z0-9+/=' \
+            | base64 --decode \
+            | gzip --decompress > /tmp/v341.patch
           echo "$PATCH_SHA256  /tmp/v341.patch" | sha256sum --check --strict
           git apply --check /tmp/v341.patch
           git apply /tmp/v341.patch
