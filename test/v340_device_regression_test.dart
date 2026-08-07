@@ -56,8 +56,12 @@ void main() {
     ).readAsStringSync();
 
     expect(parser, contains('action = "youtube_search"'));
-    expect(service, contains('Intent(Intent.ACTION_SEARCH)'));
+    expect(service, contains('MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH'));
+    expect(service, contains('MediaStore.EXTRA_MEDIA_FOCUS'));
+    expect(service, contains('MediaStore.EXTRA_MEDIA_TITLE'));
     expect(service, contains('SearchManager.QUERY'));
+    expect(service, contains('Intent(Intent.ACTION_VIEW, resultsUri)'));
     expect(service, contains('results?search_query='));
+    expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
 }
