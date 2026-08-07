@@ -351,6 +351,12 @@ class LocalStore extends ChangeNotifier {
     final cleanPrompt = prompt.trim();
     if (cleanPrompt.isEmpty) return;
 
+    final normalizedPrompt = cleanPrompt.toLowerCase();
+    final alreadyPending = _pendingChatVoiceRequests.any(
+      (pending) => pending.trim().toLowerCase() == normalizedPrompt,
+    );
+    if (alreadyPending) return;
+
     _pendingChatVoiceRequests.add(cleanPrompt);
     notifyListeners();
   }
