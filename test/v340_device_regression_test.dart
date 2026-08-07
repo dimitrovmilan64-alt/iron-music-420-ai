@@ -64,4 +64,31 @@ void main() {
     expect(service, contains('results?search_query='));
     expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
+
+  test('build 49 YouTube auto-play is one-shot and YouTube-only', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    final config = File(
+      'android/app/src/main/res/xml/youtube_autoplay_accessibility_service.xml',
+    ).readAsStringSync();
+    final autoPlay = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/YoutubeAutoPlayAccessibilityService.kt',
+    ).readAsStringSync();
+    final commands = File('lib/pages/commands_page.dart').readAsStringSync();
+
+    expect(
+      manifest,
+      contains('android.permission.BIND_ACCESSIBILITY_SERVICE'),
+    );
+    expect(config, contains('android:packageNames="com.google.android.youtube"'));
+    expect(config, contains('android:canRetrieveWindowContent="true"'));
+    expect(config, isNot(contains('canPerformGestures')));
+    expect(autoPlay, contains('REQUEST_LIFETIME_MS = 15_000L'));
+    expect(autoPlay, contains('clearPending(this)'));
+    expect(autoPlay, contains('AccessibilityNodeInfo.ACTION_CLICK'));
+    expect(autoPlay, isNot(contains('dispatchGesture')));
+    expect(commands, contains('Не чете други приложения'));
+    expect(commands, contains('ВКЛЮЧИ В ДОСТЪПНОСТ'));
+  });
 }

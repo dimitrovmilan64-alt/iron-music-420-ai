@@ -24,6 +24,7 @@ class _CommandsPageState extends State<CommandsPage>
   bool _ironActive = false;
   bool _busy = false;
   bool _flashlightOn = false;
+  bool _youtubeAutoPlayEnabled = false;
 
   static const _primaryActions = <_ToolAction>[
     _ToolAction('youtube', 'YouTube', Icons.play_circle_outline_rounded),
@@ -65,13 +66,24 @@ class _CommandsPageState extends State<CommandsPage>
     final results = await Future.wait<Object?>([
       _automation.isIronVoiceActive(),
       _automation.flashlightState(),
+      _automation.isYoutubeAutoPlayEnabled(),
     ]);
     if (!mounted) return;
     setState(() {
       _ironActive = results[0] as bool;
       final flashlightState = results[1] as bool?;
       if (flashlightState != null) _flashlightOn = flashlightState;
+      _youtubeAutoPlayEnabled = results[2] as bool;
     });
+  }
+
+  Future<void> _openYoutubeAutoPlaySettings() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final result = await _automation.openYoutubeAutoPlaySettings();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    _show(result);
   }
 
   Future<void> _toggleIron() async {
@@ -183,6 +195,57 @@ class _CommandsPageState extends State<CommandsPage>
                       : Icons.play_circle_outline_rounded,
                   secondary: _ironActive,
                   onPressed: _busy ? null : _toggleIron,
+                ),
+              ],
+            ),
+          ),
+          IronCard(
+            bright: _youtubeAutoPlayEnabled,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _youtubeAutoPlayEnabled
+                          ? Icons.play_circle_fill_rounded
+                          : Icons.play_circle_outline_rounded,
+                      color: _youtubeAutoPlayEnabled
+                          ? ironGreen
+                          : Colors.orangeAccent,
+                      size: 30,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _youtubeAutoPlayEnabled
+                            ? 'Автоматичното пускане е включено'
+                            : 'Автоматично пускане в YouTube',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'След твоя гласова команда Iron вижда само резултатите в YouTube за до 15 секунди и натиска първия съвпадащ клип. Не чете други приложения и не запазва съдържанието на екрана.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                IronButton(
+                  text: _youtubeAutoPlayEnabled
+                      ? 'ОТВОРИ НАСТРОЙКАТА'
+                      : 'ВКЛЮЧИ В ДОСТЪПНОСТ',
+                  icon: Icons.accessibility_new_rounded,
+                  secondary: _youtubeAutoPlayEnabled,
+                  onPressed: _busy ? null : _openYoutubeAutoPlaySettings,
                 ),
               ],
             ),

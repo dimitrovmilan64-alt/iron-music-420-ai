@@ -809,6 +809,15 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Settings.ACTION_SETTINGS))
                     result.success("Настройките са отворени.")
                 }
+                "youtube_autoplay_status" -> {
+                    result.success(YoutubeAutoPlayAccessibilityService.isEnabled(this))
+                }
+                "youtube_autoplay_settings" -> {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    result.success(
+                        "В Достъпност отвори „Iron: пускане в YouTube“ и го включи."
+                    )
+                }
                 "bluetooth" -> {
                     startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                     result.success("Bluetooth настройките са отворени.")

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="youtube_autoplay_accessibility_label">Iron: пускане в YouTube</string>
+    <string name="youtube_autoplay_accessibility_description">След изрична гласова команда Iron проверява само резултатите в YouTube за до 15 секунди и натиска първия съвпадащ видеоклип. Не чете други приложения и не запазва съдържанието на екрана.</string>
+</resources>

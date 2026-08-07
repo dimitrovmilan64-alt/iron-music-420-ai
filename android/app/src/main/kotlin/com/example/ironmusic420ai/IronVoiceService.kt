@@ -76,6 +76,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         WAITING_FOR_COMMAND,
     }
 
+    private enum class YoutubeLaunchResult {
+        AUTO_PLAY_ARMED,
+        NEEDS_ACCESSIBILITY,
+        RESULTS_ONLY,
+    }
+
     private data class RecorderHandle(
         val recorder: AudioRecord,
         val sourceName: String,
@@ -163,7 +169,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(LOG_TAG, "service_created build=48")
+        Log.i(LOG_TAG, "service_created build=49")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)
@@ -1024,12 +1030,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 }
                 "youtube_search" -> {
                     val query = decision.argument.ifBlank { return "Какво да пусна в YouTube?" }
-                    val playbackRequested = openYouTubeSearch(query)
+                    val launchResult = openYouTubeSearch(query)
                     decision.reply.ifBlank {
-                        if (playbackRequested) {
-                            "Пускам в YouTube."
-                        } else {
-                            "Отварям резултатите в YouTube."
+                        when (launchResult) {
+                            YoutubeLaunchResult.AUTO_PLAY_ARMED ->
+                                "Пускам в YouTube."
+                            YoutubeLaunchResult.NEEDS_ACCESSIBILITY ->
+                                "Включи „Iron: пускане в YouTube“ в Достъпност и повтори командата."
+                            YoutubeLaunchResult.RESULTS_ONLY ->
+                                "Отварям резултатите. Приложението YouTube не е намерено."
                         }
                     }
                 }
@@ -1339,11 +1348,17 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         FlashlightController.setEnabled(this, enabled)
     }
 
-    private fun openYouTubeSearch(query: String): Boolean {
+    private fun openYouTubeSearch(query: String): YoutubeLaunchResult {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) throw IllegalArgumentException("Missing YouTube query")
 
         Log.i(LOG_TAG, "youtube_search queryLength=${cleanQuery.length}")
+        if (!YoutubeAutoPlayAccessibilityService.arm(this, cleanQuery)) {
+            Log.i(LOG_TAG, "youtube_autoplay needs_accessibility")
+            launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            return YoutubeLaunchResult.NEEDS_ACCESSIBILITY
+        }
+
         val mediaPlayIntent = Intent(
             MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH,
         ).apply {
@@ -1356,7 +1371,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             try {
                 Log.i(LOG_TAG, "youtube_launch route=media_play")
                 launch(mediaPlayIntent)
-                return true
+                return YoutubeLaunchResult.AUTO_PLAY_ARMED
             } catch (error: Exception) {
                 Log.w(
                     LOG_TAG,
@@ -1372,11 +1387,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             setPackage("com.google.android.youtube")
         }
         if (deepLinkIntent.resolveActivity(packageManager) == null) {
+            YoutubeAutoPlayAccessibilityService.clearPending(this)
             deepLinkIntent.setPackage(null)
+            Log.i(LOG_TAG, "youtube_launch route=browser_results")
+            launch(deepLinkIntent)
+            return YoutubeLaunchResult.RESULTS_ONLY
         }
         Log.i(LOG_TAG, "youtube_launch route=results_deep_link")
         launch(deepLinkIntent)
-        return false
+        return YoutubeLaunchResult.AUTO_PLAY_ARMED
     }
 
     private fun launchPackage(packageName: String) {

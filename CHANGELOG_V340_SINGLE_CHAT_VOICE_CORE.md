@@ -44,3 +44,12 @@
 - Replaces the unreliable external ACTION_SEARCH route with an ACTION_VIEW deep-link fallback.
 - Logs the selected YouTube launch route without recording the spoken song title.
 - Adds native and Flutter regression coverage for the exact Bulgarian command.
+
+## Build 49 one-shot YouTube auto-play
+
+- Adds an explicit, user-enabled accessibility setting for deterministic YouTube playback.
+- Arms the automation only after a spoken Iron command and expires it after 15 seconds.
+- Reads events only from the official YouTube package and never requests gesture access.
+- Clicks one visible, non-ad, non-Shorts result that contains every requested title token.
+- Shows an in-app disclosure explaining the screen access before Android settings are opened.
+- Adds native matching tests and Flutter privacy/regression checks.

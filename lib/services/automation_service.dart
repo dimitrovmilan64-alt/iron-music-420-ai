@@ -167,6 +167,20 @@ class AutomationService {
     }
   }
 
+  Future<bool> isYoutubeAutoPlayEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('execute', {
+            'action': 'youtube_autoplay_status',
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<AutomationResult> openYoutubeAutoPlaySettings() =>
+      execute('youtube_autoplay_settings');
+
   Future<int?> consumeIronSection() async {
     try {
       return await _channel.invokeMethod<int>('consumeIronSection');
