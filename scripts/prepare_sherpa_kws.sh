@@ -46,7 +46,7 @@ if [[ "${model_ready}" != true ]]; then
 
   curl --location --fail --retry 3 --retry-delay 2 \
     --output "${archive}" "${MODEL_URL}"
-  tar -xjf "${archive}" -C "${temp_dir}"
+  tar --no-same-owner -xjf "${archive}" -C "${temp_dir}"
 
   source_dir="${temp_dir}/${MODEL_NAME}"
   rm -rf "${MODEL_DEST}"
@@ -87,46 +87,26 @@ for raw in lexicon_path.read_text(encoding="utf-8").splitlines():
 
 candidates: list[tuple[str, list[str], float, float]] = []
 
-# Use the model's own dictionary. Values stay close to sherpa-onnx's documented
-# defaults (score 1.0, threshold 0.25) so ordinary speech cannot wake Iron.
+# The full two-word phrase is intentionally kept as the only trigger. The
+# per-keyword values below were replay-tested with the Realme recording from
+# build 46. A low acoustic threshold is needed for the Bulgarian pronunciation,
+# while removing every one-word and no-H fallback keeps false wakes bounded.
 for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
     for iron_index, iron in enumerate(lexicon.get("IRON", []), start=1):
         candidates.append(
-            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 1.8, 0.28)
-        )
-        if hey and hey[0] == "HH":
-            candidates.append(
-                (
-                    f"HEY_IRON_LEX_NO_H_{hey_index}_{iron_index}",
-                    hey[1:] + iron,
-                    1.4,
-                    0.38,
-                )
-            )
-
-# Common recognition variant: „Hey Aaron“ / „Хей Аарън“.
-for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
-    for aaron_index, aaron in enumerate(lexicon.get("AARON", []), start=1):
-        candidates.append(
-            (f"HEY_AARON_LEX_{hey_index}_{aaron_index}", hey + aaron, 1.5, 0.35)
+            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 7.0, 0.01)
         )
 
-# Bulgarian-accented, relaxed and compressed variants of „Хей Айрън“.
+# Bulgarian-accented full-phrase variants of „Хей Айрън“.
 candidates.extend(
     [
-        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 1.8, 0.28),
-        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 1.7, 0.30),
-        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 1.6, 0.32),
-        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 1.6, 0.32),
-        ("HEY_IRON_NO_H", ["EY1", "AY1", "R", "AH0", "N"], 1.4, 0.38),
-        ("HEY_IRON_NO_H_FAST", ["EY1", "AY1", "R", "N"], 1.3, 0.40),
-        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 1.5, 0.35),
-        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 1.5, 0.35),
-        ("HEY_IRON_NO_H_O", ["EY1", "AY1", "R", "AO0", "N"], 1.3, 0.42),
-        ("HEY_IRON_NO_H_OW", ["EY1", "AY1", "R", "OW0", "N"], 1.3, 0.42),
-        ("HEY_AARON_BG", ["HH", "EY1", "EH1", "R", "AH0", "N"], 1.5, 0.35),
-        ("HEY_AARON_BG_FAST", ["HH", "EY1", "EH1", "R", "N"], 1.4, 0.38),
-        ("HEY_AARON_NO_H", ["EY1", "EH1", "R", "AH0", "N"], 1.3, 0.42),
+        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 7.0, 0.01),
+        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 7.0, 0.01),
     ]
 )
 

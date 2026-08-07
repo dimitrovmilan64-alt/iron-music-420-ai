@@ -3,6 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('home screen reports the current 3.4.0 version', () {
+    final home = File('lib/pages/home_page.dart').readAsStringSync();
+
+    expect(home, contains('Версия 3.4.0'));
+    expect(home, isNot(contains('Версия 3.1.0')));
+  });
+
   test('v3.4.0 flashlight uses one native controller and real state', () {
     final activity = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
@@ -21,7 +28,7 @@ void main() {
     expect(commands, contains('nativeState ?? _flashlightOn'));
   });
 
-  test('wake word is strict and command recognition is one-shot', () {
+  test('wake word uses a full calibrated phrase and recognition is one-shot', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
@@ -30,10 +37,14 @@ void main() {
 
     expect(service, contains('keywordsScore = 1.5f'));
     expect(service, contains('keywordsThreshold = 0.25f'));
+    expect(service, contains('maxActivePaths = 8'));
     expect(service, contains('WAKE_MIN_RMS'));
+    expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
+    expect(keywordScript, contains('7.0, 0.01'));
     expect(keywordScript, isNot(contains('("IRON_')));
+    expect(keywordScript, isNot(contains('LEX_NO_H')));
   });
 
   test('YouTube song commands carry a query to the YouTube app', () {

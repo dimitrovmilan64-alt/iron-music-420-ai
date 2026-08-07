@@ -58,6 +58,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         private const val WAKE_FRAME_SAMPLES = 1_600
         private const val WAKE_MIN_RMS = 0.006f
         private const val MIN_WAKE_VOICED_FRAMES = 2
+        private const val WAKE_HEALTH_LOG_FRAMES = 50L
         private const val COMMAND_TIMEOUT_MS = 30_000L
         private const val MIN_SPEECH_WATCHDOG_MS = 5_000L
         private const val MAX_SPEECH_WATCHDOG_MS = 135_000L
@@ -161,6 +162,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(LOG_TAG, "service_created build=47")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)
@@ -172,6 +174,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(LOG_TAG, "service_start action=${intent?.action.orEmpty()}")
         when (intent?.action) {
             ACTION_STOP -> {
                 getSharedPreferences(VOICE_PREFS, Context.MODE_PRIVATE)
@@ -383,8 +386,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                         assetManager = assets,
                         config = createKeywordSpotterConfig(),
                     )
-                } catch (_: Exception) {
+                } catch (error: Throwable) {
                     failed = true
+                    Log.e(LOG_TAG, "wake_engine_failed", error)
                 }
 
                 handler.post {
@@ -405,6 +409,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     }
 
                     keywordSpotter = engine
+                    Log.i(LOG_TAG, "wake_engine_ready")
                     updateNotification("Iron е готов • кажи „Hey Iron“")
                     scheduleWakeWordListening(100)
                 }
@@ -439,7 +444,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 dither = 0.0f,
             ),
             modelConfig = modelConfig,
-            maxActivePaths = 4,
+            maxActivePaths = 8,
             keywordsFile = "$MODEL_DIR/keywords.txt",
             keywordsScore = 1.5f,
             keywordsThreshold = 0.25f,
@@ -573,6 +578,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         wakeAudioRecord = recorder
         wakeWordActive = true
         setWakeCaptureActive(true)
+        Log.i(LOG_TAG, "wake_recorder_started source=${recorderHandle.sourceName}")
         updateNotification("Iron чака „Hey Iron“ • ${recorderHandle.sourceName}")
 
         val worker = Thread(
@@ -580,6 +586,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 var detected = false
                 var signalConfirmed = false
                 var voicedFrameCount = 0
+                var processedFrames = 0L
+                var intervalMaxRms = 0.0f
                 var detectedKeyword = ""
                 val buffer = ShortArray(WAKE_FRAME_SAMPLES)
 
@@ -601,6 +609,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                         }
 
                         val rms = sqrt(squareSum / count).toFloat()
+                        processedFrames++
+                        intervalMaxRms = maxOf(intervalMaxRms, rms)
                         voicedFrameCount = if (rms >= WAKE_MIN_RMS) {
                             (voicedFrameCount + 1).coerceAtMost(10)
                         } else {
@@ -615,6 +625,14 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                                     )
                                 }
                             }
+                        }
+                        if (processedFrames % WAKE_HEALTH_LOG_FRAMES == 0L) {
+                            Log.i(
+                                LOG_TAG,
+                                "wake_health frames=$processedFrames " +
+                                    "max_rms=$intervalMaxRms signal=$signalConfirmed",
+                            )
+                            intervalMaxRms = 0.0f
                         }
 
                         stream.acceptWaveform(
@@ -638,8 +656,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                             }
                         }
                     }
-                } catch (_: Exception) {
+                } catch (error: Exception) {
                     // Android can interrupt AudioRecord when audio focus changes.
+                    if (serviceActive && wakeWordActive) {
+                        Log.w(LOG_TAG, "wake_recorder_interrupted", error)
+                    }
                 } finally {
                     try {
                         if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {

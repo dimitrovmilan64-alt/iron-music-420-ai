@@ -28,3 +28,11 @@
 - Makes the offline wake phrase stricter and removes unsafe single-word wake fallbacks.
 - Uses one Android speech-recognition attempt per wake phrase to stop ColorOS cue loops.
 - Adds device-regression tests for flashlight off, YouTube queries and one-shot listening.
+
+## Build 47 Realme wake-word calibration
+
+- Confirms from the Realme log that Android grants the microphone and keeps a stable 16 kHz capture.
+- Replays the user's real „Хей Айрън“ recording against the exact APK model during diagnosis.
+- Calibrates only complete two-word Bulgarian-accented phrases; no single-word or no-H trigger remains.
+- Keeps the RMS voice guard and one-shot Android command recognition to prevent the old cue loop.
+- Adds privacy-safe wake health logs so microphone signal and model state can be verified directly.

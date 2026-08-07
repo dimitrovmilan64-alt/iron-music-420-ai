@@ -183,7 +183,7 @@ class HomePage extends StatelessWidget {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Версия 3.1.0 • разговорен AI режим',
+                        'Версия 3.4.0 • разговорен AI режим',
                         style: TextStyle(
                           color: ironGreenSoft,
                           fontWeight: FontWeight.w800,
