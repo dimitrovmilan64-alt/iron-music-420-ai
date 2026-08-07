@@ -53,9 +53,12 @@ void main() {
     expect(studio, contains('_generateWithAi()'));
   });
 
-  test('offline wake list contains Hey Aaron variants', () {
+  test('offline wake list contains only calibrated full Hey Iron phrases', () {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
-    expect(script, contains('HEY_AARON_LEX'));
-    expect(script, contains('HEY_AARON_BG'));
+    expect(script, contains('HEY_IRON_LEX'));
+    expect(script, contains('HEY_IRON_BG'));
+    expect(script, contains('7.0, 0.01'));
+    expect(script, isNot(contains('HEY_AARON')));
+    expect(script, isNot(contains('NO_H')));
   });
 }
