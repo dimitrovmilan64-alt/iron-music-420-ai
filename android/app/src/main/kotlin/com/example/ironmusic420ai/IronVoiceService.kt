@@ -169,7 +169,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(LOG_TAG, "service_created build=49")
+        Log.i(LOG_TAG, "service_created build=50")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)

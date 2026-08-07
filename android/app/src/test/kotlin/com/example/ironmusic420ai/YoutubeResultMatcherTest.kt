@@ -48,6 +48,16 @@ class YoutubeResultMatcherTest {
     }
 
     @Test
+    fun punctuationHeavySongStillMatchesTheYouTubeSearchField() {
+        assertTrue(
+            YoutubeResultMatcher.isSearchFieldFor(
+                query = "Dr. Dre Still D.R.E.",
+                fieldText = "Dr Dre Still D R E",
+            ),
+        )
+    }
+
+    @Test
     fun advertisementAndShortsCardsAreRejected() {
         val values = listOf(
             "Реклама • Бяла роза",
@@ -59,6 +69,12 @@ class YoutubeResultMatcherTest {
             assertEquals(
                 Int.MIN_VALUE,
                 YoutubeResultMatcher.score("бяла роза", candidate),
+            )
+            assertEquals(
+                false,
+                YoutubeResultMatcher.isEligibleMediaResult(
+                    "$candidate • 12 млн. гледания • 3:20",
+                ),
             )
         }
     }
@@ -85,5 +101,18 @@ class YoutubeResultMatcherTest {
             false,
             YoutubeResultMatcher.hasMediaEvidence("Търси бяла роза"),
         )
+    }
+
+    @Test
+    fun firstRealVideoRemainsEligibleWhenYouTubeWritesTheTitleDifferently() {
+        val query = "еминем уизаут ми"
+        val youtubeTitle =
+            "Eminem - Without Me (Official Music Video) • 2.1B views • 4:58"
+
+        assertEquals(
+            Int.MIN_VALUE,
+            YoutubeResultMatcher.score(query, youtubeTitle),
+        )
+        assertTrue(YoutubeResultMatcher.isEligibleMediaResult(youtubeTitle))
     }
 }

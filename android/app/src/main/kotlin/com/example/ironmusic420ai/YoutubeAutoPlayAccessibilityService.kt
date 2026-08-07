@@ -86,7 +86,7 @@ class YoutubeAutoPlayAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.i(LOG_TAG, "service_connected build=49")
+        Log.i(LOG_TAG, "service_connected build=50")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -170,10 +170,10 @@ class YoutubeAutoPlayAccessibilityService : AccessibilityService() {
                 viewId.contains("search_edit_text") ||
                 viewId.contains("search_box")
             if (!isSearchField) return@traverse false
-            YoutubeResultMatcher.score(
+            YoutubeResultMatcher.isSearchFieldFor(
                 query = query,
-                candidateText = collectSubtreeText(node),
-            ) != Int.MIN_VALUE
+                fieldText = collectSubtreeText(node),
+            )
         }.let { return it }
     }
 
@@ -200,13 +200,16 @@ class YoutubeAutoPlayAccessibilityService : AccessibilityService() {
                     candidateText = candidateText,
                     editable = editable,
                 )
+                val resultScore = if (score == Int.MIN_VALUE) 0 else score
                 if (
-                    score != Int.MIN_VALUE &&
-                    YoutubeResultMatcher.hasMediaEvidence(candidateText) &&
+                    YoutubeResultMatcher.isEligibleMediaResult(
+                        candidateText = candidateText,
+                        editable = editable,
+                    ) &&
                     bounds.height() >= 48 &&
                     bounds.bottom > toolbarLimit
                 ) {
-                    val candidate = ClickCandidate(node, score, bounds.top)
+                    val candidate = ClickCandidate(node, resultScore, bounds.top)
                     if (
                         best == null ||
                         candidate.score > best.score ||

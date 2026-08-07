@@ -53,3 +53,11 @@
 - Clicks one visible, non-ad, non-Shorts result that contains every requested title token.
 - Shows an in-app disclosure explaining the screen access before Android settings are opened.
 - Adds native matching tests and Flutter privacy/regression checks.
+
+## Build 50 any-song YouTube auto-play
+
+- Removes the requirement for every spoken query token to appear in the displayed title.
+- Verifies the active YouTube search field independently from result-title spelling.
+- Prefers a strict title match when one exists, then falls back to YouTube's first real video.
+- Continues to reject ads, Shorts, editable search controls and non-video suggestions.
+- Adds regression coverage for punctuation-heavy and differently transliterated song names.

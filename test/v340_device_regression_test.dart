@@ -65,7 +65,7 @@ void main() {
     expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
 
-  test('build 49 YouTube auto-play is one-shot and YouTube-only', () {
+  test('build 50 any-song auto-play is one-shot and YouTube-only', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();
@@ -87,6 +87,10 @@ void main() {
     expect(autoPlay, contains('REQUEST_LIFETIME_MS = 15_000L'));
     expect(autoPlay, contains('clearPending(this)'));
     expect(autoPlay, contains('AccessibilityNodeInfo.ACTION_CLICK'));
+    expect(
+      autoPlay,
+      contains('resultScore = if (score == Int.MIN_VALUE) 0 else score'),
+    );
     expect(autoPlay, isNot(contains('dispatchGesture')));
     expect(commands, contains('Не чете други приложения'));
     expect(commands, contains('ВКЛЮЧИ В ДОСТЪПНОСТ'));

@@ -73,6 +73,23 @@ internal object YoutubeResultMatcher {
         return score
     }
 
+    fun isSearchFieldFor(query: String, fieldText: String): Boolean {
+        val normalizedQuery = normalize(query)
+        val normalizedField = normalize(fieldText)
+        return normalizedQuery.isNotBlank() &&
+            normalizedField.isNotBlank() &&
+            normalizedField.contains(normalizedQuery)
+    }
+
+    fun isEligibleMediaResult(
+        candidateText: String,
+        editable: Boolean = false,
+    ): Boolean {
+        if (editable || !hasMediaEvidence(candidateText)) return false
+        val candidateTokens = normalize(candidateText).split(' ').toSet()
+        return blockedMarkers.none(candidateTokens::contains)
+    }
+
     fun hasMediaEvidence(candidateText: String): Boolean {
         val candidateTokens = normalize(candidateText).split(' ').toSet()
         if (mediaMarkers.any(candidateTokens::contains)) return true
