@@ -36,3 +36,11 @@
 - Calibrates only complete two-word Bulgarian-accented phrases; no single-word or no-H trigger remains.
 - Keeps the RMS voice guard and one-shot Android command recognition to prevent the old cue loop.
 - Adds privacy-safe wake health logs so microphone signal and model state can be verified directly.
+
+## Build 48 YouTube playback fix
+
+- Preserves the exact requested song for „Отвори YouTube и пусни Бяла роза“.
+- Uses Android's media-play-from-search contract before opening YouTube results.
+- Replaces the unreliable external ACTION_SEARCH route with an ACTION_VIEW deep-link fallback.
+- Logs the selected YouTube launch route without recording the spoken song title.
+- Adds native and Flutter regression coverage for the exact Bulgarian command.
