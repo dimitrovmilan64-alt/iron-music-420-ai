@@ -1,4 +1,4 @@
-name: Android build
+name: Source snapshot
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: android-build-${{ github.event.pull_request.number || github.ref }}
+  group: source-snapshot-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
