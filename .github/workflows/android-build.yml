@@ -59,7 +59,7 @@ jobs:
 
       - name: Test native voice lifecycle
         working-directory: android
-        run: ./gradlew testDebugUnitTest --no-daemon
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
 
       - name: Verify stable APK certificate
         shell: bash
