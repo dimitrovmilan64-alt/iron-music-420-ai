@@ -40,6 +40,19 @@ class MainActivity : FlutterActivity() {
     private var pendingStudioAutoGenerate = false
     private var automationChannel: MethodChannel? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val cameraManager by lazy {
+        getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    }
+    private var torchCallbackRegistered = false
+    private val torchCallback = object : CameraManager.TorchCallback() {
+        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+            FlashlightController.updateFromSystem(cameraManager, cameraId, enabled)
+        }
+
+        override fun onTorchModeUnavailable(cameraId: String) {
+            FlashlightController.updateFromSystem(cameraManager, cameraId, false)
+        }
+    }
     private var chatSpeechRecognizer: SpeechRecognizer? = null
     private var pendingChatSpeechResult: MethodChannel.Result? = null
     private var chatSpeechLastPartial = ""
@@ -143,6 +156,29 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (torchCallbackRegistered) return
+        try {
+            cameraManager.registerTorchCallback(torchCallback, mainHandler)
+            torchCallbackRegistered = true
+        } catch (_: Exception) {
+            // Explicit torch actions still report a useful error to Flutter.
+        }
+    }
+
+    override fun onStop() {
+        if (torchCallbackRegistered) {
+            try {
+                cameraManager.unregisterTorchCallback(torchCallback)
+            } catch (_: Exception) {
+                // The camera service may already have removed the callback.
+            }
+            torchCallbackRegistered = false
+        }
+        super.onStop()
     }
 
     private fun startChatSpeechRecognition(result: MethodChannel.Result) {
@@ -795,6 +831,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "flash_on" -> setFlashlight(true, result)
                 "flash_off" -> setFlashlight(false, result)
+                "flash_status" -> result.success(FlashlightController.isEnabled())
                 "volume_up" -> {
                     adjustVolume(AudioManager.ADJUST_RAISE)
                     result.success("Звукът е увеличен.")
@@ -988,10 +1025,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun toggleFlash(enabled: Boolean, result: MethodChannel.Result) {
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = cameraManager.cameraIdList.firstOrNull()
-            ?: throw IllegalStateException("Телефонът няма достъпна светкавица.")
-        cameraManager.setTorchMode(cameraId, enabled)
+        FlashlightController.setEnabled(this, enabled)
         result.success(
             if (enabled) "Фенерчето е включено."
             else "Фенерчето е изключено."

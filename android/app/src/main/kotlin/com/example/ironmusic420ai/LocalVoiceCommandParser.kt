@@ -14,9 +14,26 @@ data class LocalVoiceCommand(
  * Phone and app actions remain available even when Gemini and Groq are limited.
  */
 object LocalVoiceCommandParser {
+    private val youtubeSearchPatterns = listOf(
+        Regex(
+            """^(?:отвори\s+)?(?:youtube|ютуб)\s+(?:и\s+)?(?:пусни(?:\s+ми)?|намери|потърси|търси|покажи|play|find|search(?:\s+for)?)\s+(.+)$""",
+        ),
+        Regex(
+            """^(?:пусни(?:\s+ми)?|намери|потърси|търси|покажи|play|find|search(?:\s+for)?)\s+(?:в\s+|на\s+|in\s+|on\s+)?(?:youtube|ютуб)\s+(.+)$""",
+        ),
+        Regex(
+            """^(?:пусни(?:\s+ми)?|намери|потърси|търси|покажи|play|find|search(?:\s+for)?)\s+(.+?)\s+(?:в|на|in|on)\s+(?:youtube|ютуб)$""",
+        ),
+        Regex("""^(?:youtube|ютуб)\s+(.+)$"""),
+        Regex(
+            """^(?:пусни(?:\s+ми)?|намери|потърси|търси|покажи|play|find|search(?:\s+for)?)\s+(?:песента|песен|клипа|клип|видеото|видео|song|video)\s+(.+)$""",
+        ),
+    )
+
     fun parse(rawValue: String): LocalVoiceCommand? {
         val command = normalize(rawValue)
         if (command.isBlank()) return null
+        val youtubeQuery = extractYouTubeQuery(command)
 
         fun hasAny(vararg values: String): Boolean =
             values.any { command.contains(it) }
@@ -40,10 +57,22 @@ object LocalVoiceCommandParser {
                 )
             }
 
-            hasAny("изключи фенера", "спри фенера", "изгаси фенера", "flash off", "turn off flashlight") ->
+            youtubeQuery != null ->
+                return LocalVoiceCommand(
+                    action = "youtube_search",
+                    argument = youtubeQuery,
+                    reply = "Търся в YouTube.",
+                )
+
+            hasAny("фенер", "flashlight", "flash") &&
+                hasAny("изключи", "спри", "изгаси", "угаси", "не включвай", "flash off", "turn off") ->
                 return LocalVoiceCommand("flash_off", reply = "Фенерчето е изключено.")
 
-            hasAny("включи фенера", "пусни фенера", "светни с фенера", "фенер", "flash on", "turn on flashlight") ->
+            hasAny("фенер", "flashlight", "flash") &&
+                hasAny("включи", "пусни", "светни", "flash on", "turn on") ->
+                return LocalVoiceCommand("flash_on", reply = "Фенерчето е включено.")
+
+            command in setOf("фенер", "фенерче", "фенерчето", "flashlight") ->
                 return LocalVoiceCommand("flash_on", reply = "Фенерчето е включено.")
 
             hasAny("музикален режим", "music mode", "пусни музика", "режим музика") ->
@@ -121,7 +150,15 @@ object LocalVoiceCommandParser {
             hasAny("начален екран", "отвори начало", "към начало", "home screen", "go home") ->
                 return LocalVoiceCommand("home", reply = "Отварям началния екран.")
 
-            hasAny("отвори youtube", "пусни youtube", "ютуб", "youtube") ->
+            command in setOf(
+                "youtube",
+                "ютуб",
+                "отвори youtube",
+                "отвори ютуб",
+                "пусни youtube",
+                "пусни ютуб",
+                "open youtube",
+            ) ->
                 return LocalVoiceCommand("youtube", reply = "Отварям YouTube.")
 
             hasAny("отвори камерата", "пусни камерата", "камера", "open camera") ->
@@ -158,6 +195,20 @@ object LocalVoiceCommandParser {
                 )
         }
 
+        return null
+    }
+
+    private fun extractYouTubeQuery(command: String): String? {
+        for (pattern in youtubeSearchPatterns) {
+            val match = pattern.matchEntire(command) ?: continue
+            val query = match.groupValues[1]
+                .replaceFirst(
+                    Regex("""^(?:песента|песен|клипа|клип|видеото|видео|song|video)\s+"""),
+                    "",
+                )
+                .trim()
+            if (query.isNotBlank()) return query
+        }
         return null
     }
 

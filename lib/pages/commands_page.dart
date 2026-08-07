@@ -62,8 +62,16 @@ class _CommandsPageState extends State<CommandsPage>
   }
 
   Future<void> _loadStatus() async {
-    final active = await _automation.isIronVoiceActive();
-    if (mounted) setState(() => _ironActive = active);
+    final results = await Future.wait<Object?>([
+      _automation.isIronVoiceActive(),
+      _automation.flashlightState(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _ironActive = results[0] as bool;
+      final flashlightState = results[1] as bool?;
+      if (flashlightState != null) _flashlightOn = flashlightState;
+    });
   }
 
   Future<void> _toggleIron() async {
@@ -84,9 +92,12 @@ class _CommandsPageState extends State<CommandsPage>
     if (_busy) return;
     setState(() => _busy = true);
 
-    final resolved = action == 'flash_toggle'
-        ? (_flashlightOn ? 'flash_off' : 'flash_on')
-        : action;
+    var resolved = action;
+    if (action == 'flash_toggle') {
+      final nativeState = await _automation.flashlightState();
+      if (!mounted) return;
+      resolved = (nativeState ?? _flashlightOn) ? 'flash_off' : 'flash_on';
+    }
     final result = await _automation.execute(resolved);
 
     if (!mounted) return;

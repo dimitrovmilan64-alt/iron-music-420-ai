@@ -19,3 +19,12 @@
 - Restores an enabled Hey Iron service when the app becomes visible again.
 - Persists an explicit stop from either the app or the foreground notification.
 - Adds executable Kotlin lifecycle tests and runs the complete Flutter test suite in CI.
+
+## Build 46 Realme device regression fix
+
+- Uses one flash-capable rear camera and one shared torch state for UI and voice commands.
+- Reads the real Android torch state before the flashlight tile toggles it.
+- Routes requested songs to a YouTube search instead of opening the YouTube home page.
+- Makes the offline wake phrase stricter and removes unsafe single-word wake fallbacks.
+- Uses one Android speech-recognition attempt per wake phrase to stop ColorOS cue loops.
+- Adds device-regression tests for flashlight off, YouTube queries and one-shot listening.

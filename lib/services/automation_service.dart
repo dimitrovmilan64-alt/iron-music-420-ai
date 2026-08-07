@@ -157,6 +157,16 @@ class AutomationService {
     }
   }
 
+  Future<bool?> flashlightState() async {
+    try {
+      return await _channel.invokeMethod<bool>('execute', {
+        'action': 'flash_status',
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<int?> consumeIronSection() async {
     try {
       return await _channel.invokeMethod<int>('consumeIronSection');
