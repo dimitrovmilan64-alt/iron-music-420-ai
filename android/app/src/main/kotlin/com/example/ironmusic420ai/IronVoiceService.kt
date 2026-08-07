@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.AlarmClock
+import android.provider.MediaStore
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -162,7 +163,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(LOG_TAG, "service_created build=47")
+        Log.i(LOG_TAG, "service_created build=48")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)
@@ -1022,9 +1023,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     decision.reply.ifBlank { "Отварям YouTube." }
                 }
                 "youtube_search" -> {
-                    val query = decision.argument.ifBlank { return "Какво да търся в YouTube?" }
-                    openYouTubeSearch(query)
-                    decision.reply.ifBlank { "Търся в YouTube." }
+                    val query = decision.argument.ifBlank { return "Какво да пусна в YouTube?" }
+                    val playbackRequested = openYouTubeSearch(query)
+                    decision.reply.ifBlank {
+                        if (playbackRequested) {
+                            "Пускам в YouTube."
+                        } else {
+                            "Отварям резултатите в YouTube."
+                        }
+                    }
                 }
                 "chrome" -> {
                     launchPackage("com.android.chrome")
@@ -1332,18 +1339,30 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         FlashlightController.setEnabled(this, enabled)
     }
 
-    private fun openYouTubeSearch(query: String) {
+    private fun openYouTubeSearch(query: String): Boolean {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) throw IllegalArgumentException("Missing YouTube query")
 
         Log.i(LOG_TAG, "youtube_search queryLength=${cleanQuery.length}")
-        val appSearchIntent = Intent(Intent.ACTION_SEARCH).apply {
+        val mediaPlayIntent = Intent(
+            MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH,
+        ).apply {
             setPackage("com.google.android.youtube")
+            putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio")
+            putExtra(MediaStore.EXTRA_MEDIA_TITLE, cleanQuery)
             putExtra(SearchManager.QUERY, cleanQuery)
         }
-        if (appSearchIntent.resolveActivity(packageManager) != null) {
-            launch(appSearchIntent)
-            return
+        if (mediaPlayIntent.resolveActivity(packageManager) != null) {
+            try {
+                Log.i(LOG_TAG, "youtube_launch route=media_play")
+                launch(mediaPlayIntent)
+                return true
+            } catch (error: Exception) {
+                Log.w(
+                    LOG_TAG,
+                    "youtube_launch media_play_failed=${error.javaClass.simpleName}",
+                )
+            }
         }
 
         val resultsUri = Uri.parse(
@@ -1355,7 +1374,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         if (deepLinkIntent.resolveActivity(packageManager) == null) {
             deepLinkIntent.setPackage(null)
         }
+        Log.i(LOG_TAG, "youtube_launch route=results_deep_link")
         launch(deepLinkIntent)
+        return false
     }
 
     private fun launchPackage(packageName: String) {
