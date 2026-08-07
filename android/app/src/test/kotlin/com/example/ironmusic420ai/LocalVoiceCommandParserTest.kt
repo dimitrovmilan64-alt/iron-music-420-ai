@@ -16,6 +16,17 @@ class LocalVoiceCommandParserTest {
     }
 
     @Test
+    fun exactBulgarianYouTubePhraseKeepsTheRequestedSong() {
+        val command = LocalVoiceCommandParser.parse(
+            "Отвори YouTube и пусни Бяла роза",
+        )
+
+        assertEquals("youtube_search", command?.action)
+        assertEquals("бяла роза", command?.argument)
+        assertEquals("", command?.reply)
+    }
+
+    @Test
     fun youtubeSuffixKeepsOnlyTheSearchQuery() {
         val command = LocalVoiceCommandParser.parse(
             "Пусни Linkin Park Numb в YouTube",
