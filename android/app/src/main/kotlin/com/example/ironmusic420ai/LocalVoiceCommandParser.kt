@@ -61,7 +61,7 @@ object LocalVoiceCommandParser {
                 return LocalVoiceCommand(
                     action = "youtube_search",
                     argument = youtubeQuery,
-                    reply = "Търся в YouTube.",
+                    reply = "",
                 )
 
             hasAny("фенер", "flashlight", "flash") &&
