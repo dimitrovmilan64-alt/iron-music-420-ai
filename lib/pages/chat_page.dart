@@ -26,9 +26,9 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _welcomeText =
-      'Готов съм. Добави поне един AI доставчик и ме попитай на български.';
+      'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
@@ -44,6 +44,9 @@ class _ChatPageState extends State<ChatPage>
   late List<ChatMessage> _messages;
   bool _isLoading = false;
   bool _isListening = false;
+  bool _ironActive = false;
+  bool _voiceToggleBusy = false;
+  bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
@@ -54,6 +57,8 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.store.addListener(_handleStoreChange);
     _coreController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -93,10 +98,16 @@ class _ChatPageState extends State<ChatPage>
         );
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadIronStatus();
+      _consumePendingChatVoiceRequest();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.store.removeListener(_handleStoreChange);
     _coreController.dispose();
     _flutterTts.stop();
     _automation.setNativeSpeechPartialListener(null);
@@ -109,6 +120,66 @@ class _ChatPageState extends State<ChatPage>
     _backupModelController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadIronStatus();
+      _consumePendingChatVoiceRequest();
+    }
+  }
+
+  void _handleStoreChange() {
+    if (!widget.store.hasPendingChatVoiceRequest ||
+        _processingPendingChatPrompt) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumePendingChatVoiceRequest();
+    });
+  }
+
+  Future<void> _consumePendingChatVoiceRequest() async {
+    if (!mounted || _processingPendingChatPrompt || _isLoading) return;
+    final prompt = widget.store.takePendingChatVoiceRequest();
+    if (prompt == null) return;
+
+    _processingPendingChatPrompt = true;
+    setState(() {
+      _messageController.text = prompt;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: prompt.length),
+      );
+    });
+    try {
+      await _sendMessage();
+    } finally {
+      _processingPendingChatPrompt = false;
+    }
+    if (widget.store.hasPendingChatVoiceRequest) {
+      _handleStoreChange();
+    }
+  }
+
+  Future<void> _loadIronStatus() async {
+    final active = await _automation.isIronVoiceActive();
+    if (!mounted) return;
+    setState(() => _ironActive = active);
+  }
+
+  Future<void> _toggleIronMode() async {
+    if (_voiceToggleBusy) return;
+    setState(() => _voiceToggleBusy = true);
+    final result = await _automation.execute(
+      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
+    );
+    if (!mounted) return;
+    setState(() {
+      _voiceToggleBusy = false;
+      if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
   }
 
   int _voiceScore(Map<String, String> voice) {
@@ -506,15 +577,6 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  Future<void> _syncNativeAiSettings() {
-    return _automation.syncAiProviderSettings(
-      geminiApiKey: widget.store.apiKey,
-      backupApiKey: widget.store.backupApiKey,
-      backupBaseUrl: widget.store.backupBaseUrl,
-      backupModel: widget.store.backupModel,
-    );
-  }
-
   Future<bool> _saveAiProviders() async {
     final geminiKey = _apiKeyController.text.trim();
     final backupKey = _backupApiKeyController.text.trim();
@@ -554,7 +616,6 @@ class _ChatPageState extends State<ChatPage>
       baseUrl: backupBaseUrl,
       model: backupModel,
     );
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return false;
     setState(() {});
@@ -565,7 +626,6 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _clearGeminiApiKey() async {
     _apiKeyController.clear();
     await widget.store.setApiKey('');
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
@@ -579,7 +639,6 @@ class _ChatPageState extends State<ChatPage>
       baseUrl: _backupBaseUrlController.text,
       model: _backupModelController.text,
     );
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
@@ -957,7 +1016,9 @@ class _ChatPageState extends State<ChatPage>
         ? 'СЛУШАМ'
         : _isLoading
             ? 'МИСЛЯ'
-            : 'ГОТОВ СЪМ';
+            : _ironActive
+                ? 'ХЕЙ АЙРЪН АКТИВЕН'
+                : 'ГОТОВ СЪМ';
 
     return AnimatedBuilder(
       animation: _coreController,
@@ -996,10 +1057,14 @@ class _ChatPageState extends State<ChatPage>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _roundAction(
-                  icon: _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                  tooltip: _isListening ? 'Спри слушането' : 'Микрофон',
-                  active: _isListening,
-                  onPressed: _isLoading ? null : _toggleListening,
+                  icon: _ironActive
+                      ? Icons.hearing_rounded
+                      : Icons.hearing_disabled_rounded,
+                  tooltip: _ironActive
+                      ? 'Изключи „Хей Айрън“'
+                      : 'Включи „Хей Айрън“',
+                  active: _ironActive,
+                  onPressed: _voiceToggleBusy ? null : _toggleIronMode,
                 ),
                 const SizedBox(width: 12),
                 _roundAction(
@@ -1046,7 +1111,7 @@ class _ChatPageState extends State<ChatPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'IRON MUSIC 420 AI',
+                        'ХЕЙ АЙРЪН',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1058,9 +1123,9 @@ class _ChatPageState extends State<ChatPage>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.store.hasAnyAiProvider
-                            ? 'Личен AI асистент'
-                            : 'Добави AI доставчик от менюто',
+                        _ironActive
+                            ? 'Активен • глас и чат на едно място'
+                            : 'Глас и чат на едно място',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

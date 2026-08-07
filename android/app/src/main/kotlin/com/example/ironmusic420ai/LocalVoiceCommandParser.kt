@@ -142,7 +142,7 @@ object LocalVoiceCommandParser {
                 return LocalVoiceCommand("studio", reply = "Отварям Рап студио.")
 
             hasAny("отвори чата", "покажи чата", "ai чат", "open chat", "chat mode") ->
-                return LocalVoiceCommand("chat", reply = "Отварям AI чата.")
+                return LocalVoiceCommand("chat", reply = "Отварям Хей Айрън.")
 
             hasAny("отвори песните", "моите песни", "библиотека", "open songs", "song library") ->
                 return LocalVoiceCommand("songs", reply = "Отварям песните.")

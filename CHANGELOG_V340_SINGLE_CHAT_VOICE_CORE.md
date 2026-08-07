@@ -61,3 +61,12 @@
 - Prefers a strict title match when one exists, then falls back to YouTube's first real video.
 - Continues to reject ads, Shorts, editable search controls and non-video suggestions.
 - Adds regression coverage for punctuation-heavy and differently transliterated song names.
+
+## Build 51 unified Hey Iron chat
+
+- Makes the existing chat the single conversational path for typed, tapped-microphone and wake-phrase requests.
+- Keeps deterministic phone commands local, including any-song YouTube playback and flashlight control.
+- Moves the Hey Iron on/off control into the chat and removes its duplicate tools-screen card.
+- Renames the main AI tab and chat header to „Хей Айрън“.
+- Tightens the full-phrase acoustic threshold and voiced-frame gate to reduce occasional ambient false wakes.
+- Removes the unused legacy home page, native duplicate AI router, provider-sync bridge and duplicate command handler.

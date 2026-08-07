@@ -46,6 +46,7 @@ class LocalStore extends ChangeNotifier {
   String _pendingStudioPrompt = '';
   String _pendingStudioOutputType = '';
   bool _pendingStudioAutoGenerate = false;
+  final List<String> _pendingChatVoiceRequests = <String>[];
   Set<String> _favoriteAutomationIds = <String>{};
   List<CustomAutomation> _customAutomations = const [];
   List<AutomationHistoryEntry> _automationHistory = const [];
@@ -181,6 +182,8 @@ class LocalStore extends ChangeNotifier {
   String get pendingStudioPrompt => _pendingStudioPrompt;
   String get pendingStudioOutputType => _pendingStudioOutputType;
   bool get pendingStudioAutoGenerate => _pendingStudioAutoGenerate;
+  bool get hasPendingChatVoiceRequest =>
+      _pendingChatVoiceRequests.isNotEmpty;
   Set<String> get favoriteAutomationIds =>
       Set.unmodifiable(_favoriteAutomationIds);
   List<CustomAutomation> get customAutomations =>
@@ -342,6 +345,19 @@ class LocalStore extends ChangeNotifier {
     _pendingStudioPrompt = '';
     _pendingStudioOutputType = '';
     _pendingStudioAutoGenerate = false;
+  }
+
+  void queueChatVoiceRequest(String prompt) {
+    final cleanPrompt = prompt.trim();
+    if (cleanPrompt.isEmpty) return;
+
+    _pendingChatVoiceRequests.add(cleanPrompt);
+    notifyListeners();
+  }
+
+  String? takePendingChatVoiceRequest() {
+    if (_pendingChatVoiceRequests.isEmpty) return null;
+    return _pendingChatVoiceRequests.removeAt(0);
   }
 
   Future<void> loadSongIntoStudio(SongProject song) async {

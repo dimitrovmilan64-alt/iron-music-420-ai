@@ -35,6 +35,7 @@ class MainActivity : FlutterActivity() {
     private var pendingFlashEnabled = false
     private var pendingVoiceResult: MethodChannel.Result? = null
     private var pendingIronSection: Int? = null
+    private var pendingChatPrompt = ""
     private var pendingStudioPrompt = ""
     private var pendingStudioOutputType = ""
     private var pendingStudioAutoGenerate = false
@@ -107,6 +108,12 @@ class MainActivity : FlutterActivity() {
                         result.success(pendingIronSection)
                         pendingIronSection = null
                     }
+                    "consumeChatVoiceRequest" -> {
+                        result.success(
+                            if (pendingChatPrompt.isBlank()) null else pendingChatPrompt,
+                        )
+                        pendingChatPrompt = ""
+                    }
                     "consumeStudioVoiceRequest" -> {
                         if (pendingStudioPrompt.isBlank()) {
                             result.success(null)
@@ -122,21 +129,6 @@ class MainActivity : FlutterActivity() {
                             pendingStudioOutputType = ""
                             pendingStudioAutoGenerate = false
                         }
-                    }
-                    "syncGeminiApiKey" -> {
-                        syncGeminiApiKey(
-                            call.argument<String>("apiKey").orEmpty(),
-                            result,
-                        )
-                    }
-                    "syncAiProviderSettings" -> {
-                        syncAiProviderSettings(
-                            geminiApiKey = call.argument<String>("geminiApiKey").orEmpty(),
-                            backupApiKey = call.argument<String>("backupApiKey").orEmpty(),
-                            backupBaseUrl = call.argument<String>("backupBaseUrl").orEmpty(),
-                            backupModel = call.argument<String>("backupModel").orEmpty(),
-                            result = result,
-                        )
                     }
                     "startChatSpeechRecognition" -> {
                         startChatSpeechRecognition(result)
@@ -627,65 +619,11 @@ class MainActivity : FlutterActivity() {
         result.success(true)
     }
 
-    private fun syncGeminiApiKey(
-        apiKey: String,
-        result: MethodChannel.Result,
-    ) {
-        val editor = getSharedPreferences(
-            GeminiVoiceRouter.PREFS_NAME,
-            Context.MODE_PRIVATE,
-        ).edit()
-        val cleanKey = apiKey.trim()
-        if (cleanKey.isEmpty()) {
-            editor.remove(GeminiVoiceRouter.KEY_GEMINI_API_KEY)
-        } else {
-            editor.putString(GeminiVoiceRouter.KEY_GEMINI_API_KEY, cleanKey)
-        }
-        editor.apply()
-        result.success(true)
-    }
-
-    private fun syncAiProviderSettings(
-        geminiApiKey: String,
-        backupApiKey: String,
-        backupBaseUrl: String,
-        backupModel: String,
-        result: MethodChannel.Result,
-    ) {
-        val editor = getSharedPreferences(
-            GeminiVoiceRouter.PREFS_NAME,
-            Context.MODE_PRIVATE,
-        ).edit()
-
-        val cleanGeminiKey = geminiApiKey.trim()
-        val cleanBackupKey = backupApiKey.trim()
-        val cleanBaseUrl = backupBaseUrl.trim().ifBlank {
-            GeminiVoiceRouter.DEFAULT_BACKUP_BASE_URL
-        }
-        val cleanModel = backupModel.trim().ifBlank {
-            GeminiVoiceRouter.DEFAULT_BACKUP_MODEL
-        }
-
-        if (cleanGeminiKey.isEmpty()) {
-            editor.remove(GeminiVoiceRouter.KEY_GEMINI_API_KEY)
-        } else {
-            editor.putString(GeminiVoiceRouter.KEY_GEMINI_API_KEY, cleanGeminiKey)
-        }
-        if (cleanBackupKey.isEmpty()) {
-            editor.remove(GeminiVoiceRouter.KEY_BACKUP_API_KEY)
-        } else {
-            editor.putString(GeminiVoiceRouter.KEY_BACKUP_API_KEY, cleanBackupKey)
-        }
-        editor.putString(GeminiVoiceRouter.KEY_BACKUP_BASE_URL, cleanBaseUrl)
-        editor.putString(GeminiVoiceRouter.KEY_BACKUP_MODEL, cleanModel)
-        editor.apply()
-        result.success(true)
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         captureIronSection(intent)
+        automationChannel?.invokeMethod("ironRequestAvailable", null)
     }
 
     override fun onPostResume() {
@@ -761,6 +699,11 @@ class MainActivity : FlutterActivity() {
         val section = intent?.getIntExtra("iron_section", -1) ?: -1
         if (section in 0..4) {
             pendingIronSection = section
+        }
+
+        val chatPrompt = intent?.getStringExtra("iron_chat_prompt").orEmpty().trim()
+        if (chatPrompt.isNotEmpty()) {
+            pendingChatPrompt = chatPrompt
         }
 
         val studioPrompt = intent?.getStringExtra("iron_studio_prompt").orEmpty().trim()

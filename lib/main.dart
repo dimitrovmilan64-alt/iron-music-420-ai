@@ -48,12 +48,6 @@ Future<void> main() async {
 
   final store = LocalStore();
   await store.initialize();
-  await AutomationService().syncAiProviderSettings(
-    geminiApiKey: store.apiKey,
-    backupApiKey: store.backupApiKey,
-    backupBaseUrl: store.backupBaseUrl,
-    backupModel: store.backupModel,
-  );
   runApp(IronMusic420App(store: store));
 }
 
@@ -178,7 +172,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     IronNavItem(
       icon: Icons.auto_awesome_outlined,
       selectedIcon: Icons.auto_awesome_rounded,
-      label: 'AI',
+      label: 'Хей Айрън',
     ),
     IronNavItem(
       icon: Icons.mic_external_on_outlined,
@@ -196,6 +190,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _automation.setPendingRequestListener(_openPendingSection);
     _pages = [
       ChatPage(
         store: widget.store,
@@ -207,7 +202,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ),
       RapStudioPage(store: widget.store),
       SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
-      CommandsPage(store: widget.store, onOpenSection: _openSection),
+      CommandsPage(store: widget.store),
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
   }
@@ -215,6 +210,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _automation.setPendingRequestListener(null);
     super.dispose();
   }
 
@@ -234,6 +230,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         autoGenerate: studioRequest.autoGenerate,
       );
       _openSection(1);
+      return;
+    }
+
+    final chatPrompt = await _automation.consumeChatVoiceRequest();
+    if (chatPrompt != null) {
+      widget.store.queueChatVoiceRequest(chatPrompt);
+      _openSection(3);
       return;
     }
 

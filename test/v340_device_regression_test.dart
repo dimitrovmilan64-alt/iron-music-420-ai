@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('home screen reports the current 3.4.0 version', () {
-    final home = File('lib/pages/home_page.dart').readAsStringSync();
+  test('main navigation exposes one Hey Iron chat', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    final chat = File('lib/pages/chat_page.dart').readAsStringSync();
 
-    expect(home, contains('Версия 3.4.0'));
-    expect(home, isNot(contains('Версия 3.1.0')));
+    expect(main, contains("label: 'Хей Айрън'"));
+    expect(chat, contains("'ХЕЙ АЙРЪН'"));
+    expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
   });
 
   test('v3.4.0 flashlight uses one native controller and real state', () {
@@ -38,11 +40,12 @@ void main() {
     expect(service, contains('keywordsScore = 1.5f'));
     expect(service, contains('keywordsThreshold = 0.25f'));
     expect(service, contains('maxActivePaths = 8'));
-    expect(service, contains('WAKE_MIN_RMS'));
+    expect(service, contains('WAKE_MIN_RMS = 0.007f'));
+    expect(service, contains('MIN_WAKE_VOICED_FRAMES = 3'));
     expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
-    expect(keywordScript, contains('7.0, 0.01'));
+    expect(keywordScript, contains('7.0, 0.02'));
     expect(keywordScript, isNot(contains('("IRON_')));
     expect(keywordScript, isNot(contains('LEX_NO_H')));
   });
@@ -65,7 +68,7 @@ void main() {
     expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
 
-  test('build 50 any-song auto-play is one-shot and YouTube-only', () {
+  test('build 51 keeps any-song auto-play one-shot and YouTube-only', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();

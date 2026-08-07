@@ -3,17 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('local commands are routed before cloud AI', () {
+  test('local commands stay native and free conversation enters one chat', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
     final localIndex = service.indexOf('LocalVoiceCommandParser.parse');
-    final apiIndex = service.indexOf('if (!aiRouter.hasApiKey())');
+    final chatIndex = service.indexOf('openIronChatPrompt(originalCommand)');
 
     expect(localIndex, greaterThanOrEqualTo(0));
-    expect(apiIndex, greaterThan(localIndex));
+    expect(chatIndex, greaterThan(localIndex));
     expect(service, contains('executeLocalVoiceCommand'));
     expect(service, contains('openIronStudioRequest'));
+    expect(service, isNot(contains('GeminiVoiceRouter')));
+    expect(service, isNot(contains('executeCommand(')));
   });
 
   test('parser includes bilingual phone and music commands', () {
@@ -57,7 +59,7 @@ void main() {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
     expect(script, contains('HEY_IRON_LEX'));
     expect(script, contains('HEY_IRON_BG'));
-    expect(script, contains('7.0, 0.01'));
+    expect(script, contains('7.0, 0.02'));
     expect(script, isNot(contains('HEY_AARON')));
     expect(script, isNot(contains('NO_H')));
   });

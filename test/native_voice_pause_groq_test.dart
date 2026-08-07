@@ -22,10 +22,10 @@ void main() {
     final prepareBlock = activity.substring(prepareStart, launchStart);
 
     final finishStart = activity.indexOf('private fun finishChatSpeech(');
-    final syncStart = activity.indexOf('private fun syncGeminiApiKey(');
+    final pauseStart = activity.indexOf('private fun pauseIronVoiceCapture(');
     expect(finishStart, greaterThanOrEqualTo(0));
-    expect(syncStart, greaterThan(finishStart));
-    final finishBlock = activity.substring(finishStart, syncStart);
+    expect(pauseStart, greaterThan(finishStart));
+    final finishBlock = activity.substring(finishStart, pauseStart);
 
     expect(prepareBlock, contains('ACTION_PAUSE_WAKE'));
     expect(prepareBlock, isNot(contains('ACTION_STOP')));
@@ -111,7 +111,8 @@ void main() {
     expect(service, contains('finishSpeechWatchdog'));
     expect(service, contains('activeUtteranceId'));
     expect(service, contains('consumeExpectedRecognitionCancellation()'));
-    expect(service, contains('requestGeneration != aiRequestGeneration'));
+    expect(service, contains('openIronChatPrompt(originalCommand)'));
+    expect(service, isNot(contains('GeminiVoiceRouter')));
   });
 
   test('enabled Hey Iron mode is restored after reopening the app', () {

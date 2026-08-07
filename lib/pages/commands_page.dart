@@ -6,12 +6,10 @@ import '../ui/common_widgets.dart';
 
 class CommandsPage extends StatefulWidget {
   final LocalStore store;
-  final ValueChanged<int> onOpenSection;
 
   const CommandsPage({
     super.key,
     required this.store,
-    required this.onOpenSection,
   });
 
   @override
@@ -21,7 +19,6 @@ class CommandsPage extends StatefulWidget {
 class _CommandsPageState extends State<CommandsPage>
     with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
-  bool _ironActive = false;
   bool _busy = false;
   bool _flashlightOn = false;
   bool _youtubeAutoPlayEnabled = false;
@@ -64,16 +61,14 @@ class _CommandsPageState extends State<CommandsPage>
 
   Future<void> _loadStatus() async {
     final results = await Future.wait<Object?>([
-      _automation.isIronVoiceActive(),
       _automation.flashlightState(),
       _automation.isYoutubeAutoPlayEnabled(),
     ]);
     if (!mounted) return;
     setState(() {
-      _ironActive = results[0] as bool;
-      final flashlightState = results[1] as bool?;
+      final flashlightState = results[0] as bool?;
       if (flashlightState != null) _flashlightOn = flashlightState;
-      _youtubeAutoPlayEnabled = results[2] as bool;
+      _youtubeAutoPlayEnabled = results[1] as bool;
     });
   }
 
@@ -83,20 +78,6 @@ class _CommandsPageState extends State<CommandsPage>
     final result = await _automation.openYoutubeAutoPlaySettings();
     if (!mounted) return;
     setState(() => _busy = false);
-    _show(result);
-  }
-
-  Future<void> _toggleIron() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final result = await _automation.execute(
-      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
-    );
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      if (result.success) _ironActive = !_ironActive;
-    });
     _show(result);
   }
 
@@ -136,69 +117,10 @@ class _CommandsPageState extends State<CommandsPage>
           const PageTitle(
             eyebrow: 'IRON',
             title: 'Инструменти',
-            subtitle: 'Само най-полезните действия. Останалото го кажи на AI.',
+            subtitle:
+                'Само най-полезните действия. Останалото го кажи на Хей Айрън.',
           ),
           const SizedBox(height: 18),
-          IronCard(
-            bright: _ironActive,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: (_ironActive ? ironGreen : Colors.white)
-                            .withOpacity(0.10),
-                      ),
-                      child: Icon(
-                        _ironActive
-                            ? Icons.hearing_rounded
-                            : Icons.hearing_disabled_rounded,
-                        color: _ironActive ? ironGreen : Colors.white54,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _ironActive ? 'Iron е активен' : 'Iron е спрян',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _ironActive
-                                ? 'Кажи „Hey Iron“ и говори нормално.'
-                                : 'Активирай фоновото гласово събуждане.',
-                            style: const TextStyle(
-                              color: Colors.white60,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                IronButton(
-                  text: _ironActive ? 'СПРИ IRON' : 'АКТИВИРАЙ IRON',
-                  icon: _ironActive
-                      ? Icons.stop_circle_outlined
-                      : Icons.play_circle_outline_rounded,
-                  secondary: _ironActive,
-                  onPressed: _busy ? null : _toggleIron,
-                ),
-              ],
-            ),
-          ),
           IronCard(
             bright: _youtubeAutoPlayEnabled,
             child: Column(
@@ -250,12 +172,7 @@ class _CommandsPageState extends State<CommandsPage>
               ],
             ),
           ),
-          IronButton(
-            text: 'ОТВОРИ AI РАЗГОВОРА',
-            icon: Icons.forum_rounded,
-            onPressed: () => widget.onOpenSection(3),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
           const Text(
             'Бързи действия',
             style: TextStyle(
@@ -329,19 +246,19 @@ class _CommandsPageState extends State<CommandsPage>
             child: Row(
               children: [
                 Icon(
-                  widget.store.hasApiKey
+                  widget.store.hasAnyAiProvider
                       ? Icons.auto_awesome_rounded
                       : Icons.key_off_outlined,
-                  color: widget.store.hasApiKey
+                  color: widget.store.hasAnyAiProvider
                       ? ironGreen
                       : Colors.orangeAccent,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    widget.store.hasApiKey
-                        ? 'AI режимът е готов. За търсене, разговор и сложни заявки просто говори с Iron.'
-                        : 'Запази Gemini API ключ в AI разговора, за да работят свободните заявки.',
+                    widget.store.hasAnyAiProvider
+                        ? 'Хей Айрън е готов. За разговор и сложни заявки говори или пиши в чата.'
+                        : 'Запази Gemini API ключ в Хей Айрън, за да работят свободните заявки.',
                     style: const TextStyle(
                       color: Colors.white70,
                       height: 1.35,

@@ -57,8 +57,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         private const val NOTIFICATION_ID = 2420
         private const val WAKE_SAMPLE_RATE = 16_000
         private const val WAKE_FRAME_SAMPLES = 1_600
-        private const val WAKE_MIN_RMS = 0.006f
-        private const val MIN_WAKE_VOICED_FRAMES = 2
+        private const val WAKE_MIN_RMS = 0.007f
+        private const val MIN_WAKE_VOICED_FRAMES = 3
         private const val WAKE_HEALTH_LOG_FRAMES = 50L
         private const val COMMAND_TIMEOUT_MS = 30_000L
         private const val MIN_SPEECH_WATCHDOG_MS = 5_000L
@@ -93,7 +93,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     @Volatile
     private var serviceActive = false
 
-    private val aiRouter by lazy { GeminiVoiceRouter(this) }
     private var recognizer: SpeechRecognizer? = null
     private var keywordSpotter: KeywordSpotter? = null
     private var keywordStream: OnlineStream? = null
@@ -109,7 +108,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var afterSpeech: (() -> Unit)? = null
     private var ignoreNextRecognitionError = false
     private var capturePauseCount = 0
-    private var aiRequestGeneration = 0
 
     @Volatile
     private var pausedForChatSpeech = false
@@ -119,9 +117,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     @Volatile
     private var wakeEngineLoading = false
-
-    @Volatile
-    private var isAiProcessing = false
 
     private val beginSpeechRecognition = Runnable {
         startListening()
@@ -161,7 +156,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             setSpeechCaptureActive(false)
             resetRecognizer()
         }
-        endConversation()
         voiceState = VoiceState.WAITING_FOR_WAKE
         updateNotification("Iron чака „Hey Iron“")
         scheduleWakeWordListening(450)
@@ -169,7 +163,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(LOG_TAG, "service_created build=50")
+        Log.i(LOG_TAG, "service_created build=51")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)
@@ -224,7 +218,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onDestroy() {
         serviceActive = false
         isRunning = false
-        aiRequestGeneration++
         handler.removeCallbacksAndMessages(null)
         stopWakeWordListening()
 
@@ -275,7 +268,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
         isListening = false
         isSpeaking = false
-        isAiProcessing = false
         foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -285,14 +277,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         capturePauseCount++
         if (pausedForChatSpeech) return
         pausedForChatSpeech = true
-        aiRequestGeneration++
         handler.removeCallbacks(beginWakeWordListening)
         handler.removeCallbacks(beginSpeechRecognition)
         handler.removeCallbacks(recognitionTimeout)
         handler.removeCallbacks(finishSpeechWatchdog)
         afterSpeech = null
         activeUtteranceId = null
-        isAiProcessing = false
         val currentRecognizer = recognizer
         recognizer = null
         try {
@@ -466,7 +456,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             !pausedForChatSpeech &&
             !isSpeaking &&
             !isListening &&
-            !isAiProcessing &&
             voiceState == VoiceState.WAITING_FOR_WAKE &&
             !wakeWordActive
         ) {
@@ -751,7 +740,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        beginConversation()
         voiceState = VoiceState.WAITING_FOR_COMMAND
         updateNotification("„Hey Iron“ е разпознат • разговорът започна")
         speak("Слушам") {
@@ -831,19 +819,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
     }
 
-    private fun beginConversation() {
-        aiRouter.resetConversation()
-    }
-
-    private fun endConversation() {
-        aiRouter.resetConversation()
-    }
-
     private fun continueConversationOrWake(delayMillis: Long = 650) {
         // ColorOS/Realme emits an audible system cue every time Android's
         // SpeechRecognizer starts or stops. Keep commands one-shot and return
         // to the silent offline wake-word recorder after each answer.
-        endConversation()
         voiceState = VoiceState.WAITING_FOR_WAKE
         updateNotification("Iron чака „Hey Iron“")
         scheduleWakeWordListening(delayMillis)
@@ -864,7 +843,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             serviceActive &&
             !pausedForChatSpeech &&
             !isSpeaking &&
-            !isAiProcessing &&
             voiceState == VoiceState.WAITING_FOR_COMMAND
         ) {
             handler.postDelayed(beginSpeechRecognition, delayMillis)
@@ -895,7 +873,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         if (phrases.isEmpty()) {
             if (isFinal) {
                 isListening = false
-                endConversation()
                 voiceState = VoiceState.WAITING_FOR_WAKE
                 updateNotification("Iron чака „Hey Iron“")
                 scheduleWakeWordListening(450)
@@ -915,7 +892,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         val normalizedCommand = normalize(originalCommand)
 
         if (isStopConversationCommand(normalizedCommand)) {
-            endConversation()
             speak("Добре.") {
                 voiceState = VoiceState.WAITING_FOR_WAKE
                 scheduleWakeWordListening(450)
@@ -933,70 +909,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        if (!aiRouter.hasApiKey()) {
-            val localReply = executeCommand(normalizedCommand)
-            val reply = if (localReply == "Не разбрах командата. Опитай пак.") {
-                "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
-            } else {
-                localReply
-            }
-            speak(reply) {
-                continueConversationOrWake(650)
-            }
-            return
-        }
-
-        isAiProcessing = true
-        val requestGeneration = ++aiRequestGeneration
-        updateNotification("Iron мисли с AI…")
-
-        Thread(
-            {
-                val result = try {
-                    Result.success(aiRouter.route(originalCommand))
-                } catch (error: Exception) {
-                    Result.failure(error)
-                }
-
-                handler.post {
-                    isAiProcessing = false
-                    if (
-                        !serviceActive ||
-                        pausedForChatSpeech ||
-                        requestGeneration != aiRequestGeneration
-                    ) {
-                        return@post
-                    }
-
-                    val decision = result.getOrNull()
-                    if (decision != null) {
-                        val reply = executeAiDecision(decision)
-                        speak(reply) {
-                            continueConversationOrWake(650)
-                        }
-                        return@post
-                    }
-
-                    val localReply = executeCommand(normalizedCommand)
-                    val error = result.exceptionOrNull()
-                    val reply = when {
-                        localReply != "Не разбрах командата. Опитай пак." -> localReply
-                        error is GeminiVoiceRouter.MissingApiKeyException ->
-                            "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
-                        error is GeminiVoiceRouter.AiUnavailableException ->
-                            error.message ?: "AI временно не отговаря. Опитай пак."
-                        else -> "AI временно не отговаря. Опитай пак."
-                    }
-                    speak(reply) {
-                        continueConversationOrWake(900)
-                    }
-                }
-            },
-            "IronAiRouter",
-        ).apply {
-            isDaemon = true
-            start()
-        }
+        Log.i(LOG_TAG, "command_route source=chat")
+        openIronChatPrompt(originalCommand)
+        scheduleWakeWordListening(900)
     }
 
     private fun executeLocalVoiceCommand(command: LocalVoiceCommand): String {
@@ -1009,29 +924,22 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 command.reply.ifBlank { "Отварям Рап студио." }
             }
             "clarify" -> command.reply.ifBlank { "Кажи какво точно да направя." }
-            else -> executeAiDecision(
-                GeminiVoiceRouter.Decision(
-                    action = command.action,
-                    argument = command.argument,
-                    reply = command.reply,
-                ),
-            )
+            else -> executeDirectCommand(command)
         }
     }
 
-    private fun executeAiDecision(decision: GeminiVoiceRouter.Decision): String {
+    private fun executeDirectCommand(command: LocalVoiceCommand): String {
         return try {
-            Log.i(LOG_TAG, "command_execute action=${decision.action}")
-            when (decision.action) {
-                "reply" -> decision.reply
+            Log.i(LOG_TAG, "command_execute action=${command.action}")
+            when (command.action) {
                 "youtube" -> {
                     launchPackage("com.google.android.youtube")
-                    decision.reply.ifBlank { "Отварям YouTube." }
+                    command.reply.ifBlank { "Отварям YouTube." }
                 }
                 "youtube_search" -> {
-                    val query = decision.argument.ifBlank { return "Какво да пусна в YouTube?" }
+                    val query = command.argument.ifBlank { return "Какво да пусна в YouTube?" }
                     val launchResult = openYouTubeSearch(query)
-                    decision.reply.ifBlank {
+                    command.reply.ifBlank {
                         when (launchResult) {
                             YoutubeLaunchResult.AUTO_PLAY_ARMED ->
                                 "Пускам в YouTube."
@@ -1044,36 +952,19 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 }
                 "chrome" -> {
                     launchPackage("com.android.chrome")
-                    decision.reply.ifBlank { "Отварям браузъра." }
-                }
-                "web_search" -> {
-                    val query = decision.argument.ifBlank { return "Какво да потърся?" }
-                    launch(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}"),
-                        ).apply {
-                            setPackage("com.android.chrome")
-                        },
-                    )
-                    decision.reply.ifBlank { "Търся в интернет." }
+                    command.reply.ifBlank { "Отварям браузъра." }
                 }
                 "camera" -> {
                     launch(Intent("android.media.action.IMAGE_CAPTURE"))
-                    decision.reply.ifBlank { "Отварям камерата." }
+                    command.reply.ifBlank { "Отварям камерата." }
                 }
                 "maps" -> {
                     openMaps("")
-                    decision.reply.ifBlank { "Отварям картите." }
-                }
-                "maps_search" -> {
-                    val query = decision.argument.ifBlank { return "Кое място да потърся?" }
-                    openMaps(query)
-                    decision.reply.ifBlank { "Търся мястото в картите." }
+                    command.reply.ifBlank { "Отварям картите." }
                 }
                 "alarms" -> {
                     launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
-                    decision.reply.ifBlank { "Отварям алармите." }
+                    command.reply.ifBlank { "Отварям алармите." }
                 }
                 "calendar" -> {
                     launch(
@@ -1081,78 +972,72 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                             addCategory(Intent.CATEGORY_APP_CALENDAR)
                         },
                     )
-                    decision.reply.ifBlank { "Отварям календара." }
+                    command.reply.ifBlank { "Отварям календара." }
                 }
                 "dialer" -> {
                     launch(Intent(Intent.ACTION_DIAL))
-                    decision.reply.ifBlank { "Отварям телефона." }
-                }
-                "dial_number" -> {
-                    val number = decision.argument.filter { it.isDigit() || it == '+' }
-                    if (number.isBlank()) return "Не разбрах телефонния номер."
-                    launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
-                    decision.reply.ifBlank { "Подготвям номера за набиране." }
+                    command.reply.ifBlank { "Отварям телефона." }
                 }
                 "bluetooth" -> {
                     launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                    decision.reply.ifBlank { "Отварям Bluetooth." }
+                    command.reply.ifBlank { "Отварям Bluetooth." }
                 }
                 "wifi" -> {
                     launch(Intent(Settings.ACTION_WIFI_SETTINGS))
-                    decision.reply.ifBlank { "Отварям Wi-Fi." }
+                    command.reply.ifBlank { "Отварям Wi-Fi." }
                 }
                 "settings" -> {
                     launch(Intent(Settings.ACTION_SETTINGS))
-                    decision.reply.ifBlank { "Отварям настройките." }
+                    command.reply.ifBlank { "Отварям настройките." }
                 }
                 "flash_on" -> {
                     setFlashlight(true)
-                    decision.reply.ifBlank { "Фенерчето е включено." }
+                    command.reply.ifBlank { "Фенерчето е включено." }
                 }
                 "flash_off" -> {
                     setFlashlight(false)
-                    decision.reply.ifBlank { "Фенерчето е изключено." }
+                    command.reply.ifBlank { "Фенерчето е изключено." }
                 }
                 "volume_up" -> {
                     adjustVolume(AudioManager.ADJUST_RAISE)
-                    decision.reply.ifBlank { "Звукът е увеличен." }
+                    command.reply.ifBlank { "Звукът е увеличен." }
                 }
                 "volume_down" -> {
                     adjustVolume(AudioManager.ADJUST_LOWER)
-                    decision.reply.ifBlank { "Звукът е намален." }
+                    command.reply.ifBlank { "Звукът е намален." }
                 }
                 "music_mode" -> {
                     sendAutomateCommand("music_mode_420")
-                    decision.reply.ifBlank { "Музикалният режим е включен." }
+                    command.reply.ifBlank { "Музикалният режим е включен." }
                 }
                 "night_mode" -> {
                     adjustVolume(AudioManager.ADJUST_LOWER)
                     adjustVolume(AudioManager.ADJUST_LOWER)
-                    decision.reply.ifBlank { "Нощният режим е включен." }
+                    command.reply.ifBlank { "Нощният режим е включен." }
                 }
                 "studio" -> {
                     openIronSection(1)
-                    decision.reply.ifBlank { "Отварям Rap Studio." }
+                    command.reply.ifBlank { "Отварям Rap Studio." }
                 }
                 "chat" -> {
                     openIronSection(3)
-                    decision.reply.ifBlank { "Отварям AI чата." }
+                    command.reply.ifBlank { "Отварям Хей Айрън." }
                 }
                 "songs" -> {
                     openIronSection(2)
-                    decision.reply.ifBlank { "Отварям песните." }
+                    command.reply.ifBlank { "Отварям песните." }
                 }
                 "home" -> {
                     openIronSection(0)
-                    decision.reply.ifBlank { "Отварям началния екран." }
+                    command.reply.ifBlank { "Отварям началния екран." }
                 }
                 "automate" -> {
-                    val macro = decision.argument.trim()
+                    val macro = command.argument.trim()
                     if (macro.isBlank()) return "Кажи името на Automate командата."
                     sendAutomateCommand(macro)
-                    decision.reply.ifBlank { "Командата е изпратена." }
+                    command.reply.ifBlank { "Командата е изпратена." }
                 }
-                else -> decision.reply.ifBlank { "Не разбрах. Опитай пак." }
+                else -> command.reply.ifBlank { "Не разбрах. Опитай пак." }
             }
         } catch (_: SecurityException) {
             "Липсва нужно разрешение за това действие."
@@ -1173,151 +1058,6 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             intent.setPackage(null)
         }
         launch(intent)
-    }
-
-    private fun executeCommand(command: String): String {
-        return try {
-            when {
-                command.startsWith("automate ") ||
-                    command.startsWith("аутомейт ") ||
-                    command.startsWith("макро ") ||
-                    command.startsWith("макродроид ") -> {
-                    val automateCommand = command
-                        .replaceFirst(
-                            Regex("^(automate|аутомейт|макро(дроид)?)\\s+"),
-                            "",
-                        )
-                        .trim()
-
-                    if (automateCommand.isBlank()) {
-                        "Кажи името на Automate командата."
-                    } else {
-                        sendAutomateCommand(automateCommand)
-                        "Командата е изпратена."
-                    }
-                }
-
-                command.contains("музика") ||
-                    command.contains("music mode") ||
-                    command.contains("музикален режим") -> {
-                    sendAutomateCommand("music_mode_420")
-                    "Музикалният режим е включен."
-                }
-
-                command.contains("фенер") &&
-                    (command.contains("спри") || command.contains("изключи")) -> {
-                    setFlashlight(false)
-                    "Фенерчето е изключено."
-                }
-
-                command.contains("фенер") -> {
-                    setFlashlight(true)
-                    "Фенерчето е включено."
-                }
-
-                command.contains("увеличи") && command.contains("звук") -> {
-                    adjustVolume(AudioManager.ADJUST_RAISE)
-                    "Звукът е увеличен."
-                }
-
-                command.contains("намали") && command.contains("звук") -> {
-                    adjustVolume(AudioManager.ADJUST_LOWER)
-                    "Звукът е намален."
-                }
-
-                command.contains("youtube") || command.contains("ютуб") -> {
-                    launchPackage("com.google.android.youtube")
-                    "Отварям YouTube."
-                }
-
-                command.contains("камера") -> {
-                    launch(Intent("android.media.action.IMAGE_CAPTURE"))
-                    "Отварям камерата."
-                }
-
-                command.contains("карти") || command.contains("maps") -> {
-                    launch(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=")).apply {
-                            setPackage("com.google.android.apps.maps")
-                        },
-                    )
-                    "Отварям картите."
-                }
-
-                command.contains("аларм") -> {
-                    launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
-                    "Отварям алармите."
-                }
-
-                command.contains("календар") -> {
-                    launch(
-                        Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_APP_CALENDAR)
-                        },
-                    )
-                    "Отварям календара."
-                }
-
-                command.contains("телефон") || command.contains("набиране") -> {
-                    launch(Intent(Intent.ACTION_DIAL))
-                    "Отварям телефона."
-                }
-
-                command.contains("bluetooth") || command.contains("блутут") -> {
-                    launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                    "Отварям Bluetooth."
-                }
-
-                command.contains("wi fi") ||
-                    command.contains("wifi") ||
-                    command.contains("уай фай") -> {
-                    launch(Intent(Settings.ACTION_WIFI_SETTINGS))
-                    "Отварям Wi‑Fi."
-                }
-
-                command.contains("нощен режим") || command.contains("night mode") -> {
-                    adjustVolume(AudioManager.ADJUST_LOWER)
-                    adjustVolume(AudioManager.ADJUST_LOWER)
-                    "Нощният режим е включен."
-                }
-
-                command.contains("студио") -> {
-                    openIronSection(1)
-                    "Отварям Rap Studio."
-                }
-
-                command.contains("чат") -> {
-                    openIronSection(3)
-                    "Отварям чата."
-                }
-
-                command.contains("песни") || command.contains("библиотека") -> {
-                    openIronSection(2)
-                    "Отварям песните."
-                }
-
-                command.contains("начало") -> {
-                    openIronSection(0)
-                    "Отварям началния екран."
-                }
-
-                command.contains("настройки") -> {
-                    launch(Intent(Settings.ACTION_SETTINGS))
-                    "Отварям настройките."
-                }
-
-                command.contains("chrome") || command.contains("браузър") -> {
-                    launchPackage("com.android.chrome")
-                    "Отварям браузъра."
-                }
-
-                else -> "Не разбрах командата. Опитай пак."
-            }
-        } catch (_: SecurityException) {
-            "Липсва нужно разрешение за тази команда."
-        } catch (_: Exception) {
-            "Тази команда не е достъпна на телефона."
-        }
     }
 
     private fun sendAutomateCommand(command: String) {
@@ -1416,6 +1156,18 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 putExtra("iron_studio_prompt", prompt.trim())
                 putExtra("iron_studio_output_type", outputType.trim())
                 putExtra("iron_studio_auto_generate", true)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
+    }
+
+    private fun openIronChatPrompt(prompt: String) {
+        val cleanPrompt = prompt.trim()
+        if (cleanPrompt.isBlank()) return
+        launch(
+            Intent(this, MainActivity::class.java).apply {
+                putExtra("iron_section", 3)
+                putExtra("iron_chat_prompt", cleanPrompt)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
         )
@@ -1656,14 +1408,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
         ) {
-            endConversation()
             voiceState = VoiceState.WAITING_FOR_WAKE
             updateNotification("Iron чака „Hey Iron“")
             scheduleWakeWordListening(450)
             return
         }
 
-        endConversation()
         voiceState = VoiceState.WAITING_FOR_WAKE
         scheduleWakeWordListening(
             when (error) {
