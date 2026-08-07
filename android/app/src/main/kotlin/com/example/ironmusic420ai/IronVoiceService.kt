@@ -58,8 +58,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         private const val NOTIFICATION_ID = 2420
         private const val WAKE_SAMPLE_RATE = 16_000
         private const val WAKE_FRAME_SAMPLES = 1_600
-        private const val WAKE_MIN_RMS = 0.008f
-        private const val MIN_WAKE_VOICED_FRAMES = 3
+        private const val WAKE_MIN_RMS = 0.006f
+        private const val MIN_WAKE_VOICED_FRAMES = 2
+        private const val WAKE_SIGNAL_HOLD_MS = 1_500L
         private const val WAKE_REARM_COOLDOWN_MS = 4_000L
         private const val CHAT_PROMPT_DEDUP_MS = 12_000L
         private const val CHAT_GREETING_DEDUP_MS = 60_000L
@@ -95,6 +96,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private val captureOwner = Any()
     private val wakeActivationGuard = WakeActivationGuard(
         requiredVoicedFrames = MIN_WAKE_VOICED_FRAMES,
+        signalHoldMillis = WAKE_SIGNAL_HOLD_MS,
         cooldownMillis = WAKE_REARM_COOLDOWN_MS,
     )
     private val voicePromptGuard = VoicePromptGuard(
@@ -175,7 +177,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(LOG_TAG, "service_created build=52")
+        Log.i(LOG_TAG, "service_created build=53")
         createNotificationChannel()
         textToSpeech = try {
             TextToSpeech(this, this)
@@ -453,11 +455,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 dither = 0.0f,
             ),
             modelConfig = modelConfig,
-            maxActivePaths = 1,
+            maxActivePaths = 4,
             keywordsFile = "$MODEL_DIR/keywords.txt",
             keywordsScore = 1.5f,
             keywordsThreshold = 0.25f,
-            numTrailingBlanks = 2,
+            numTrailingBlanks = 1,
         )
     }
 
@@ -620,7 +622,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                         val rms = sqrt(squareSum / count).toFloat()
                         processedFrames++
                         intervalMaxRms = maxOf(intervalMaxRms, rms)
-                        wakeActivationGuard.observeFrame(rms >= WAKE_MIN_RMS)
+                        wakeActivationGuard.observeFrame(
+                            voiced = rms >= WAKE_MIN_RMS,
+                            nowMillis = SystemClock.elapsedRealtime(),
+                        )
                         if (
                             !signalConfirmed &&
                             wakeActivationGuard.voicedFrames >= MIN_WAKE_VOICED_FRAMES

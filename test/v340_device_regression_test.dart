@@ -30,7 +30,7 @@ void main() {
     expect(commands, contains('nativeState ?? _flashlightOn'));
   });
 
-  test('build 52 accepts only a guarded full wake phrase', () {
+  test('build 53 hears only a guarded full wake phrase', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
@@ -39,13 +39,14 @@ void main() {
 
     expect(service, contains('keywordsScore = 1.5f'));
     expect(service, contains('keywordsThreshold = 0.25f'));
-    expect(service, contains('maxActivePaths = 1'));
-    expect(service, contains('WAKE_MIN_RMS = 0.008f'));
-    expect(service, contains('MIN_WAKE_VOICED_FRAMES = 3'));
+    expect(service, contains('maxActivePaths = 4'));
+    expect(service, contains('WAKE_MIN_RMS = 0.006f'));
+    expect(service, contains('MIN_WAKE_VOICED_FRAMES = 2'));
+    expect(service, contains('WAKE_SIGNAL_HOLD_MS = 1_500L'));
     expect(service, contains('WAKE_REARM_COOLDOWN_MS = 4_000L'));
     expect(service, contains('WakeActivationGuard('));
     expect(service, contains('VoicePromptGuard('));
-    expect(service, contains('numTrailingBlanks = 2'));
+    expect(service, contains('numTrailingBlanks = 1'));
     expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
@@ -72,7 +73,7 @@ void main() {
     expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
 
-  test('build 52 keeps any-song auto-play one-shot and YouTube-only', () {
+  test('build 53 keeps any-song auto-play one-shot and YouTube-only', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();

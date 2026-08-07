@@ -89,9 +89,9 @@ candidates: list[tuple[str, list[str], float, float]] = []
 
 # The full two-word phrase is intentionally kept as the only trigger. The
 # per-keyword values below keep the Bulgarian pronunciation reachable while
-# reducing the boost and raising the trigger threshold from build 51. Together
-# with a single beam path and the consecutive-voice gate, ordinary words and
-# short sounds must no longer be promoted into a missing „Hey“ prefix.
+# remaining less permissive than build 51. The service keeps recent voice
+# evidence across the model's required trailing blank, so a valid phrase is not
+# discarded just because recognition is finalized after the speaker stops.
 for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
     for iron_index, iron in enumerate(lexicon.get("IRON", []), start=1):
         candidates.append(
