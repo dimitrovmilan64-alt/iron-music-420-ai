@@ -29,11 +29,12 @@ void main() {
       'направи рап текст',
       'дай рими',
       'направи припев',
-      'включи фенера',
-      'turn on flashlight',
     ]) {
       expect(parser, contains(phrase));
     }
+    expect(parser, contains('hasAny("фенер"'));
+    expect(parser, contains('hasAny("включи"'));
+    expect(parser, contains('"turn on"'));
   });
 
   test('native Studio request reaches the existing Rap Studio generator', () {

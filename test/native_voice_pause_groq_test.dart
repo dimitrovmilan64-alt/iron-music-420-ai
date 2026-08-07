@@ -129,13 +129,14 @@ void main() {
     expect(service, contains('.putBoolean(KEY_VOICE_ENABLED, false)'));
   });
 
-  test('always-on command recognition retries one transient failure', () {
+  test('wake command recognition is one-shot on Android errors', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
 
-    expect(service, contains('commandRecognitionRetryCount < 1'));
-    expect(service, contains('Iron опитва микрофона отново'));
-    expect(service, contains('scheduleCommandListening('));
+    expect(service, isNot(contains('commandRecognitionRetryCount')));
+    expect(service, isNot(contains('Iron опитва микрофона отново')));
+    expect(service, contains('voiceState = VoiceState.WAITING_FOR_WAKE'));
+    expect(service, contains('scheduleWakeWordListening('));
   });
 }
