@@ -45,6 +45,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         const val ACTION_STOP = "com.example.ironmusic420ai.STOP_IRON_VOICE"
         const val ACTION_PAUSE_WAKE = "com.example.ironmusic420ai.PAUSE_IRON_WAKE"
         const val ACTION_RESUME_WAKE = "com.example.ironmusic420ai.RESUME_IRON_WAKE"
+        const val VOICE_PREFS = "iron_voice_preferences"
+        const val KEY_VOICE_ENABLED = "voice_enabled"
 
         @Volatile
         var isRunning = false
@@ -57,8 +59,13 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         private const val COMMAND_TIMEOUT_MS = 30_000L
         private const val CONVERSATION_WINDOW_MS = 180_000L
         private const val CONVERSATION_TURNS = 10
+        private const val MIN_SPEECH_WATCHDOG_MS = 5_000L
+        private const val MAX_SPEECH_WATCHDOG_MS = 135_000L
         private const val MODEL_DIR =
             "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
+
+        fun isMicrophoneCaptureActive(): Boolean =
+            VoiceCaptureRegistry.isAnyCaptureActive()
     }
 
     private enum class VoiceState {
@@ -72,6 +79,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     )
 
     private val handler = Handler(Looper.getMainLooper())
+    private val captureOwner = Any()
+
+    @Volatile
+    private var serviceActive = false
+
     private val aiRouter by lazy { GeminiVoiceRouter(this) }
     private var recognizer: SpeechRecognizer? = null
     private var keywordSpotter: KeywordSpotter? = null
@@ -82,13 +94,17 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var ttsReady = false
     private var isListening = false
     private var isSpeaking = false
+    private var activeUtteranceId: String? = null
     private var foregroundStarted = false
     private var voiceState = VoiceState.WAITING_FOR_WAKE
     private var afterSpeech: (() -> Unit)? = null
     private var conversationExpiresAt = 0L
     private var conversationTurnsRemaining = 0
+    private var commandRecognitionRetryCount = 0
     private val pendingCommandParts = mutableListOf<String>()
     private var ignoreNextRecognitionError = false
+    private var capturePauseCount = 0
+    private var aiRequestGeneration = 0
 
     @Volatile
     private var pausedForChatSpeech = false
@@ -111,6 +127,27 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private val finalizePendingCommand = Runnable {
         finalizePendingCommandNow()
     }
+    private val finishSpeechWatchdog = Runnable {
+        if (!isSpeaking) return@Runnable
+        try {
+            textToSpeech?.stop()
+        } catch (_: Exception) {
+            // The callback below still releases the voice state.
+        }
+        finishSpeech()
+    }
+    private val clearRecognitionCancellation = Runnable {
+        if (!ignoreNextRecognitionError) return@Runnable
+        ignoreNextRecognitionError = false
+        setSpeechCaptureActive(false)
+        try {
+            recognizer?.destroy()
+        } catch (_: Exception) {
+            // A recognizer that does not return a cancel callback must be replaced.
+        }
+        recognizer = null
+        if (!pausedForChatSpeech && serviceActive) initializeRecognizer()
+    }
     private val recognitionTimeout = Runnable {
         if (pendingCommandParts.isNotEmpty()) {
             finalizePendingCommandNow()
@@ -118,8 +155,14 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
         if (!isListening || isSpeaking) return@Runnable
         isListening = false
-        ignoreNextRecognitionError = true
-        recognizer?.cancel()
+        expectRecognitionCancellation()
+        try {
+            recognizer?.cancel()
+        } catch (_: Exception) {
+            consumeExpectedRecognitionCancellation()
+            setSpeechCaptureActive(false)
+            resetRecognizer()
+        }
         endConversation()
         voiceState = VoiceState.WAITING_FOR_WAKE
         updateNotification("Iron чака „Hey Iron“")
@@ -129,13 +172,22 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        textToSpeech = TextToSpeech(this, this)
+        textToSpeech = try {
+            TextToSpeech(this, this)
+        } catch (_: Exception) {
+            null
+        }
+        serviceActive = true
         isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                getSharedPreferences(VOICE_PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_VOICE_ENABLED, false)
+                    .apply()
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -170,7 +222,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceActive = false
         isRunning = false
+        aiRequestGeneration++
         handler.removeCallbacksAndMessages(null)
         stopWakeWordListening()
 
@@ -192,12 +246,33 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
         keywordSpotter = null
 
-        recognizer?.cancel()
-        recognizer?.destroy()
+        val recognizerToDestroy = recognizer
         recognizer = null
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
+        try {
+            recognizerToDestroy?.cancel()
+        } catch (_: Exception) {
+            // Continue releasing the rest of the service.
+        }
+        try {
+            recognizerToDestroy?.destroy()
+        } catch (_: Exception) {
+            // Continue releasing the rest of the service.
+        }
+        setSpeechCaptureActive(false)
+        if (thread?.isAlive != true) setWakeCaptureActive(false)
+        activeUtteranceId = null
+        val ttsToDestroy = textToSpeech
         textToSpeech = null
+        try {
+            ttsToDestroy?.stop()
+        } catch (_: Exception) {
+            // Continue releasing the foreground service.
+        }
+        try {
+            ttsToDestroy?.shutdown()
+        } catch (_: Exception) {
+            // Continue releasing the foreground service.
+        }
         isListening = false
         isSpeaking = false
         isAiProcessing = false
@@ -207,24 +282,35 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun pauseForChatSpeech() {
+        capturePauseCount++
         if (pausedForChatSpeech) return
         pausedForChatSpeech = true
+        aiRequestGeneration++
         handler.removeCallbacks(beginWakeWordListening)
         handler.removeCallbacks(beginSpeechRecognition)
         handler.removeCallbacks(finalizePendingCommand)
         handler.removeCallbacks(recognitionTimeout)
+        handler.removeCallbacks(finishSpeechWatchdog)
         pendingCommandParts.clear()
         afterSpeech = null
+        activeUtteranceId = null
         isAiProcessing = false
-        if (isListening) {
-            ignoreNextRecognitionError = true
-            try {
-                recognizer?.cancel()
-            } catch (_: Exception) {
-                // The recognizer may already be stopping.
-            }
+        val currentRecognizer = recognizer
+        recognizer = null
+        try {
+            currentRecognizer?.cancel()
+        } catch (_: Exception) {
+            // The recognizer may already be stopping.
+        }
+        try {
+            currentRecognizer?.destroy()
+        } catch (_: Exception) {
+            // Destroy guarantees that chat dictation can acquire the microphone.
         }
         isListening = false
+        setSpeechCaptureActive(false)
+        ignoreNextRecognitionError = false
+        handler.removeCallbacks(clearRecognitionCancellation)
         if (isSpeaking) {
             try {
                 textToSpeech?.stop()
@@ -240,8 +326,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     private fun resumeAfterChatSpeech() {
         if (!pausedForChatSpeech) return
+        if (capturePauseCount > 0) capturePauseCount--
+        if (capturePauseCount > 0) return
         pausedForChatSpeech = false
-        if (!isRunning) return
+        if (!serviceActive) return
         voiceState = VoiceState.WAITING_FOR_WAKE
         updateNotification("Iron е готов • кажи „Hey Iron“")
         scheduleWakeWordListening(650)
@@ -254,17 +342,46 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-            it.setRecognitionListener(this)
+        recognizer = try {
+            SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(this)
+            }
+        } catch (_: Exception) {
+            updateNotification("Гласовият разпознавател не може да бъде стартиран")
+            null
         }
     }
+
+    private fun expectRecognitionCancellation() {
+        ignoreNextRecognitionError = true
+        handler.removeCallbacks(clearRecognitionCancellation)
+        handler.postDelayed(clearRecognitionCancellation, 1_000L)
+    }
+
+    private fun consumeExpectedRecognitionCancellation(): Boolean {
+        if (!ignoreNextRecognitionError) return false
+        ignoreNextRecognitionError = false
+        handler.removeCallbacks(clearRecognitionCancellation)
+        return true
+    }
+
+    private fun setWakeCaptureActive(active: Boolean) {
+        VoiceCaptureRegistry.setWakeActive(captureOwner, active)
+    }
+
+    private fun setSpeechCaptureActive(active: Boolean) {
+        VoiceCaptureRegistry.setSpeechActive(captureOwner, active)
+    }
+
+    private fun isSpeechCaptureActive(): Boolean =
+        VoiceCaptureRegistry.isSpeechActive(captureOwner)
 
     private fun initializeWakeEngineAsync() {
         if (keywordSpotter != null) {
             scheduleWakeWordListening(100)
             return
         }
-        if (wakeEngineLoading || !isRunning) return
+        if (wakeEngineLoading || !serviceActive) return
 
         wakeEngineLoading = true
         updateNotification("Iron зарежда офлайн модела за „Hey Iron“…")
@@ -284,7 +401,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
                 handler.post {
                     wakeEngineLoading = false
-                    if (!isRunning) {
+                    if (!serviceActive) {
                         try {
                             engine?.release()
                         } catch (_: Exception) {
@@ -345,7 +462,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun scheduleWakeWordListening(delayMillis: Long = 500) {
         handler.removeCallbacks(beginWakeWordListening)
         if (
-            isRunning &&
+            serviceActive &&
             !pausedForChatSpeech &&
             !isSpeaking &&
             !isListening &&
@@ -412,7 +529,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun startWakeWordListening() {
         handler.removeCallbacks(beginWakeWordListening)
         if (
-            !isRunning ||
+            !serviceActive ||
             pausedForChatSpeech ||
             isSpeaking ||
             isListening ||
@@ -420,6 +537,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             wakeThread?.isAlive == true ||
             voiceState != VoiceState.WAITING_FOR_WAKE
         ) {
+            return
+        }
+
+        if (VoiceCaptureRegistry.isAnyCaptureActive()) {
+            scheduleWakeWordListening(180)
             return
         }
 
@@ -462,6 +584,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         keywordStream = stream
         wakeAudioRecord = recorder
         wakeWordActive = true
+        setWakeCaptureActive(true)
         updateNotification("Iron чака „Hey Iron“ • ${recorderHandle.sourceName}")
 
         val worker = Thread(
@@ -471,7 +594,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                 val buffer = ShortArray(WAKE_FRAME_SAMPLES)
 
                 try {
-                    while (isRunning && wakeWordActive) {
+                    while (serviceActive && wakeWordActive) {
                         val count = recorder.read(
                             buffer,
                             0,
@@ -492,7 +615,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                             if (rms >= 0.003f) {
                                 signalConfirmed = true
                                 handler.post {
-                                    if (isRunning && wakeWordActive) {
+                                    if (serviceActive && wakeWordActive) {
                                         updateNotification(
                                             "Микрофонът работи • кажи „Hey Iron“",
                                         )
@@ -534,6 +657,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     } catch (_: Exception) {
                         // Stream may already be released after a native failure.
                     }
+                    setWakeCaptureActive(false)
+                    if (!serviceActive) {
+                        try {
+                            spotter.release()
+                        } catch (_: Exception) {
+                            // The service may have released the engine after joining this thread.
+                        }
+                        if (keywordSpotter === spotter) keywordSpotter = null
+                    }
 
                     val finishedThread = Thread.currentThread()
                     handler.post {
@@ -544,13 +676,13 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
                         if (
                             detected &&
-                            isRunning &&
+                            serviceActive &&
                             !pausedForChatSpeech &&
                             !isSpeaking &&
                             voiceState == VoiceState.WAITING_FOR_WAKE
                         ) {
                             onWakeWordDetected()
-                        } else if (isRunning && !pausedForChatSpeech) {
+                        } else if (serviceActive && !pausedForChatSpeech) {
                             scheduleWakeWordListening(800)
                         }
                     }
@@ -584,7 +716,8 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     private fun onWakeWordDetected() {
         if (
-            !isRunning ||
+            !serviceActive ||
+            pausedForChatSpeech ||
             isSpeaking ||
             voiceState != VoiceState.WAITING_FOR_WAKE
         ) {
@@ -603,11 +736,22 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginSpeechRecognition)
         handler.removeCallbacks(recognitionTimeout)
         if (
-            !isRunning ||
+            !serviceActive ||
+            pausedForChatSpeech ||
             isSpeaking ||
             isListening ||
             voiceState != VoiceState.WAITING_FOR_COMMAND
         ) {
+            return
+        }
+
+        if (ignoreNextRecognitionError) {
+            scheduleCommandListening(120)
+            return
+        }
+
+        if (VoiceCaptureRegistry.isAnyCaptureActive()) {
+            scheduleCommandListening(120)
             return
         }
 
@@ -644,11 +788,13 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
         try {
             isListening = true
+            setSpeechCaptureActive(true)
             updateNotification("Iron слуша командата")
             currentRecognizer.startListening(recognitionIntent)
             handler.postDelayed(recognitionTimeout, COMMAND_TIMEOUT_MS)
         } catch (_: Exception) {
             isListening = false
+            setSpeechCaptureActive(false)
             voiceState = VoiceState.WAITING_FOR_WAKE
             resetRecognizer()
             speak("Не успях да включа микрофона.") {
@@ -660,6 +806,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun beginConversation() {
         pendingCommandParts.clear()
         handler.removeCallbacks(finalizePendingCommand)
+        commandRecognitionRetryCount = 0
         conversationExpiresAt = System.currentTimeMillis() + CONVERSATION_WINDOW_MS
         conversationTurnsRemaining = CONVERSATION_TURNS
         aiRouter.resetConversation()
@@ -672,6 +819,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun endConversation() {
         pendingCommandParts.clear()
         handler.removeCallbacks(finalizePendingCommand)
+        commandRecognitionRetryCount = 0
         conversationExpiresAt = 0L
         conversationTurnsRemaining = 0
         aiRouter.resetConversation()
@@ -679,6 +827,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
     private fun continueConversationOrWake(delayMillis: Long = 650) {
         if (isConversationActive()) {
+            commandRecognitionRetryCount = 0
             conversationTurnsRemaining--
             conversationExpiresAt = System.currentTimeMillis() + CONVERSATION_WINDOW_MS
             voiceState = VoiceState.WAITING_FOR_COMMAND
@@ -724,8 +873,14 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         val shouldCancel = isListening
         isListening = false
         if (shouldCancel) {
-            ignoreNextRecognitionError = true
-            recognizer?.cancel()
+            expectRecognitionCancellation()
+            try {
+                recognizer?.cancel()
+            } catch (_: Exception) {
+                consumeExpectedRecognitionCancellation()
+                setSpeechCaptureActive(false)
+                resetRecognizer()
+            }
         }
 
         val command = pendingCommandParts.joinToString(" ").trim()
@@ -736,8 +891,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun scheduleCommandListening(delayMillis: Long = 250) {
         handler.removeCallbacks(beginSpeechRecognition)
         if (
-            isRunning &&
+            serviceActive &&
+            !pausedForChatSpeech &&
             !isSpeaking &&
+            !isAiProcessing &&
             voiceState == VoiceState.WAITING_FOR_COMMAND
         ) {
             handler.postDelayed(beginSpeechRecognition, delayMillis)
@@ -745,9 +902,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun resetRecognizer() {
-        recognizer?.destroy()
+        val recognizerToDestroy = recognizer
         recognizer = null
-        initializeRecognizer()
+        try {
+            recognizerToDestroy?.destroy()
+        } catch (_: Exception) {
+            // A replacement recognizer can still be created.
+        }
+        setSpeechCaptureActive(false)
+        if (serviceActive && !pausedForChatSpeech) initializeRecognizer()
     }
 
     private fun processRecognition(results: Bundle?, isFinal: Boolean) {
@@ -775,6 +938,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
         if (isFinal) {
             isListening = false
+            commandRecognitionRetryCount = 0
             queueRecognizedPhrase(phrases.first())
         }
     }
@@ -816,6 +980,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         }
 
         isAiProcessing = true
+        val requestGeneration = ++aiRequestGeneration
         updateNotification("Iron мисли с AI…")
 
         Thread(
@@ -828,7 +993,13 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
 
                 handler.post {
                     isAiProcessing = false
-                    if (!isRunning) return@post
+                    if (
+                        !serviceActive ||
+                        pausedForChatSpeech ||
+                        requestGeneration != aiRequestGeneration
+                    ) {
+                        return@post
+                    }
 
                     val decision = result.getOrNull()
                     if (decision != null) {
@@ -1256,58 +1427,91 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginSpeechRecognition)
         handler.removeCallbacks(beginWakeWordListening)
         handler.removeCallbacks(recognitionTimeout)
+        handler.removeCallbacks(finishSpeechWatchdog)
         stopWakeWordListening()
+        val wasListening = isListening || isSpeechCaptureActive()
         isListening = false
         isSpeaking = true
-        recognizer?.cancel()
+        if (wasListening) {
+            expectRecognitionCancellation()
+            try {
+                recognizer?.cancel()
+            } catch (_: Exception) {
+                setSpeechCaptureActive(false)
+            }
+        }
+        val utteranceId = "iron_${System.currentTimeMillis()}"
+        activeUtteranceId = utteranceId
         afterSpeech = onFinished
 
-        if (!ttsReady) {
+        if (!ttsReady || text.isBlank()) {
             handler.postDelayed(
                 {
-                    isSpeaking = false
-                    afterSpeech?.invoke()
-                    afterSpeech = null
+                    finishSpeech(utteranceId)
                 },
                 250,
             )
             return
         }
 
-        textToSpeech?.speak(
+        val result = textToSpeech?.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
             null,
-            "iron_${System.currentTimeMillis()}",
-        )
+            utteranceId,
+        ) ?: TextToSpeech.ERROR
+        if (result == TextToSpeech.ERROR) {
+            finishSpeech(utteranceId)
+            return
+        }
+
+        val watchdogDelay = (MIN_SPEECH_WATCHDOG_MS + text.length * 80L)
+            .coerceAtMost(MAX_SPEECH_WATCHDOG_MS)
+        handler.postDelayed(finishSpeechWatchdog, watchdogDelay)
     }
 
     override fun onInit(status: Int) {
         if (status != TextToSpeech.SUCCESS) return
 
-        ttsReady = true
-        textToSpeech?.language = Locale("bg", "BG")
-        textToSpeech?.setSpeechRate(0.92f)
-        textToSpeech?.setPitch(0.92f)
-        textToSpeech?.setOnUtteranceProgressListener(
+        val tts = textToSpeech ?: return
+        tts.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
 
                 override fun onDone(utteranceId: String?) {
-                    finishSpeech()
+                    finishSpeech(utteranceId)
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    finishSpeech()
+                    finishSpeech(utteranceId)
+                }
+
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    finishSpeech(utteranceId)
                 }
             },
         )
+        val languageStatus = tts.setLanguage(Locale("bg", "BG"))
+        if (
+            languageStatus == TextToSpeech.LANG_MISSING_DATA ||
+            languageStatus == TextToSpeech.LANG_NOT_SUPPORTED
+        ) {
+            tts.setLanguage(Locale.getDefault())
+        }
+        tts.setSpeechRate(0.92f)
+        tts.setPitch(0.92f)
+        ttsReady = true
     }
 
-    private fun finishSpeech() {
+    private fun finishSpeech(utteranceId: String? = null) {
         handler.post {
+            if (utteranceId != null && utteranceId != activeUtteranceId) {
+                return@post
+            }
+            handler.removeCallbacks(finishSpeechWatchdog)
             isSpeaking = false
+            activeUtteranceId = null
             val callback = afterSpeech
             afterSpeech = null
             callback?.invoke()
@@ -1351,7 +1555,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun updateNotification(status: String) {
-        if (!isRunning || !foregroundStarted || status.isBlank()) return
+        if (!serviceActive || !foregroundStarted || status.isBlank()) return
         // The foreground notification intentionally stays unchanged. Rebuilding it
         // for every microphone state caused repeated alerts on some Android skins.
     }
@@ -1411,10 +1615,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onError(error: Int) {
         handler.removeCallbacks(recognitionTimeout)
         isListening = false
-        if (ignoreNextRecognitionError) {
-            ignoreNextRecognitionError = false
-            return
-        }
+        setSpeechCaptureActive(false)
+        if (consumeExpectedRecognitionCancellation()) return
+        if (!serviceActive) return
+        if (pausedForChatSpeech) return
         if (isSpeaking) return
 
         if (pendingCommandParts.isNotEmpty() &&
@@ -1430,13 +1634,23 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
             return
         }
 
-        if (
+        val isTransientRecognizerError =
             error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-            error == SpeechRecognizer.ERROR_AUDIO ||
-            error == SpeechRecognizer.ERROR_CLIENT ||
-            error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
-        ) {
+                error == SpeechRecognizer.ERROR_AUDIO ||
+                error == SpeechRecognizer.ERROR_CLIENT ||
+                error == SpeechRecognizer.ERROR_SERVER ||
+                error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+        if (isTransientRecognizerError) {
             resetRecognizer()
+            if (isConversationActive() && commandRecognitionRetryCount < 1) {
+                commandRecognitionRetryCount++
+                voiceState = VoiceState.WAITING_FOR_COMMAND
+                updateNotification("Iron опитва микрофона отново")
+                scheduleCommandListening(
+                    if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 700L else 1_000L,
+                )
+                return
+            }
         }
 
         if (
@@ -1474,10 +1688,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     override fun onResults(results: Bundle?) {
         handler.removeCallbacks(recognitionTimeout)
         isListening = false
+        setSpeechCaptureActive(false)
+        if (consumeExpectedRecognitionCancellation()) return
+        if (!serviceActive) return
+        if (pausedForChatSpeech) return
         processRecognition(results, isFinal = true)
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
+        if (!serviceActive || ignoreNextRecognitionError || pausedForChatSpeech) return
         processRecognition(partialResults, isFinal = false)
     }
 

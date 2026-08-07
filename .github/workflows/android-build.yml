@@ -25,7 +25,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -48,35 +48,18 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0
-        run: >-
-          flutter analyze --no-fatal-warnings --no-fatal-infos
-          lib/main.dart
-          lib/pages/chat_page.dart
-          lib/pages/rap_studio_page.dart
-          lib/services/ai_provider_config.dart
-          lib/services/gemini_service.dart
-          lib/services/local_store.dart
-          lib/services/automation_service.dart
-          test/native_speech_bridge_test.dart
-          test/native_voice_pause_groq_test.dart
-          test/stable_notification_studio_handoff_test.dart
-          test/single_chat_voice_core_test.dart
-          test/ai_provider_fallback_test.dart
-          test/chat_layout_test.dart
+      - name: Analyze v3.4.0 build 45
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
-      - name: Test single chat voice core and regressions
-        run: >-
-          flutter test
-          test/native_speech_bridge_test.dart
-          test/native_voice_pause_groq_test.dart
-          test/stable_notification_studio_handoff_test.dart
-          test/single_chat_voice_core_test.dart
-          test/ai_provider_fallback_test.dart
-          test/chat_layout_test.dart
+      - name: Test all Flutter regressions
+        run: flutter test
 
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Test native voice lifecycle
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Verify stable APK certificate
         shell: bash
@@ -92,6 +75,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-single-chat-voice-core
+          name: iron-music-420-ai-v3.4.0-build45-voice-fix
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error

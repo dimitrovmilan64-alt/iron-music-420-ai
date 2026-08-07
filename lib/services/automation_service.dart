@@ -101,6 +101,23 @@ class AutomationService {
     }
   }
 
+  Future<bool> pauseIronVoiceCapture() async {
+    try {
+      return await _channel.invokeMethod<bool>('pauseIronVoiceCapture') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> resumeIronVoiceCapture() async {
+    try {
+      await _channel.invokeMethod<bool>('resumeIronVoiceCapture');
+    } catch (_) {
+      // Voice playback must not affect the text response.
+    }
+  }
+
   Future<void> syncGeminiApiKey(String apiKey) async {
     try {
       await _channel.invokeMethod<bool>('syncGeminiApiKey', {

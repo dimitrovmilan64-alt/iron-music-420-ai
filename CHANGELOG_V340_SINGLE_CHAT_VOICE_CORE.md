@@ -8,3 +8,14 @@
 - Opens the existing Rap Studio, loads the request and starts its existing generator.
 - Adds common “Hey Aaron” pronunciation variants to the offline wake-word model.
 - Preserves the silent notification channel, native chat speech, Groq fallback and stable signing.
+
+## Build 45 voice lifecycle fix
+
+- Waits for the wake-word recorder to release the microphone before chat dictation.
+- Retries one transient Android speech failure without accepting stale callbacks.
+- Stops pending recognizer setup and guarantees Activity/service cleanup.
+- Pauses wake capture during every app TTS playback and restores it afterward.
+- Prevents stale AI and TTS callbacks from blocking or restarting the wrong voice state.
+- Restores an enabled Hey Iron service when the app becomes visible again.
+- Persists an explicit stop from either the app or the foreground notification.
+- Adds executable Kotlin lifecycle tests and runs the complete Flutter test suite in CI.

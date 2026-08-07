@@ -24,6 +24,12 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val MAX_CHAT_SPEECH_RELEASE_CHECKS = 30
+        private const val CHAT_SPEECH_RELEASE_CHECK_MS = 100L
+        private const val CHAT_SPEECH_STOP_TIMEOUT_MS = 2_500L
+    }
+
     private val channelName = "iron_music_420/automations"
     private var pendingFlashResult: MethodChannel.Result? = null
     private var pendingFlashEnabled = false
@@ -38,12 +44,36 @@ class MainActivity : FlutterActivity() {
     private var pendingChatSpeechResult: MethodChannel.Result? = null
     private var chatSpeechLastPartial = ""
     private var chatSpeechStopRequested = false
+    private var chatSpeechReleaseChecks = 0
+    private val chatSpeechAttemptTracker = RecognitionAttemptTracker()
     private var restoreIronVoiceAfterChatSpeech = false
+    private val beginChatSpeechRecognition = Runnable {
+        launchChatSpeechRecognizerWhenReady()
+    }
     private val chatSpeechTimeout = Runnable {
-        finishChatSpeech(
-            errorCode = "CHAT_SPEECH_TIMEOUT",
-            errorMessage = "Не чух реч навреме. Натисни микрофона и говори след сигнала.",
-        )
+        if (chatSpeechLastPartial.isNotBlank()) {
+            finishChatSpeech(text = chatSpeechLastPartial)
+        } else if (shouldRetryChatSpeech(SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+            retryChatSpeechRecognition(SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+        } else {
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_TIMEOUT",
+                errorMessage = "Не чух реч навреме. Натисни микрофона и говори след сигнала.",
+            )
+        }
+    }
+    private val chatSpeechStopTimeout = Runnable {
+        if (pendingChatSpeechResult == null || !chatSpeechStopRequested) {
+            return@Runnable
+        }
+        if (chatSpeechLastPartial.isNotBlank()) {
+            finishChatSpeech(text = chatSpeechLastPartial)
+        } else {
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_NO_MATCH",
+                errorMessage = "Не чух ясни думи. Натисни микрофона и говори след сигнала.",
+            )
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -104,6 +134,12 @@ class MainActivity : FlutterActivity() {
                     "cancelChatSpeechRecognition" -> {
                         cancelChatSpeechRecognition(result)
                     }
+                    "pauseIronVoiceCapture" -> {
+                        pauseIronVoiceCapture(result)
+                    }
+                    "resumeIronVoiceCapture" -> {
+                        resumeIronVoiceCapture(result)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -143,6 +179,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun prepareChatSpeechRecognition() {
+        chatSpeechAttemptTracker.resetOperation()
+        chatSpeechReleaseChecks = 0
         restoreIronVoiceAfterChatSpeech = IronVoiceService.isRunning
         if (restoreIronVoiceAfterChatSpeech) {
             startService(
@@ -152,8 +190,38 @@ class MainActivity : FlutterActivity() {
             )
         }
 
-        val releaseDelay = if (restoreIronVoiceAfterChatSpeech) 550L else 120L
-        mainHandler.postDelayed({ launchChatSpeechRecognizer() }, releaseDelay)
+        val releaseDelay = if (restoreIronVoiceAfterChatSpeech) 100L else 80L
+        mainHandler.removeCallbacks(beginChatSpeechRecognition)
+        mainHandler.postDelayed(beginChatSpeechRecognition, releaseDelay)
+    }
+
+    private fun launchChatSpeechRecognizerWhenReady() {
+        if (pendingChatSpeechResult == null) return
+        if (isFinishing || isDestroyed) {
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_CANCELLED",
+                errorMessage = "Гласовото разпознаване беше прекратено.",
+            )
+            return
+        }
+
+        if (IronVoiceService.isMicrophoneCaptureActive()) {
+            if (chatSpeechReleaseChecks < MAX_CHAT_SPEECH_RELEASE_CHECKS) {
+                chatSpeechReleaseChecks++
+                mainHandler.postDelayed(
+                    beginChatSpeechRecognition,
+                    CHAT_SPEECH_RELEASE_CHECK_MS,
+                )
+                return
+            }
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_BUSY",
+                errorMessage = "Микрофонът не се освободи навреме. Опитай отново.",
+            )
+            return
+        }
+
+        launchChatSpeechRecognizer()
     }
 
     private fun launchChatSpeechRecognizer() {
@@ -167,10 +235,21 @@ class MainActivity : FlutterActivity() {
 
         chatSpeechLastPartial = ""
         chatSpeechStopRequested = false
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        val recognizer = try {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        } catch (error: Exception) {
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_START_ERROR",
+                errorMessage = error.localizedMessage
+                    ?: "Android не успя да създаде гласовия разпознавател.",
+            )
+            return
+        }
+        val attemptGeneration = chatSpeechAttemptTracker.beginAttempt()
         chatSpeechRecognizer = recognizer
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
+                if (!isCurrentChatSpeechAttempt(recognizer, attemptGeneration)) return
                 automationChannel?.invokeMethod(
                     "chatSpeechStatus",
                     mapOf("status" to "ready"),
@@ -178,6 +257,7 @@ class MainActivity : FlutterActivity() {
             }
 
             override fun onBeginningOfSpeech() {
+                if (!isCurrentChatSpeechAttempt(recognizer, attemptGeneration)) return
                 automationChannel?.invokeMethod(
                     "chatSpeechStatus",
                     mapOf("status" to "speaking"),
@@ -189,11 +269,19 @@ class MainActivity : FlutterActivity() {
             override fun onEndOfSpeech() = Unit
 
             override fun onError(error: Int) {
+                if (!isCurrentChatSpeechAttempt(recognizer, attemptGeneration)) return
                 if (
-                    chatSpeechStopRequested &&
+                    (chatSpeechStopRequested ||
+                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                        error == SpeechRecognizer.ERROR_NO_MATCH) &&
                     chatSpeechLastPartial.isNotBlank()
                 ) {
                     finishChatSpeech(text = chatSpeechLastPartial)
+                    return
+                }
+
+                if (shouldRetryChatSpeech(error)) {
+                    retryChatSpeechRecognition(error)
                     return
                 }
 
@@ -247,19 +335,25 @@ class MainActivity : FlutterActivity() {
             }
 
             override fun onResults(results: Bundle?) {
+                if (!isCurrentChatSpeechAttempt(recognizer, attemptGeneration)) return
                 val text = bestRecognitionText(results)
                     .ifBlank { chatSpeechLastPartial }
                 if (text.isBlank()) {
-                    finishChatSpeech(
-                        errorCode = "CHAT_SPEECH_NO_MATCH",
-                        errorMessage = "Не чух ясни думи. Натисни микрофона и говори след сигнала.",
-                    )
+                    if (shouldRetryChatSpeech(SpeechRecognizer.ERROR_NO_MATCH)) {
+                        retryChatSpeechRecognition(SpeechRecognizer.ERROR_NO_MATCH)
+                    } else {
+                        finishChatSpeech(
+                            errorCode = "CHAT_SPEECH_NO_MATCH",
+                            errorMessage = "Не чух ясни думи. Натисни микрофона и говори след сигнала.",
+                        )
+                    }
                 } else {
                     finishChatSpeech(text = text)
                 }
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
+                if (!isCurrentChatSpeechAttempt(recognizer, attemptGeneration)) return
                 val text = bestRecognitionText(partialResults)
                 if (text.isBlank()) return
                 chatSpeechLastPartial = text
@@ -308,6 +402,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun isCurrentChatSpeechAttempt(
+        recognizer: SpeechRecognizer,
+        generation: Int,
+    ): Boolean =
+        pendingChatSpeechResult != null &&
+            chatSpeechRecognizer === recognizer &&
+            chatSpeechAttemptTracker.isCurrent(generation)
+
     private fun bestRecognitionText(results: Bundle?): String {
         return results
             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -316,17 +418,87 @@ class MainActivity : FlutterActivity() {
             .trim()
     }
 
+    private fun shouldRetryChatSpeech(error: Int): Boolean {
+        if (
+            !chatSpeechAttemptTracker.canRetry() ||
+            chatSpeechStopRequested ||
+            pendingChatSpeechResult == null
+        ) {
+            return false
+        }
+        return error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+            error == SpeechRecognizer.ERROR_NO_MATCH ||
+            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+            error == SpeechRecognizer.ERROR_AUDIO ||
+            error == SpeechRecognizer.ERROR_CLIENT
+    }
+
+    private fun retryChatSpeechRecognition(error: Int) {
+        if (!chatSpeechAttemptTracker.recordRetry()) return
+        chatSpeechReleaseChecks = 0
+        chatSpeechLastPartial = ""
+        releaseChatSpeechRecognizer()
+        automationChannel?.invokeMethod(
+            "chatSpeechStatus",
+            mapOf("status" to "retrying"),
+        )
+        val delay = when (error) {
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+            SpeechRecognizer.ERROR_AUDIO,
+            SpeechRecognizer.ERROR_CLIENT -> 700L
+            else -> 450L
+        }
+        mainHandler.postDelayed(beginChatSpeechRecognition, delay)
+    }
+
+    private fun releaseChatSpeechRecognizer() {
+        mainHandler.removeCallbacks(chatSpeechTimeout)
+        mainHandler.removeCallbacks(chatSpeechStopTimeout)
+        chatSpeechAttemptTracker.invalidateAttempt()
+        val recognizer = chatSpeechRecognizer
+        chatSpeechRecognizer = null
+        try {
+            recognizer?.cancel()
+        } catch (_: Exception) {
+            // Recognition may already be complete.
+        }
+        try {
+            recognizer?.destroy()
+        } catch (_: Exception) {
+            // Recognition may already be destroyed.
+        }
+    }
+
     private fun stopChatSpeechRecognition(result: MethodChannel.Result) {
         val recognizer = chatSpeechRecognizer
-        if (recognizer == null || pendingChatSpeechResult == null) {
+        if (pendingChatSpeechResult == null) {
             result.success(false)
+            return
+        }
+        if (recognizer == null) {
+            chatSpeechStopRequested = true
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_CANCELLED",
+                errorMessage = "Гласовото разпознаване беше прекратено.",
+            )
+            result.success(true)
             return
         }
         chatSpeechStopRequested = true
         try {
             recognizer.stopListening()
+            mainHandler.removeCallbacks(chatSpeechStopTimeout)
+            mainHandler.postDelayed(
+                chatSpeechStopTimeout,
+                CHAT_SPEECH_STOP_TIMEOUT_MS,
+            )
             result.success(true)
         } catch (error: Exception) {
+            finishChatSpeech(
+                errorCode = "CHAT_SPEECH_STOP_ERROR",
+                errorMessage = error.localizedMessage
+                    ?: "Микрофонът не можа да бъде спрян.",
+            )
             result.error(
                 "CHAT_SPEECH_STOP_ERROR",
                 error.localizedMessage ?: "Микрофонът не можа да бъде спрян.",
@@ -360,20 +532,10 @@ class MainActivity : FlutterActivity() {
     ) {
         val pendingResult = pendingChatSpeechResult ?: return
         pendingChatSpeechResult = null
+        mainHandler.removeCallbacks(beginChatSpeechRecognition)
         mainHandler.removeCallbacks(chatSpeechTimeout)
-
-        val recognizer = chatSpeechRecognizer
-        chatSpeechRecognizer = null
-        try {
-            recognizer?.cancel()
-        } catch (_: Exception) {
-            // Recognition may already be complete.
-        }
-        try {
-            recognizer?.destroy()
-        } catch (_: Exception) {
-            // Recognition may already be destroyed.
-        }
+        mainHandler.removeCallbacks(chatSpeechStopTimeout)
+        releaseChatSpeechRecognizer()
 
         if (errorCode == null) {
             pendingResult.success(text.orEmpty().trim())
@@ -389,21 +551,44 @@ class MainActivity : FlutterActivity() {
         restoreIronVoiceAfterChatSpeech = false
         chatSpeechLastPartial = ""
         chatSpeechStopRequested = false
+        chatSpeechReleaseChecks = 0
         if (shouldRestore &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            mainHandler.postDelayed(
-                {
-                    startService(
-                        Intent(this, IronVoiceService::class.java).apply {
-                            action = IronVoiceService.ACTION_RESUME_WAKE
-                        },
-                    )
+            startService(
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_RESUME_WAKE
                 },
-                250L,
             )
         }
+    }
+
+    private fun pauseIronVoiceCapture(result: MethodChannel.Result) {
+        val active = IronVoiceService.isRunning
+        if (active) {
+            startService(
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_PAUSE_WAKE
+                },
+            )
+        }
+        result.success(active)
+    }
+
+    private fun resumeIronVoiceCapture(result: MethodChannel.Result) {
+        if (
+            IronVoiceService.isRunning &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            startService(
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_RESUME_WAKE
+                },
+            )
+        }
+        result.success(true)
     }
 
     private fun syncGeminiApiKey(
@@ -465,6 +650,75 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureIronSection(intent)
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        restoreIronVoiceIfEnabled()
+    }
+
+    private fun restoreIronVoiceIfEnabled() {
+        if (IronVoiceService.isRunning) return
+        val enabled = getSharedPreferences(
+            IronVoiceService.VOICE_PREFS,
+            Context.MODE_PRIVATE,
+        ).getBoolean(IronVoiceService.KEY_VOICE_ENABLED, true)
+        if (!enabled) return
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_START
+                },
+            )
+        } catch (_: Exception) {
+            // The visible toggle can retry and surface an Android error.
+        }
+    }
+
+    override fun onDestroy() {
+        mainHandler.removeCallbacks(beginChatSpeechRecognition)
+        mainHandler.removeCallbacks(chatSpeechTimeout)
+        mainHandler.removeCallbacks(chatSpeechStopTimeout)
+        val pendingSpeechResult = pendingChatSpeechResult
+        pendingChatSpeechResult = null
+        releaseChatSpeechRecognizer()
+
+        pendingSpeechResult?.error(
+            "CHAT_SPEECH_CANCELLED",
+            "Гласовото разпознаване беше прекратено.",
+            null,
+        )
+        pendingVoiceResult?.error(
+            "IRON_VOICE_CANCELLED",
+            "Стартирането на Iron беше прекратено.",
+            null,
+        )
+        pendingVoiceResult = null
+
+        if (
+            restoreIronVoiceAfterChatSpeech &&
+            IronVoiceService.isRunning &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            startService(
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_RESUME_WAKE
+                },
+            )
+        }
+        restoreIronVoiceAfterChatSpeech = false
+        automationChannel?.setMethodCallHandler(null)
+        automationChannel = null
+        super.onDestroy()
     }
 
     private fun captureIronSection(intent: Intent?) {
@@ -577,6 +831,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "iron_voice_on" -> startIronVoice(result)
                 "iron_voice_off" -> {
+                    getSharedPreferences(IronVoiceService.VOICE_PREFS, Context.MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(IronVoiceService.KEY_VOICE_ENABLED, false)
+                        .apply()
                     stopService(
                         Intent(this, IronVoiceService::class.java).apply {
                             this.action = IronVoiceService.ACTION_STOP
@@ -652,6 +910,10 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun launchIronVoiceService(result: MethodChannel.Result) {
+        getSharedPreferences(IronVoiceService.VOICE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(IronVoiceService.KEY_VOICE_ENABLED, true)
+            .apply()
         ContextCompat.startForegroundService(
             this,
             Intent(this, IronVoiceService::class.java).apply {

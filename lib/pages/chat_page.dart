@@ -324,7 +324,7 @@ class _ChatPageState extends State<ChatPage>
                       voiceName: tempVoiceName,
                       voiceLocale: tempVoiceLocale,
                     );
-                    await _flutterTts.speak(
+                    await _playSpeechWithWakePaused(
                       'Здравей. Аз съм Iron Music 420 AI. Това е тест на българския глас.',
                     );
                   } catch (_) {
@@ -375,11 +375,29 @@ class _ChatPageState extends State<ChatPage>
         ? '${cleanText.substring(0, 3900)}. Краят е съкратен за гласовото прочитане.'
         : cleanText;
 
+    await _playSpeechWithWakePaused(textForSpeech);
+  }
+
+  Future<void> _playSpeechWithWakePaused(String text) async {
+    final resumeIronVoice = await _automation.pauseIronVoiceCapture();
     try {
+      if (resumeIronVoice) {
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      }
       await _flutterTts.stop();
-      await _flutterTts.speak(textForSpeech);
+      await _flutterTts
+          .speak(text)
+          .timeout(const Duration(minutes: 7));
     } catch (_) {
-      // Текстовият отговор остава наличен и без TTS.
+      try {
+        await _flutterTts.stop();
+      } catch (_) {
+        // The wake listener still has to be restored below.
+      }
+    } finally {
+      if (resumeIronVoice) {
+        await _automation.resumeIronVoiceCapture();
+      }
     }
   }
 

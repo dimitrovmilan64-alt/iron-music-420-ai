@@ -48,4 +48,94 @@ void main() {
     expect(chat, contains('Groq API ключ'));
     expect(chat, contains('Адресът и моделът се настройват автоматично'));
   });
+
+  test('chat speech waits for wake capture and retries once', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
+    ).readAsStringSync();
+    final service = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('launchChatSpeechRecognizerWhenReady'));
+    expect(activity, contains('IronVoiceService.isMicrophoneCaptureActive()'));
+    expect(activity, contains('MAX_CHAT_SPEECH_RELEASE_CHECKS'));
+    expect(activity, contains('chatSpeechAttemptTracker.canRetry()'));
+    expect(activity, contains('retryChatSpeechRecognition(error)'));
+    expect(service, contains('fun isMicrophoneCaptureActive()'));
+    expect(service, contains('VoiceCaptureRegistry.isAnyCaptureActive()'));
+  });
+
+  test('stale callbacks cannot close a retried recognition attempt', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('RecognitionAttemptTracker()'));
+    expect(activity, contains('isCurrentChatSpeechAttempt'));
+    expect(activity, contains('chatSpeechRecognizer === recognizer'));
+    expect(activity, contains('chatSpeechAttemptTracker.isCurrent(generation)'));
+  });
+
+  test('pending speech can stop and activity always releases recognizer', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('if (recognizer == null)'));
+    expect(activity, contains('chatSpeechStopTimeout'));
+    expect(activity, contains('releaseChatSpeechRecognizer()'));
+    expect(activity, contains('override fun onDestroy()'));
+    expect(
+      activity,
+      contains('mainHandler.removeCallbacks(beginChatSpeechRecognition)'),
+    );
+  });
+
+  test('TTS cannot compete with dictation or leave wake mode blocked', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
+    ).readAsStringSync();
+    final service = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
+    ).readAsStringSync();
+    final automation =
+        File('lib/services/automation_service.dart').readAsStringSync();
+    final chat = File('lib/pages/chat_page.dart').readAsStringSync();
+
+    expect(activity, contains('pauseIronVoiceCapture'));
+    expect(activity, contains('resumeIronVoiceCapture'));
+    expect(automation, contains('Future<bool> pauseIronVoiceCapture()'));
+    expect(chat, contains('_playSpeechWithWakePaused'));
+    expect(chat, contains('await _automation.resumeIronVoiceCapture()'));
+    expect(service, contains('finishSpeechWatchdog'));
+    expect(service, contains('activeUtteranceId'));
+    expect(service, contains('consumeExpectedRecognitionCancellation()'));
+    expect(service, contains('requestGeneration != aiRequestGeneration'));
+  });
+
+  test('enabled Hey Iron mode is restored after reopening the app', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
+    ).readAsStringSync();
+    final service = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(activity, contains('override fun onPostResume()'));
+    expect(activity, contains('restoreIronVoiceIfEnabled()'));
+    expect(activity, contains('IronVoiceService.KEY_VOICE_ENABLED'));
+    expect(service, contains('ACTION_STOP'));
+    expect(service, contains('.putBoolean(KEY_VOICE_ENABLED, false)'));
+  });
+
+  test('always-on command recognition retries one transient failure', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(service, contains('commandRecognitionRetryCount < 1'));
+    expect(service, contains('Iron опитва микрофона отново'));
+    expect(service, contains('scheduleCommandListening('));
+  });
 }
