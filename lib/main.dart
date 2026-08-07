@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/chat_page.dart';
+import 'pages/commands_page.dart';
 import 'pages/rap_studio_page.dart';
 import 'pages/songs_page.dart';
 import 'services/automation_service.dart';
@@ -47,7 +48,12 @@ Future<void> main() async {
 
   final store = LocalStore();
   await store.initialize();
-  await AutomationService().syncGeminiApiKey(store.apiKey);
+  await AutomationService().syncAiProviderSettings(
+    geminiApiKey: store.apiKey,
+    backupApiKey: store.backupApiKey,
+    backupBaseUrl: store.backupBaseUrl,
+    backupModel: store.backupModel,
+  );
   runApp(IronMusic420App(store: store));
 }
 
@@ -171,7 +177,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   static const _navItems = <IronNavItem>[
     IronNavItem(
       icon: Icons.auto_awesome_outlined,
-      selectedIcon: Icons.auto_awesome,
+      selectedIcon: Icons.auto_awesome_rounded,
       label: 'AI',
     ),
     IronNavItem(
@@ -191,9 +197,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _pages = [
-      ChatPage(store: widget.store),
+      ChatPage(
+        store: widget.store,
+        onOpenTools: () => _openSection(4),
+        onSendToStudio: (text) async {
+          await widget.store.sendTextToStudio(text);
+          _openSection(1);
+        },
+      ),
       RapStudioPage(store: widget.store),
       SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
+      CommandsPage(store: widget.store, onOpenSection: _openSection),
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
   }
@@ -213,21 +227,34 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Future<void> _openPendingSection() async {
     final section = await _automation.consumeIronSection();
-    if (section == null) return;
-
-    // Native actions still use the original section IDs. The compact v3.1
-    // navigation maps every assistant/home request to the main AI screen.
-    final compactIndex = switch (section) {
-      1 => 1,
-      2 => 2,
-      _ => 0,
-    };
-    _openSection(compactIndex);
+    if (section != null) {
+      _openSection(section);
+    }
   }
 
-  void _openSection(int index) {
-    if (!mounted || index < 0 || index >= _pages.length) return;
-    setState(() => _currentIndex = index);
+  void _openSection(int legacyIndex) {
+    if (!mounted) return;
+
+    int targetIndex;
+    switch (legacyIndex) {
+      case 0:
+      case 3:
+        targetIndex = 0;
+        break;
+      case 1:
+        targetIndex = 1;
+        break;
+      case 2:
+        targetIndex = 2;
+        break;
+      case 4:
+        targetIndex = 3;
+        break;
+      default:
+        return;
+    }
+
+    setState(() => _currentIndex = targetIndex);
   }
 
   @override
@@ -236,7 +263,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: IronBottomNavigation(
-        selectedIndex: _currentIndex,
+        selectedIndex: _currentIndex < _navItems.length ? _currentIndex : 0,
         onSelected: _openSection,
         items: _navItems,
       ),

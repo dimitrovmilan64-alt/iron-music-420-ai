@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/chat_message.dart';
+import '../models/song_project.dart';
+import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
@@ -11,8 +12,15 @@ import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
   final LocalStore store;
+  final VoidCallback? onOpenTools;
+  final Future<void> Function(String text)? onSendToStudio;
 
-  const ChatPage({super.key, required this.store});
+  const ChatPage({
+    super.key,
+    required this.store,
+    this.onOpenTools,
+    this.onSendToStudio,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -21,28 +29,23 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage>
     with SingleTickerProviderStateMixin {
   static const _welcomeText =
-      'Аз съм Iron. Говори ми естествено на български — помня разговора и мога да продължавам по контекста.';
+      'Готов съм. Добави поне един AI доставчик и ме попитай на български.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
+  late final TextEditingController _backupApiKeyController;
+  late final TextEditingController _backupBaseUrlController;
+  late final TextEditingController _backupModelController;
   final ScrollController _scrollController = ScrollController();
   final FlutterTts _flutterTts = FlutterTts();
-  final stt.SpeechToText _speechToText = stt.SpeechToText();
   final GeminiService _gemini = GeminiService();
   final AutomationService _automation = AutomationService();
   late final AnimationController _coreController;
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
-  bool _showApiBox = false;
   bool _isListening = false;
-  bool _speechAvailable = false;
   bool _voiceReady = false;
-  bool _speechSendTriggered = false;
-  bool _conversationMode = false;
-  bool _ironActive = false;
-  bool _ironBusy = false;
-  String _bulgarianLocale = 'bg_BG';
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
   String _selectedVoiceLocale = '';
@@ -57,7 +60,12 @@ class _ChatPageState extends State<ChatPage>
       duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
     _apiKeyController = TextEditingController(text: widget.store.apiKey);
-    _showApiBox = !widget.store.hasApiKey;
+    _backupApiKeyController =
+        TextEditingController(text: widget.store.backupApiKey);
+    _backupBaseUrlController =
+        TextEditingController(text: widget.store.backupBaseUrl);
+    _backupModelController =
+        TextEditingController(text: widget.store.backupModel);
     _messages = List<ChatMessage>.from(widget.store.chatHistory);
 
     if (_messages.isEmpty) {
@@ -77,18 +85,29 @@ class _ChatPageState extends State<ChatPage>
     _selectedVoiceName = widget.store.ttsVoiceName;
     _selectedVoiceLocale = widget.store.ttsVoiceLocale;
     _configureBulgarianVoice();
-    _prepareSpeechRecognition();
-    _loadIronStatus();
+    _automation.setNativeSpeechPartialListener((recognized) {
+      if (!mounted || !_isListening) return;
+      setState(() {
+        _messageController.text = recognized;
+        _messageController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _messageController.text.length),
+        );
+      });
+    });
   }
 
   @override
   void dispose() {
     _coreController.dispose();
     _flutterTts.stop();
-    _speechToText.stop();
+    _automation.setNativeSpeechPartialListener(null);
+    _automation.cancelNativeSpeechRecognition();
     _gemini.dispose();
     _messageController.dispose();
     _apiKeyController.dispose();
+    _backupApiKeyController.dispose();
+    _backupBaseUrlController.dispose();
+    _backupModelController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -347,52 +366,6 @@ class _ChatPageState extends State<ChatPage>
     if (mounted) _showMessage('Настройките на гласа са запазени.');
   }
 
-  Future<void> _prepareSpeechRecognition() async {
-    try {
-      final available = await _speechToText.initialize(
-        options: [stt.SpeechToText.androidNoBluetooth],
-        onStatus: (status) {
-          if (!mounted) return;
-          if (status == 'done' || status == 'notListening') {
-            final shouldAutoSend = _isListening &&
-                !_speechSendTriggered &&
-                _messageController.text.trim().isNotEmpty;
-            setState(() => _isListening = false);
-            if (shouldAutoSend) {
-              Future.microtask(_sendRecognizedSpeech);
-            }
-          }
-        },
-        onError: (error) {
-          if (!mounted) return;
-          setState(() => _isListening = false);
-          _showMessage('Проблем с микрофона: ${error.errorMsg}');
-        },
-      );
-
-      String localeId = 'bg_BG';
-      if (available) {
-        final locales = await _speechToText.locales();
-        for (final locale in locales) {
-          final normalized = locale.localeId.toLowerCase();
-          if (normalized == 'bg_bg' || normalized.startsWith('bg')) {
-            localeId = locale.localeId;
-            break;
-          }
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _speechAvailable = available;
-        _bulgarianLocale = localeId;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _speechAvailable = false);
-    }
-  }
-
   Future<void> _speak(String text) async {
     if (!widget.store.voiceRepliesEnabled) return;
 
@@ -424,160 +397,385 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  Future<void> _loadIronStatus() async {
-    final active = await _automation.isIronVoiceActive();
-    if (!mounted) return;
-    setState(() => _ironActive = active);
-  }
-
-  Future<void> _toggleIron() async {
-    if (_ironBusy) return;
-    setState(() => _ironBusy = true);
-    final result = await _automation.execute(
-      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
-    );
-    if (!mounted) return;
-    setState(() {
-      _ironBusy = false;
-      if (result.success) _ironActive = !_ironActive;
-    });
-    _showMessage(result.message);
-  }
-
-  Future<void> _toggleConversationMode() async {
-    final enabled = !_conversationMode;
-    setState(() => _conversationMode = enabled);
-
-    if (!enabled) {
-      await _speechToText.stop();
-      if (mounted) setState(() => _isListening = false);
-      return;
-    }
-
-    if (!_isLoading && !_speechToText.isListening) {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      if (mounted && _conversationMode) await _toggleListening();
-    }
-  }
-
-  void _scheduleConversationListening() {
-    if (!_conversationMode) return;
-    Future<void>.delayed(const Duration(milliseconds: 650)).then((_) async {
-      if (!mounted || !_conversationMode || _isLoading) return;
-      if (_speechToText.isListening || _isListening) return;
-      await _toggleListening();
-    });
-  }
-
-  Future<void> _sendRecognizedSpeech() async {
-    if (_speechSendTriggered || _isLoading) return;
-    if (_messageController.text.trim().isEmpty) return;
-
-    _speechSendTriggered = true;
-    if (mounted) setState(() => _isListening = false);
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    if (!mounted) return;
-    await _sendMessage();
-  }
-
   Future<void> _toggleListening() async {
-    if (_speechToText.isListening) {
-      await _speechToText.stop();
-      if (mounted) setState(() => _isListening = false);
-      await _sendRecognizedSpeech();
+    if (_isLoading) return;
+
+    if (_isListening) {
+      await _automation.stopNativeSpeechRecognition();
       return;
     }
 
     await _flutterTts.stop();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!mounted) return;
 
-    if (!_speechAvailable) {
-      await _prepareSpeechRecognition();
-    }
+    setState(() => _isListening = true);
+    final result = await _automation.startNativeSpeechRecognition();
+    if (!mounted) return;
 
-    if (!_speechAvailable) {
-      if (mounted) {
-        _showMessage(
-          'Разпознаването на реч не е налично. Разреши микрофона и провери Google Speech Services.',
-        );
+    setState(() => _isListening = false);
+    if (!result.success) {
+      if (result.message.trim().isNotEmpty) {
+        _showMessage(result.message.trim());
       }
       return;
     }
 
-    _speechSendTriggered = false;
-    setState(() => _isListening = true);
-
-    try {
-      await _speechToText.listen(
-        localeId: _bulgarianLocale,
-        listenFor: const Duration(seconds: 90),
-        pauseFor: const Duration(seconds: 7),
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: stt.ListenMode.dictation,
-        onResult: (result) {
-          if (!mounted) return;
-          final recognized = result.recognizedWords.trim();
-          setState(() {
-            _messageController.text = recognized;
-            _messageController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _messageController.text.length),
-            );
-          });
-
-          if (result.finalResult && recognized.isNotEmpty) {
-            Future.microtask(_sendRecognizedSpeech);
-          }
-        },
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isListening = false);
-      _showMessage('Микрофонът не можа да стартира.');
-    }
-  }
-
-  Future<void> _saveApiKey() async {
-    final value = _apiKeyController.text.trim();
-    if (value.isEmpty) {
-      _showMessage('Постави Gemini API ключ.');
+    final recognized = result.text.trim();
+    if (recognized.isEmpty) {
+      _showMessage('Не чух думи. Натисни микрофона и говори след сигнала.');
       return;
     }
 
-    await widget.store.setApiKey(value);
-    await _automation.syncGeminiApiKey(value);
-    _gemini.resetModel();
-    if (!mounted) return;
-    setState(() => _showApiBox = false);
-    _showMessage('API ключът е запазен локално на телефона.');
+    setState(() {
+      _messageController.text = recognized;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length),
+      );
+    });
+    await _sendMessage();
   }
 
-  Future<void> _clearApiKey() async {
+  bool _requestsStudioTransfer(String value) {
+    final text = value.toLowerCase();
+    final mentionsStudio = text.contains('рап студио') ||
+        text.contains('rap studio') ||
+        text.contains('студиото') ||
+        text.contains('студио');
+    final asksTransfer = text.contains('прехвърли') ||
+        text.contains('прати') ||
+        text.contains('изпрати') ||
+        text.contains('сложи') ||
+        text.contains('вкарай') ||
+        text.contains('отвори го');
+    return mentionsStudio && asksTransfer;
+  }
+
+  bool _isDirectStudioTransferCommand(String value) {
+    if (!_requestsStudioTransfer(value)) return false;
+    final text = value.toLowerCase();
+    final asksCreation = text.contains('напиши') ||
+        text.contains('направи') ||
+        text.contains('създай') ||
+        text.contains('генерирай') ||
+        text.contains('измисли') ||
+        text.contains('редактирай');
+    return !asksCreation;
+  }
+
+  ChatMessage? _lastAssistantMessage() {
+    for (final message in _messages.reversed) {
+      if (!message.isUser && !message.isLocalNotice && message.text.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _sendTextToStudio(String text) async {
+    final cleanText = cleanMarkdownForDisplay(text).trim();
+    if (cleanText.isEmpty) {
+      _showMessage('Няма текст за прехвърляне.');
+      return;
+    }
+    final callback = widget.onSendToStudio;
+    if (callback == null) {
+      _showMessage('Рап студиото не е достъпно.');
+      return;
+    }
+    await callback(cleanText);
+    if (mounted) {
+      _showMessage('Текстът е прехвърлен в Рап студио.');
+    }
+  }
+
+  String? _detectMusicCommand(String value) {
+    final text = value.toLowerCase();
+    final refersToExisting = text.contains('го') ||
+        text.contains('това') ||
+        text.contains('текста') ||
+        text.contains('песента') ||
+        text.contains('последн');
+    if (!refersToExisting) return null;
+
+    if (text.contains('запази') &&
+        (text.contains('песен') || text.contains('моите песни'))) {
+      return 'save';
+    }
+    if (text.contains('анализ')) return 'analyze';
+    if (text.contains('припев') || text.contains('рефрен')) return 'hook';
+    if (text.contains('музикален промпт') ||
+        text.contains('suno промпт') ||
+        text.contains('стил за suno') ||
+        text.contains('бийт промпт')) {
+      return 'music_prompt';
+    }
+    if ((text.contains('стегни') ||
+            text.contains('подобри') ||
+            text.contains('оправи') ||
+            text.contains('преработи')) &&
+        (text.contains('рим') || text.contains('текст'))) {
+      return 'improve';
+    }
+    return null;
+  }
+
+  String _songTitleFromText(String value) {
+    final lines = cleanMarkdownForDisplay(value)
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty && !line.startsWith('['))
+        .toList();
+    if (lines.isEmpty) return 'Iron Chat песен';
+
+    final words = lines.first
+        .replaceAll(RegExp(r'^[#>*\-\s]+'), '')
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .take(7)
+        .join(' ')
+        .replaceAll(RegExp(r'[,:;.!?]+$'), '')
+        .trim();
+    return words.isEmpty ? 'Iron Chat песен' : words;
+  }
+
+  Future<void> _saveChatTextAsSong(String sourceText) async {
+    final cleanText = cleanMarkdownForDisplay(sourceText).trim();
+    if (cleanText.isEmpty) {
+      _showMessage('Няма текст за запазване.');
+      return;
+    }
+
+    final project = SongProject.create(
+      title: _songTitleFromText(cleanText),
+      lyrics: cleanText,
+      musicPrompt: '',
+      theme: '',
+      style: 'Hard trap',
+      mood: 'Тъмно и агресивно',
+      rhymeScheme: 'Многосрични рими',
+      bpm: 140,
+    );
+    await widget.store.upsertSong(project);
+    await widget.store.loadSongIntoStudio(project);
+    if (mounted) {
+      _showMessage('Песента е запазена в „Моите песни“.');
+    }
+  }
+
+  Future<void> _appendAssistantMusicResult(String result) async {
+    final cleanResult = result.trim();
+    if (cleanResult.isEmpty || !mounted) return;
+    final message = ChatMessage(
+      text: cleanResult,
+      isUser: false,
+      createdAt: DateTime.now(),
+    );
+    setState(() => _messages.add(message));
+    await widget.store.replaceChatHistory(_messages);
+    _scrollToBottom();
+    await _speak(cleanResult);
+  }
+
+  Future<void> _runChatMusicAction(String action, String sourceText) async {
+    final cleanText = cleanMarkdownForDisplay(sourceText).trim();
+    if (cleanText.isEmpty || _isLoading) return;
+
+    if (action == 'studio') {
+      await _sendTextToStudio(cleanText);
+      return;
+    }
+    if (action == 'save') {
+      await _saveChatTextAsSong(cleanText);
+      return;
+    }
+    if (!widget.store.hasAnyAiProvider) {
+      await _openApiKeySheet();
+      return;
+    }
+
+    final excerpt = cleanText.length > 12000
+        ? cleanText.substring(0, 12000)
+        : cleanText;
+    final instruction = switch (action) {
+      'hook' => '''
+Напиши силен оригинален български рап припев от 6 до 8 реда за текста по-долу.
+Да е лесен за запомняне, ритмичен и подходящ за повторение.
+Върни само секция [Припев], без обяснения и без указания в кръгли скоби.
+
+ТЕКСТ:
+$excerpt
+''',
+      'improve' => '''
+Преработи целия български рап текст професионално.
+Запази смисъла, историята и личния тон, но подобри ритъма, вътрешните и многосричните рими, punchline-ите и слабите повторения.
+Върни целия завършен редактиран текст без обяснения и без указания в кръгли скоби.
+
+ОРИГИНАЛ:
+$excerpt
+''',
+      'analyze' => '''
+Анализирай следния български рап текст практично и конкретно.
+Дай кратки секции: тема и послание, структура, ритъм и flow, рими, най-силни редове, слаби места и точни следващи поправки.
+Не пренаписвай целия текст.
+
+ТЕКСТ:
+$excerpt
+''',
+      'music_prompt' => '''
+Създай професионален пакет за Suno за текста по-долу.
+Върни точно:
+STYLE OF MUSIC:
+кратък английски промпт за жанр, BPM, барабани, бас, инструменти, нисък естествен мъжки вокал, атмосфера и микс.
+EXCLUDE:
+кратък английски списък с нежелани елементи.
+Не добавяй текст на песента и не използвай имена на известни изпълнители.
+
+ТЕКСТ:
+$excerpt
+''',
+      _ => '',
+    };
+    if (instruction.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    _scrollToBottom();
+    try {
+      final result = await _gemini.generateRap(
+        apiKey: widget.store.apiKey.trim(),
+        instruction: instruction,
+      );
+      await _appendAssistantMusicResult(result);
+    } on GeminiException catch (error) {
+      if (mounted) await _addLocalNotice(error.message);
+    } catch (_) {
+      if (mounted) {
+        await _addLocalNotice('Неочаквана грешка при музикалната AI команда.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _scrollToBottom();
+      }
+    }
+  }
+
+  Future<void> _syncNativeAiSettings() {
+    return _automation.syncAiProviderSettings(
+      geminiApiKey: widget.store.apiKey,
+      backupApiKey: widget.store.backupApiKey,
+      backupBaseUrl: widget.store.backupBaseUrl,
+      backupModel: widget.store.backupModel,
+    );
+  }
+
+  Future<bool> _saveAiProviders() async {
+    final geminiKey = _apiKeyController.text.trim();
+    final backupKey = _backupApiKeyController.text.trim();
+    final backupBaseUrl = backupKey.isEmpty
+        ? _backupBaseUrlController.text.trim()
+        : AiProviderConfig.defaultBackupBaseUrl;
+    final backupModel = backupKey.isEmpty
+        ? _backupModelController.text.trim()
+        : AiProviderConfig.defaultBackupModel;
+
+    if (geminiKey.isEmpty && backupKey.isEmpty) {
+      _showMessage('Добави Gemini или резервен AI API ключ.');
+      return false;
+    }
+
+    if (backupKey.isNotEmpty) {
+      final normalizedBase = backupBaseUrl.endsWith('/chat/completions')
+          ? backupBaseUrl
+          : '${backupBaseUrl.replaceFirst(RegExp(r'/+$'), '')}/chat/completions';
+      final endpoint = Uri.tryParse(normalizedBase);
+      if (endpoint == null ||
+          !endpoint.hasScheme ||
+          endpoint.host.isEmpty ||
+          (endpoint.scheme != 'https' && endpoint.scheme != 'http')) {
+        _showMessage('Адресът на резервния AI доставчик не е валиден.');
+        return false;
+      }
+      if (backupModel.isEmpty) {
+        _showMessage('Въведи модел за резервния AI доставчик.');
+        return false;
+      }
+    }
+
+    await widget.store.setApiKey(geminiKey);
+    await widget.store.setBackupProvider(
+      apiKey: backupKey,
+      baseUrl: backupBaseUrl,
+      model: backupModel,
+    );
+    await _syncNativeAiSettings();
+    _gemini.resetModel();
+    if (!mounted) return false;
+    setState(() {});
+    _showMessage('Gemini и Groq са запазени локално на телефона.');
+    return true;
+  }
+
+  Future<void> _clearGeminiApiKey() async {
     _apiKeyController.clear();
     await widget.store.setApiKey('');
-    await _automation.syncGeminiApiKey('');
+    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
-    setState(() => _showApiBox = true);
-    _showMessage('API ключът е премахнат.');
+    setState(() {});
+    _showMessage('Gemini ключът е премахнат.');
+  }
+
+  Future<void> _clearBackupProvider() async {
+    _backupApiKeyController.clear();
+    await widget.store.setBackupProvider(
+      apiKey: '',
+      baseUrl: _backupBaseUrlController.text,
+      model: _backupModelController.text,
+    );
+    await _syncNativeAiSettings();
+    _gemini.resetModel();
+    if (!mounted) return;
+    setState(() {});
+    _showMessage('Groq ключът е премахнат.');
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading) return;
 
-    await _speechToText.stop();
+    if (_isListening) {
+      await _automation.cancelNativeSpeechRecognition();
+      if (mounted) setState(() => _isListening = false);
+    }
 
-    final typedKey = _apiKeyController.text.trim();
-    if (typedKey.isNotEmpty && typedKey != widget.store.apiKey) {
-      await widget.store.setApiKey(typedKey);
-      await _automation.syncGeminiApiKey(typedKey);
-      _gemini.resetModel();
+    final wantsStudioTransfer = _requestsStudioTransfer(text);
+    if (_isDirectStudioTransferCommand(text)) {
+      final previous = _lastAssistantMessage();
+      _messageController.clear();
+      if (previous == null) {
+        _showMessage('Първо нека напиша текст, който да прехвърля.');
+        return;
+      }
+      await _sendTextToStudio(previous.text);
+      return;
+    }
+
+    final musicCommand = _detectMusicCommand(text);
+    if (musicCommand != null) {
+      final previous = _lastAssistantMessage();
+      _messageController.clear();
+      if (previous == null) {
+        _showMessage('Първо нека напиша текст, върху който да работя.');
+        return;
+      }
+      await _runChatMusicAction(musicCommand, previous.text);
+      return;
     }
 
     final apiKey = widget.store.apiKey.trim();
-    if (apiKey.isEmpty) {
-      setState(() => _showApiBox = true);
-      _showMessage('Първо постави и запази Gemini API ключа.');
+    if (!widget.store.hasAnyAiProvider) {
+      await _openApiKeySheet();
       return;
     }
 
@@ -611,6 +809,9 @@ class _ChatPageState extends State<ChatPage>
       setState(() => _messages.add(aiMessage));
       await widget.store.replaceChatHistory(_messages);
       _scrollToBottom();
+      if (wantsStudioTransfer) {
+        await _sendTextToStudio(reply);
+      }
       await _speak(reply);
     } on GeminiException catch (error) {
       if (!mounted) return;
@@ -622,7 +823,6 @@ class _ChatPageState extends State<ChatPage>
       if (mounted) {
         setState(() => _isLoading = false);
         _scrollToBottom();
-        _scheduleConversationListening();
       }
     }
   }
@@ -692,171 +892,347 @@ class _ChatPageState extends State<ChatPage>
         SnackBar(
           content: Text(text),
           behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(
-            16,
-            8,
-            16,
-            96 + MediaQuery.of(context).viewInsets.bottom,
-          ),
           duration: const Duration(seconds: 2),
         ),
       );
   }
 
-  Widget _buildApiSection() {
-    if (!_showApiBox) {
-      return const SizedBox.shrink();
-    }
+  Future<void> _openApiKeySheet() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _apiKeyController.text = widget.store.apiKey;
+    _backupApiKeyController.text = widget.store.backupApiKey;
+    _backupBaseUrlController.text = widget.store.backupBaseUrl;
+    _backupModelController.text = widget.store.backupModel;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: IronCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Gemini API ключ',
-              style: TextStyle(
-                color: ironGreen,
-                fontWeight: FontWeight.bold,
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: Material(
+            color: ironPanelRaised,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(28),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Row(
+                    children: [
+                      Icon(Icons.hub_rounded, color: ironGreen),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'AI доставчици',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Iron използва Gemini първо. При лимит или недостъпност автоматично преминава към Groq. Ключовете се пазят само локално на телефона.',
+                    style: TextStyle(color: Colors.white60, height: 1.35),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    '1. Основен доставчик · Gemini',
+                    style: TextStyle(
+                      color: ironGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _apiKeyController,
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Gemini API ключ',
+                      hintText: 'AIza...',
+                      prefixIcon: Icon(Icons.key_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '2. Резервен доставчик · Groq',
+                    style: TextStyle(
+                      color: ironGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Постави само Groq API ключа. Адресът и моделът се настройват автоматично.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _backupApiKeyController,
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Groq API ключ',
+                      hintText: 'gsk_...',
+                      prefixIcon: Icon(Icons.shield_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Color(0x3300FF77),
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                    ),
+                    child: Text(
+                      'Groq Free · openai/gpt-oss-20b',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final saved = await _saveAiProviders();
+                      if (saved && sheetContext.mounted) {
+                        Navigator.pop(sheetContext);
+                      }
+                    },
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('Запази AI доставчиците'),
+                  ),
+                  if (widget.store.hasApiKey ||
+                      widget.store.hasBackupProvider) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (widget.store.hasApiKey)
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await _clearGeminiApiKey();
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('Премахни Gemini'),
+                          ),
+                        if (widget.store.hasBackupProvider)
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await _clearBackupProvider();
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('Премахни резервния'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Ключът се пази само в локалните настройки на приложението.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _roundAction({
+    required IconData icon,
+    required String tooltip,
+    required bool active,
+    required VoidCallback? onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const CircleBorder(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? ironGreen.withOpacity(0.16)
+                  : Colors.black.withOpacity(0.28),
+              border: Border.all(
+                color: ironGreen.withOpacity(active ? 0.68 : 0.25),
+              ),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: ironGreen.withOpacity(0.16),
+                        blurRadius: 16,
+                      ),
+                    ]
+                  : null,
             ),
-            const SizedBox(height: 10),
-            IronInput(
-              controller: _apiKeyController,
-              label: 'API ключ',
-              hint: 'AIza...',
-              obscureText: true,
+            child: Icon(
+              icon,
+              color: active ? ironGreen : Colors.white60,
+              size: 21,
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: IronButton(
-                    text: 'Запази',
-                    icon: Icons.save,
-                    onPressed: _saveApiKey,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: IronButton(
-                    text: 'Премахни',
-                    icon: Icons.delete_outline,
-                    secondary: true,
-                    onPressed: _clearApiKey,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  String get _coreStatus {
-    if (_isListening) return 'СЛУШАМ';
-    if (_isLoading) return 'МИСЛЯ';
-    if (_conversationMode) return 'РАЗГОВОРЪТ Е АКТИВЕН';
-    return 'ГОТОВ СЪМ';
-  }
+  Widget _buildAssistantCore(double size) {
+    final status = _isListening
+        ? 'СЛУШАМ'
+        : _isLoading
+            ? 'МИСЛЯ'
+            : 'ГОТОВ СЪМ';
 
-  Widget _coreControl({
-    required IconData icon,
-    required String tooltip,
-    required bool active,
-    required VoidCallback? onPressed,
-    required double size,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: active
-                ? ironGreen.withOpacity(0.16)
-                : Colors.black.withOpacity(0.28),
-            border: Border.all(
-              color: ironGreen.withOpacity(active ? 0.72 : 0.24),
+    return AnimatedBuilder(
+      animation: _coreController,
+      builder: (context, _) {
+        final activity = (_isListening || _isLoading) ? 0.22 : 0.0;
+        final progress =
+            (_coreController.value * 0.72 + activity).clamp(0.0, 1.0).toDouble();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              button: true,
+              label: _isListening ? 'Спри слушането' : 'Говори с Iron',
+              child: GestureDetector(
+                onTap: _isLoading ? null : _toggleListening,
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 180),
+                  scale: _isListening ? 1.05 : 1.0,
+                  child: CannabisCore(progress: progress, size: size),
+                ),
+              ),
             ),
-            boxShadow: active
-                ? [
-                    BoxShadow(
-                      color: ironGreen.withOpacity(0.18),
-                      blurRadius: 16,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Icon(
-            icon,
-            color: active ? ironGreen : Colors.white54,
-            size: size * 0.48,
-          ),
-        ),
-      ),
+            const SizedBox(height: 2),
+            Text(
+              status,
+              style: TextStyle(
+                color: _isListening ? ironGreenSoft : ironGreen,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.2,
+                shadows: const [Shadow(color: ironGreen, blurRadius: 10)],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _roundAction(
+                  icon: _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                  tooltip: _isListening ? 'Спри слушането' : 'Микрофон',
+                  active: _isListening,
+                  onPressed: _isLoading ? null : _toggleListening,
+                ),
+                const SizedBox(width: 12),
+                _roundAction(
+                  icon: widget.store.voiceRepliesEnabled
+                      ? Icons.volume_up_rounded
+                      : Icons.volume_off_rounded,
+                  tooltip: widget.store.voiceRepliesEnabled
+                      ? (_voiceReady ? 'Гласовите отговори са включени' : 'Системен глас')
+                      : 'Гласовите отговори са изключени',
+                  active: widget.store.voiceRepliesEnabled,
+                  onPressed: _toggleVoiceReplies,
+                ),
+                const SizedBox(width: 12),
+                _roundAction(
+                  icon: Icons.key_rounded,
+                  tooltip: 'AI доставчици',
+                  active: widget.store.hasAnyAiProvider,
+                  onPressed: _openApiKeySheet,
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final usableHeight = media.size.height -
-        media.padding.vertical -
-        media.viewInsets.bottom;
     final keyboardOpen = media.viewInsets.bottom > 0;
-    final compactHeight = usableHeight < 680;
-    final showLargeCore =
-        _messages.length <= 2 && !keyboardOpen && !compactHeight;
-    final coreSize = keyboardOpen
-        ? 88.0
-        : showLargeCore
-            ? 164.0
-            : compactHeight
-                ? 108.0
-                : 122.0;
-    final controlSize = compactHeight || keyboardOpen ? 40.0 : 44.0;
+    final compactHeight = media.size.height < 720;
+    final coreSize = compactHeight ? 126.0 : 156.0;
 
     return IronBackground(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
+            padding: const EdgeInsets.fromLTRB(18, 10, 8, 0),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'IRON MUSIC 420 AI',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 19,
+                          fontSize: 18,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.1,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Личен AI асистент',
-                        style: TextStyle(
+                        widget.store.hasAnyAiProvider
+                            ? 'Личен AI асистент'
+                            : 'Добави AI доставчик от менюто',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           color: ironGreen,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
                         ),
                       ),
                     ],
@@ -864,23 +1240,33 @@ class _ChatPageState extends State<ChatPage>
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Настройки',
-                  icon: const Icon(Icons.more_horiz, color: ironGreen),
+                  icon: const Icon(Icons.more_horiz_rounded, color: ironGreen),
                   onSelected: (value) {
                     if (value == 'api') {
-                      setState(() => _showApiBox = !_showApiBox);
-                    } else if (value == 'history') {
-                      _clearHistory();
+                      _openApiKeySheet();
                     } else if (value == 'voice') {
                       _openVoiceSettings();
+                    } else if (value == 'history') {
+                      _clearHistory();
+                    } else if (value == 'tools') {
+                      widget.onOpenTools?.call();
                     }
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'api', child: Text('API ключ')),
-                    PopupMenuItem(
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'api',
+                      child: Text('AI доставчици'),
+                    ),
+                    const PopupMenuItem(
                       value: 'voice',
                       child: Text('Настройки на гласа'),
                     ),
-                    PopupMenuItem(
+                    if (widget.onOpenTools != null)
+                      const PopupMenuItem(
+                        value: 'tools',
+                        child: Text('Инструменти'),
+                      ),
+                    const PopupMenuItem(
                       value: 'history',
                       child: Text('Изчисти историята'),
                     ),
@@ -890,123 +1276,69 @@ class _ChatPageState extends State<ChatPage>
             ),
           ),
           AnimatedSize(
-            duration: const Duration(milliseconds: 320),
+            duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                keyboardOpen ? 2 : (showLargeCore ? 8 : 4),
-                12,
-                keyboardOpen ? 4 : 8,
-              ),
-              child: AnimatedBuilder(
-              animation: _coreController,
-              builder: (context, _) {
-                final activityBoost = (_isListening || _isLoading) ? 0.22 : 0.0;
-                final progress =
-                    (_coreController.value * 0.72 + activityBoost)
-                        .clamp(0.0, 1.0)
-                        .toDouble();
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: _isLoading ? null : _toggleListening,
-                      child: AnimatedScale(
-                        duration: const Duration(milliseconds: 220),
-                        scale: _isListening ? 1.08 : 1.0,
-                        child: CannabisCore(
-                          progress: progress,
-                          size: coreSize,
-                        ),
-                      ),
+            child: keyboardOpen
+                ? const SizedBox(height: 4)
+                : Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      compactHeight ? 4 : 8,
+                      12,
+                      8,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _coreStatus,
-                      style: TextStyle(
-                        color: _isListening ? ironGreenSoft : ironGreen,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2.0,
-                        shadows: const [
-                          Shadow(color: ironGreen, blurRadius: 10),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _coreControl(
-                          icon: _conversationMode
-                              ? Icons.forum
-                              : Icons.forum_outlined,
-                          tooltip: 'Продължаващ разговор',
-                          active: _conversationMode,
-                          onPressed: _toggleConversationMode,
-                          size: controlSize,
-                        ),
-                        const SizedBox(width: 12),
-                        _coreControl(
-                          icon: _ironActive
-                              ? Icons.hearing
-                              : Icons.hearing_disabled,
-                          tooltip: 'Hey Iron',
-                          active: _ironActive,
-                          onPressed: _ironBusy ? null : _toggleIron,
-                          size: controlSize,
-                        ),
-                        const SizedBox(width: 12),
-                        _coreControl(
-                          icon: widget.store.voiceRepliesEnabled
-                              ? Icons.volume_up
-                              : Icons.volume_off,
-                          tooltip: 'Гласови отговори',
-                          active: widget.store.voiceRepliesEnabled,
-                          onPressed: _toggleVoiceReplies,
-                          size: controlSize,
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
+                    child: _buildAssistantCore(coreSize),
+                  ),
           ),
-        ),
-          _buildApiSection(),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
                   return const Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
-                      padding: EdgeInsets.only(left: 6, bottom: 12),
-                      child: Text(
-                        'Iron мисли...',
-                        style: TextStyle(
-                          color: ironGreen,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      padding: EdgeInsets.fromLTRB(8, 6, 8, 14),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 17,
+                            height: 17,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: ironGreen,
+                            ),
+                          ),
+                          SizedBox(width: 9),
+                          Text(
+                            'Iron мисли...',
+                            style: TextStyle(color: ironGreen),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 }
-
-                return _ChatBubble(message: _messages[index]);
+                final message = _messages[index];
+                return _ChatBubble(
+                  message: message,
+                  onSendToStudio: !message.isUser && !message.isLocalNotice
+                      ? () => _sendTextToStudio(message.text)
+                      : null,
+                  onMusicAction: !message.isUser && !message.isLocalNotice
+                      ? (action) => _runChatMusicAction(action, message.text)
+                      : null,
+                );
               },
             ),
           ),
           Container(
             margin: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-            padding: const EdgeInsets.fromLTRB(10, 7, 7, 7),
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
             decoration: BoxDecoration(
               color: const Color(0xFF010A05).withOpacity(0.98),
               borderRadius: BorderRadius.circular(24),
@@ -1014,7 +1346,7 @@ class _ChatPageState extends State<ChatPage>
               boxShadow: [
                 BoxShadow(
                   color: ironGreen.withOpacity(0.08),
-                  blurRadius: 20,
+                  blurRadius: 18,
                 ),
               ],
             ),
@@ -1025,23 +1357,25 @@ class _ChatPageState extends State<ChatPage>
                   child: TextField(
                     controller: _messageController,
                     minLines: 1,
-                    maxLines: 5,
+                    maxLines: 4,
                     textCapitalization: TextCapitalization.sentences,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration.collapsed(
                       hintText: _isListening
-                          ? 'Слушам... кажи всичко спокойно'
+                          ? 'Слушам на български...'
                           : 'Говори или напиши на Iron...',
                       hintStyle: const TextStyle(color: Colors.white38),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
+                    onSubmitted: (_) {
+                      if (!_isLoading) _sendMessage();
+                    },
                   ),
                 ),
                 IconButton(
                   tooltip: 'Микрофон',
                   onPressed: _isLoading ? null : _toggleListening,
                   icon: Icon(
-                    _isListening ? Icons.stop_circle : Icons.mic_rounded,
+                    _isListening ? Icons.stop_circle_rounded : Icons.mic_rounded,
                     color: _isListening ? Colors.redAccent : ironGreen,
                   ),
                 ),
@@ -1062,8 +1396,14 @@ class _ChatPageState extends State<ChatPage>
 
 class _ChatBubble extends StatelessWidget {
   final ChatMessage message;
+  final VoidCallback? onSendToStudio;
+  final ValueChanged<String>? onMusicAction;
 
-  const _ChatBubble({required this.message});
+  const _ChatBubble({
+    required this.message,
+    this.onSendToStudio,
+    this.onMusicAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1085,7 +1425,9 @@ class _ChatBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
-        constraints: const BoxConstraints(maxWidth: 340),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.84,
+        ),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.only(
@@ -1119,6 +1461,61 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onSendToStudio != null) ...[
+                  Tooltip(
+                    message: 'В Рап студио',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: onSendToStudio,
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.mic_external_on_rounded,
+                          size: 16,
+                          color: ironGreen,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                ],
+                if (onMusicAction != null)
+                  PopupMenuButton<String>(
+                    tooltip: 'Музикални действия',
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 17,
+                      color: ironGreen,
+                    ),
+                    onSelected: onMusicAction,
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'improve',
+                        child: Text('Стегни римите'),
+                      ),
+                      PopupMenuItem(
+                        value: 'hook',
+                        child: Text('Направи припев'),
+                      ),
+                      PopupMenuItem(
+                        value: 'analyze',
+                        child: Text('Анализирай текста'),
+                      ),
+                      PopupMenuItem(
+                        value: 'music_prompt',
+                        child: Text('Suno музикален промпт'),
+                      ),
+                      PopupMenuItem(
+                        value: 'save',
+                        child: Text('Запази като песен'),
+                      ),
+                      PopupMenuItem(
+                        value: 'studio',
+                        child: Text('Отвори в Рап студио'),
+                      ),
+                    ],
+                  ),
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () async {
@@ -1126,22 +1523,10 @@ class _ChatBubble extends StatelessWidget {
                       ClipboardData(text: message.text),
                     );
                     if (context.mounted) {
-                      final messenger = ScaffoldMessenger.of(context);
-                      messenger
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          SnackBar(
-                            content: const Text('Съобщението е копирано.'),
-                            behavior: SnackBarBehavior.floating,
-                            margin: EdgeInsets.fromLTRB(
-                              16,
-                              8,
-                              16,
-                              96 + MediaQuery.of(context).viewInsets.bottom,
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Съобщението е копирано.')),
+                      );
                     }
                   },
                   child: const Padding(

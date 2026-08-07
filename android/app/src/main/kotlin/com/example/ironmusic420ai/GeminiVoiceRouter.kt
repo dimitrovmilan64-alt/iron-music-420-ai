@@ -9,15 +9,23 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Sends a recognized Bulgarian utterance to Gemini and returns one safe,
- * allow-listed decision. The model never executes Android actions directly.
+ * Routes a recognized Bulgarian utterance through Gemini, then through an
+ * OpenAI-compatible backup provider. The model only returns allow-listed
+ * decisions and never executes Android actions directly.
  */
 class GeminiVoiceRouter(private val context: Context) {
     companion object {
         const val PREFS_NAME = "iron_ai_settings"
         const val KEY_GEMINI_API_KEY = "gemini_api_key"
+        const val KEY_BACKUP_API_KEY = "backup_api_key"
+        const val KEY_BACKUP_BASE_URL = "backup_base_url"
+        const val KEY_BACKUP_MODEL = "backup_model"
+        const val DEFAULT_BACKUP_BASE_URL = "https://api.groq.com/openai/v1"
+        const val DEFAULT_BACKUP_MODEL = "openai/gpt-oss-20b"
+
         private const val KEY_ACTIVE_MODEL = "gemini_voice_active_model"
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private const val GEMINI_BASE_URL =
+            "https://generativelanguage.googleapis.com/v1beta"
 
         private val PREFERRED_MODELS = listOf(
             "gemini-3.6-flash",
@@ -115,11 +123,17 @@ class GeminiVoiceRouter(private val context: Context) {
         val text: String,
     )
 
+    private data class HttpResult(
+        val statusCode: Int,
+        val body: String,
+    )
+
     private val preferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val conversation = mutableListOf<ConversationTurn>()
 
-    fun hasApiKey(): Boolean = apiKey().isNotBlank()
+    fun hasApiKey(): Boolean =
+        geminiApiKey().isNotBlank() || backupApiKey().isNotBlank()
 
     @Synchronized
     fun resetConversation() {
@@ -128,30 +142,63 @@ class GeminiVoiceRouter(private val context: Context) {
 
     @Synchronized
     fun route(utterance: String): Decision {
-        val key = apiKey()
-        if (key.isBlank()) throw MissingApiKeyException()
+        val geminiKey = geminiApiKey()
+        val backupKey = backupApiKey()
+        if (geminiKey.isBlank() && backupKey.isBlank()) {
+            throw MissingApiKeyException()
+        }
 
+        val errors = mutableListOf<String>()
+
+        if (geminiKey.isNotBlank()) {
+            try {
+                return routeGemini(geminiKey, utterance)
+            } catch (error: AiUnavailableException) {
+                errors.add(error.message.orEmpty())
+            }
+        }
+
+        if (backupKey.isNotBlank()) {
+            try {
+                return routeBackup(backupKey, utterance)
+            } catch (error: AiUnavailableException) {
+                errors.add(error.message.orEmpty())
+            }
+        }
+
+        val cleanErrors = errors
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        throw AiUnavailableException(
+            cleanErrors.joinToString(" ").ifBlank {
+                "AI доставчиците временно не отговарят."
+            },
+        )
+    }
+
+    private fun routeGemini(apiKey: String, utterance: String): Decision {
         val models = linkedSetOf<String>()
         preferences.getString(KEY_ACTIVE_MODEL, null)?.let(models::add)
         models.addAll(PREFERRED_MODELS)
 
-        var lastMessage = "AI временно не отговаря."
+        var lastMessage = "Gemini временно не отговаря."
         for (model in models) {
-            val result = requestDecision(
-                apiKey = key,
+            val result = requestGeminiDecision(
+                apiKey = apiKey,
                 model = model,
                 utterance = utterance,
             )
 
             when {
                 result.statusCode == 200 && result.body.isNotBlank() -> {
-                    val decision = parseDecision(result.body)
+                    val decision = parseGeminiDecision(result.body)
                     rememberTurn(utterance, decision)
                     preferences.edit().putString(KEY_ACTIVE_MODEL, model).apply()
                     return decision
                 }
                 result.statusCode == 404 -> {
-                    lastMessage = "Моделът $model не е наличен."
+                    lastMessage = "Gemini моделът $model не е наличен."
                     continue
                 }
                 result.statusCode == 401 || result.statusCode == 403 -> {
@@ -161,15 +208,16 @@ class GeminiVoiceRouter(private val context: Context) {
                 }
                 result.statusCode == 429 -> {
                     throw AiUnavailableException(
-                        "Достигнат е лимитът на AI услугата. Опитай след малко.",
+                        "Лимитът на Gemini е достигнат. Преминавам към резервния AI.",
                     )
                 }
                 result.statusCode in 500..599 -> {
-                    lastMessage = "AI услугата временно не отговаря."
-                    continue
+                    throw AiUnavailableException(
+                        "Gemini временно не отговаря. Преминавам към резервния AI.",
+                    )
                 }
                 else -> {
-                    lastMessage = extractError(result.body)
+                    lastMessage = extractError(result.body, "Gemini заявката беше отхвърлена.")
                     break
                 }
             }
@@ -178,20 +226,76 @@ class GeminiVoiceRouter(private val context: Context) {
         throw AiUnavailableException(lastMessage)
     }
 
-    private fun apiKey(): String =
+    private fun routeBackup(apiKey: String, utterance: String): Decision {
+        val model = backupModel()
+        val result = requestBackupDecision(
+            apiKey = apiKey,
+            model = model,
+            utterance = utterance,
+        )
+
+        when {
+            result.statusCode == 200 && result.body.isNotBlank() -> {
+                val decision = parseBackupDecision(result.body)
+                rememberTurn(utterance, decision)
+                return decision
+            }
+            result.statusCode == 401 || result.statusCode == 403 -> {
+                throw AiUnavailableException(
+                    "Резервният API ключ не е валиден или няма разрешение.",
+                )
+            }
+            result.statusCode == 404 -> {
+                throw AiUnavailableException(
+                    "Резервният модел $model не е наличен.",
+                )
+            }
+            result.statusCode == 429 -> {
+                throw AiUnavailableException(
+                    "Лимитът на резервния AI доставчик също е достигнат.",
+                )
+            }
+            result.statusCode in 500..599 -> {
+                throw AiUnavailableException(
+                    "Резервният AI доставчик временно не отговаря.",
+                )
+            }
+            else -> {
+                throw AiUnavailableException(
+                    extractError(
+                        result.body,
+                        "Резервната AI заявка беше отхвърлена.",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun geminiApiKey(): String =
         preferences.getString(KEY_GEMINI_API_KEY, "").orEmpty().trim()
 
-    private data class HttpResult(
-        val statusCode: Int,
-        val body: String,
-    )
+    private fun backupApiKey(): String =
+        preferences.getString(KEY_BACKUP_API_KEY, "").orEmpty().trim()
 
-    private fun requestDecision(
+    private fun backupBaseUrl(): String =
+        preferences.getString(KEY_BACKUP_BASE_URL, DEFAULT_BACKUP_BASE_URL)
+            .orEmpty()
+            .trim()
+            .ifBlank { DEFAULT_BACKUP_BASE_URL }
+            .trimEnd('/')
+
+    private fun backupModel(): String =
+        preferences.getString(KEY_BACKUP_MODEL, DEFAULT_BACKUP_MODEL)
+            .orEmpty()
+            .trim()
+            .ifBlank { DEFAULT_BACKUP_MODEL }
+
+    private fun requestGeminiDecision(
         apiKey: String,
         model: String,
         utterance: String,
     ): HttpResult {
-        val url = URL("$BASE_URL/models/$model:generateContent")
+        val url = URL("$GEMINI_BASE_URL/models/$model:generateContent")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
@@ -213,7 +317,10 @@ class GeminiVoiceRouter(private val context: Context) {
             conversation.forEach { turn ->
                 contents.put(
                     JSONObject()
-                        .put("role", turn.role)
+                        .put(
+                            "role",
+                            if (turn.role == "assistant") "model" else "user",
+                        )
                         .put(
                             "parts",
                             JSONArray().put(JSONObject().put("text", turn.text)),
@@ -229,8 +336,7 @@ class GeminiVoiceRouter(private val context: Context) {
                     ),
             )
             put("contents", contents)
-            val generationConfig = JSONObject()
-                .put("maxOutputTokens", 500)
+            val generationConfig = JSONObject().put("maxOutputTokens", 500)
             if (!model.startsWith("gemini-3.5") &&
                 !model.startsWith("gemini-3.6")
             ) {
@@ -239,6 +345,70 @@ class GeminiVoiceRouter(private val context: Context) {
             put("generationConfig", generationConfig)
         }
 
+        return executeRequest(connection, payload)
+    }
+
+    private fun requestBackupDecision(
+        apiKey: String,
+        model: String,
+        utterance: String,
+    ): HttpResult {
+        val base = backupBaseUrl()
+        val endpoint = if (base.endsWith("/chat/completions")) {
+            base
+        } else {
+            "$base/chat/completions"
+        }
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15_000
+            readTimeout = 45_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Authorization", "Bearer $apiKey")
+        }
+
+        val messages = JSONArray().put(
+            JSONObject()
+                .put("role", "system")
+                .put("content", SYSTEM_PROMPT),
+        )
+        conversation.forEach { turn ->
+            messages.put(
+                JSONObject()
+                    .put("role", turn.role)
+                    .put("content", turn.text),
+            )
+        }
+        messages.put(
+            JSONObject()
+                .put("role", "user")
+                .put("content", utterance),
+        )
+
+        val payload = JSONObject()
+            .put("model", model)
+            .put("messages", messages)
+
+        val lowerModel = model.lowercase()
+        val reasoningModel = lowerModel.startsWith("gpt-5") ||
+            lowerModel.startsWith("o1") ||
+            lowerModel.startsWith("o3") ||
+            lowerModel.startsWith("o4")
+        if (reasoningModel) {
+            payload.put("max_completion_tokens", 500)
+        } else {
+            payload.put("max_tokens", 500)
+            payload.put("temperature", 0.15)
+        }
+
+        return executeRequest(connection, payload)
+    }
+
+    private fun executeRequest(
+        connection: HttpURLConnection,
+        payload: JSONObject,
+    ): HttpResult {
         return try {
             connection.outputStream.use { output ->
                 output.write(payload.toString().toByteArray(Charsets.UTF_8))
@@ -263,16 +433,16 @@ class GeminiVoiceRouter(private val context: Context) {
         }
     }
 
-    private fun parseDecision(responseBody: String): Decision {
+    private fun parseGeminiDecision(responseBody: String): Decision {
         val envelope = JSONObject(responseBody)
         val candidates = envelope.optJSONArray("candidates")
-            ?: throw AiUnavailableException("AI върна празен отговор.")
+            ?: throw AiUnavailableException("Gemini върна празен отговор.")
         val candidate = candidates.optJSONObject(0)
-            ?: throw AiUnavailableException("AI върна невалиден отговор.")
+            ?: throw AiUnavailableException("Gemini върна невалиден отговор.")
         val parts = candidate
             .optJSONObject("content")
             ?.optJSONArray("parts")
-            ?: throw AiUnavailableException("AI отговорът няма съдържание.")
+            ?: throw AiUnavailableException("Gemini отговорът няма съдържание.")
 
         val rawText = buildString {
             for (index in 0 until parts.length()) {
@@ -281,6 +451,20 @@ class GeminiVoiceRouter(private val context: Context) {
             }
         }.trim()
 
+        return parseDecisionText(rawText)
+    }
+
+    private fun parseBackupDecision(responseBody: String): Decision {
+        val envelope = JSONObject(responseBody)
+        val choices = envelope.optJSONArray("choices")
+            ?: throw AiUnavailableException("Резервният AI върна празен отговор.")
+        val message = choices.optJSONObject(0)?.optJSONObject("message")
+            ?: throw AiUnavailableException("Резервният AI върна невалиден отговор.")
+        val rawText = message.optString("content", "").trim()
+        return parseDecisionText(rawText)
+    }
+
+    private fun parseDecisionText(rawText: String): Decision {
         if (rawText.isBlank()) {
             throw AiUnavailableException("AI върна празен отговор.")
         }
@@ -290,7 +474,11 @@ class GeminiVoiceRouter(private val context: Context) {
             .removePrefix("```")
             .removeSuffix("```")
             .trim()
-        val json = JSONObject(cleanJson)
+        val json = try {
+            JSONObject(cleanJson)
+        } catch (_: Exception) {
+            throw AiUnavailableException("AI върна невалиден JSON отговор.")
+        }
         val rawAction = json.optString("action", "reply")
             .lowercase()
             .trim()
@@ -306,20 +494,20 @@ class GeminiVoiceRouter(private val context: Context) {
     }
 
     private fun rememberTurn(utterance: String, decision: Decision) {
-        val modelContext = JSONObject()
+        val assistantContext = JSONObject()
             .put("action", decision.action)
             .put("argument", decision.argument)
             .put("reply", decision.reply)
             .toString()
 
         conversation.add(ConversationTurn("user", utterance.trim()))
-        conversation.add(ConversationTurn("model", modelContext))
+        conversation.add(ConversationTurn("assistant", assistantContext))
         while (conversation.size > 12) {
             conversation.removeAt(0)
         }
     }
 
-    private fun extractError(body: String): String {
+    private fun extractError(body: String, fallback: String): String {
         return try {
             val error = JSONObject(body).optJSONObject("error")
             error?.optString("message")
@@ -327,9 +515,9 @@ class GeminiVoiceRouter(private val context: Context) {
                 ?.trim()
                 ?.take(240)
                 .orEmpty()
-                .ifBlank { "AI заявката беше отхвърлена." }
+                .ifBlank { fallback }
         } catch (_: Exception) {
-            "AI заявката беше отхвърлена."
+            fallback
         }
     }
 }

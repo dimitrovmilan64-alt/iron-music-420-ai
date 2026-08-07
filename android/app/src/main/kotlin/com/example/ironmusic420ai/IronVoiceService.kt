@@ -43,12 +43,14 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     companion object {
         const val ACTION_START = "com.example.ironmusic420ai.START_IRON_VOICE"
         const val ACTION_STOP = "com.example.ironmusic420ai.STOP_IRON_VOICE"
+        const val ACTION_PAUSE_WAKE = "com.example.ironmusic420ai.PAUSE_IRON_WAKE"
+        const val ACTION_RESUME_WAKE = "com.example.ironmusic420ai.RESUME_IRON_WAKE"
 
         @Volatile
         var isRunning = false
             private set
 
-        private const val CHANNEL_ID = "iron_voice_service"
+        private const val CHANNEL_ID = "iron_voice_service_silent_v3"
         private const val NOTIFICATION_ID = 2420
         private const val WAKE_SAMPLE_RATE = 16_000
         private const val WAKE_FRAME_SAMPLES = 1_600
@@ -87,6 +89,9 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private var conversationTurnsRemaining = 0
     private val pendingCommandParts = mutableListOf<String>()
     private var ignoreNextRecognitionError = false
+
+    @Volatile
+    private var pausedForChatSpeech = false
 
     @Volatile
     private var wakeWordActive = false
@@ -129,9 +134,19 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_PAUSE_WAKE -> {
+                pauseForChatSpeech()
+                return START_STICKY
+            }
+            ACTION_RESUME_WAKE -> {
+                resumeAfterChatSpeech()
+                return START_STICKY
+            }
         }
 
         if (
@@ -189,6 +204,47 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         foregroundStarted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
+    }
+
+    private fun pauseForChatSpeech() {
+        if (pausedForChatSpeech) return
+        pausedForChatSpeech = true
+        handler.removeCallbacks(beginWakeWordListening)
+        handler.removeCallbacks(beginSpeechRecognition)
+        handler.removeCallbacks(finalizePendingCommand)
+        handler.removeCallbacks(recognitionTimeout)
+        pendingCommandParts.clear()
+        afterSpeech = null
+        isAiProcessing = false
+        if (isListening) {
+            ignoreNextRecognitionError = true
+            try {
+                recognizer?.cancel()
+            } catch (_: Exception) {
+                // The recognizer may already be stopping.
+            }
+        }
+        isListening = false
+        if (isSpeaking) {
+            try {
+                textToSpeech?.stop()
+            } catch (_: Exception) {
+                // TTS may already be complete.
+            }
+        }
+        isSpeaking = false
+        voiceState = VoiceState.WAITING_FOR_WAKE
+        stopWakeWordListening()
+        updateNotification("Iron е активен • диктовка в приложението")
+    }
+
+    private fun resumeAfterChatSpeech() {
+        if (!pausedForChatSpeech) return
+        pausedForChatSpeech = false
+        if (!isRunning) return
+        voiceState = VoiceState.WAITING_FOR_WAKE
+        updateNotification("Iron е готов • кажи „Hey Iron“")
+        scheduleWakeWordListening(650)
     }
 
     private fun initializeRecognizer() {
@@ -290,6 +346,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginWakeWordListening)
         if (
             isRunning &&
+            !pausedForChatSpeech &&
             !isSpeaking &&
             !isListening &&
             !isAiProcessing &&
@@ -356,6 +413,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         handler.removeCallbacks(beginWakeWordListening)
         if (
             !isRunning ||
+            pausedForChatSpeech ||
             isSpeaking ||
             isListening ||
             wakeWordActive ||
@@ -487,11 +545,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                         if (
                             detected &&
                             isRunning &&
+                            !pausedForChatSpeech &&
                             !isSpeaking &&
                             voiceState == VoiceState.WAITING_FOR_WAKE
                         ) {
                             onWakeWordDetected()
-                        } else if (isRunning) {
+                        } else if (isRunning && !pausedForChatSpeech) {
                             scheduleWakeWordListening(800)
                         }
                     }
@@ -737,7 +796,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         if (!aiRouter.hasApiKey()) {
             val localReply = executeCommand(normalizedCommand)
             val reply = if (localReply == "Не разбрах командата. Опитай пак.") {
-                "За свободния AI режим отвори приложението и запази Gemini API ключа."
+                "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
             } else {
                 localReply
             }
@@ -776,7 +835,7 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
                     val reply = when {
                         localReply != "Не разбрах командата. Опитай пак." -> localReply
                         error is GeminiVoiceRouter.MissingApiKeyException ->
-                            "За свободния AI режим отвори приложението и запази Gemini API ключа."
+                            "За свободния AI режим отвори приложението и добави Gemini или резервен AI ключ."
                         error is GeminiVoiceRouter.AiUnavailableException ->
                             error.message ?: "AI временно не отговаря. Опитай пак."
                         else -> "AI временно не отговаря. Опитай пак."
@@ -1217,22 +1276,28 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel("iron_voice_service")
+
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Iron гласов режим",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Показва, когато Iron слуша офлайн за „Hey Iron“."
+            description = "Постоянен безшумен режим за офлайн „Hey Iron“."
             setSound(null, null)
             enableVibration(false)
+            enableLights(false)
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
         }
 
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+        manager.createNotificationChannel(channel)
     }
 
     private fun startAsForeground(status: String) {
-        val notification = buildNotification(status)
+        if (status.isBlank()) return
+        val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -1245,13 +1310,12 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
     }
 
     private fun updateNotification(status: String) {
-        if (!isRunning || !foregroundStarted) return
-
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(status))
+        if (!isRunning || !foregroundStarted || status.isBlank()) return
+        // The foreground notification intentionally stays unchanged. Rebuilding it
+        // for every microphone state caused repeated alerts on some Android skins.
     }
 
-    private fun buildNotification(status: String): Notification {
+    private fun buildNotification(): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
@@ -1277,10 +1341,11 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         return builder
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Iron е активен")
-            .setContentText(status)
+            .setContentText("Iron е активен • готов за „Hey Iron“")
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setWhen(0)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(

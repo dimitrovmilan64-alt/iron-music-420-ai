@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 concurrency:
   group: android-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -15,11 +18,44 @@ concurrency:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout v3.3.6 branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Detect pending v3.3.6 migration
+        id: migration
+        shell: bash
+        run: |
+          if grep -q '^version: 3.3.6+44$' pubspec.yaml; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix v3.3.6 migration quoting
+        if: steps.migration.outputs.needed == 'true'
+        run: python3 scripts/fix_v336_script_quotes.py
+
+      - name: Apply chat music actions migration
+        if: steps.migration.outputs.needed == 'true'
+        run: python3 scripts/apply_v336_chat_music_actions.py
+
+      - name: Commit v3.3.6 source
+        if: steps.migration.outputs.needed == 'true'
+        shell: bash
+        run: |
+          rm scripts/apply_v336_chat_music_actions.py scripts/fix_v336_script_quotes.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Add chat music actions and song saving"
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -33,21 +69,65 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Prepare stable test signing key
+        shell: bash
+        run: |
+          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
+          keytool -list \
+            -keystore android/app/iron-test-key.jks \
+            -storepass iron420test \
+            -alias iron-test
+
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh
 
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze responsive UI
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos lib/pages/chat_page.dart
+      - name: Analyze v3.3.6
+        run: >-
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+          lib/main.dart
+          lib/pages/chat_page.dart
+          lib/pages/rap_studio_page.dart
+          lib/services/ai_provider_config.dart
+          lib/services/gemini_service.dart
+          lib/services/local_store.dart
+          lib/services/automation_service.dart
+          test/native_speech_bridge_test.dart
+          test/native_voice_pause_groq_test.dart
+          test/stable_notification_studio_handoff_test.dart
+          test/chat_music_actions_test.dart
+          test/ai_provider_fallback_test.dart
+          test/chat_layout_test.dart
+
+      - name: Test chat music actions, notification, voice and Groq
+        run: >-
+          flutter test
+          test/native_speech_bridge_test.dart
+          test/native_voice_pause_groq_test.dart
+          test/stable_notification_studio_handoff_test.dart
+          test/chat_music_actions_test.dart
+          test/ai_provider_fallback_test.dart
+          test/chat_layout_test.dart
 
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
 
+      - name: Verify stable APK certificate
+        shell: bash
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
+            | tee /tmp/iron-apk-certificate.txt
+          grep -Fi \
+            'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
+            /tmp/iron-apk-certificate.txt
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.1.2-responsive-ui
+          name: iron-music-420-ai-v3.3.6-chat-music-actions
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error

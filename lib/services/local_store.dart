@@ -6,9 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/automation_models.dart';
 import '../models/chat_message.dart';
 import '../models/song_project.dart';
+import 'ai_provider_config.dart';
 
 class LocalStore extends ChangeNotifier {
   static const _apiKeyKey = 'gemini_api_key';
+  static const _backupApiKeyKey = 'backup_api_key';
+  static const _backupBaseUrlKey = 'backup_base_url';
+  static const _backupModelKey = 'backup_model';
   static const _voiceRepliesKey = 'voice_replies_enabled';
   static const _ttsRateKey = 'tts_rate_v152';
   static const _ttsPitchKey = 'tts_pitch_v152';
@@ -25,6 +29,9 @@ class LocalStore extends ChangeNotifier {
 
   late SharedPreferences _preferences;
   String _apiKey = '';
+  String _backupApiKey = '';
+  String _backupBaseUrl = AiProviderConfig.defaultBackupBaseUrl;
+  String _backupModel = AiProviderConfig.defaultBackupModel;
   bool _voiceRepliesEnabled = true;
   double _ttsRate = 0.44;
   double _ttsPitch = 0.92;
@@ -43,6 +50,17 @@ class LocalStore extends ChangeNotifier {
   Future<void> initialize() async {
     _preferences = await SharedPreferences.getInstance();
     _apiKey = _preferences.getString(_apiKeyKey) ?? '';
+    _backupApiKey = _preferences.getString(_backupApiKeyKey) ?? '';
+    _backupBaseUrl = AiProviderConfig.normalizeBaseUrl(
+      _preferences.getString(_backupBaseUrlKey) ??
+          AiProviderConfig.defaultBackupBaseUrl,
+    );
+    _backupModel = (_preferences.getString(_backupModelKey) ??
+            AiProviderConfig.defaultBackupModel)
+        .trim();
+    if (_backupModel.isEmpty) {
+      _backupModel = AiProviderConfig.defaultBackupModel;
+    }
     _voiceRepliesEnabled = _preferences.getBool(_voiceRepliesKey) ?? true;
     _ttsRate = _preferences.getDouble(_ttsRateKey) ?? 0.44;
     _ttsPitch = _preferences.getDouble(_ttsPitchKey) ?? 0.92;
@@ -135,10 +153,17 @@ class LocalStore extends ChangeNotifier {
       _activeSongId = '';
       await _preferences.remove(_activeSongIdKey);
     }
+
+    _syncAiProviderConfig();
   }
 
   String get apiKey => _apiKey;
   bool get hasApiKey => _apiKey.trim().isNotEmpty;
+  String get backupApiKey => _backupApiKey;
+  String get backupBaseUrl => _backupBaseUrl;
+  String get backupModel => _backupModel;
+  bool get hasBackupProvider => _backupApiKey.trim().isNotEmpty;
+  bool get hasAnyAiProvider => hasApiKey || hasBackupProvider;
   bool get voiceRepliesEnabled => _voiceRepliesEnabled;
   double get ttsRate => _ttsRate;
   double get ttsPitch => _ttsPitch;
@@ -172,6 +197,37 @@ class LocalStore extends ChangeNotifier {
       await _preferences.setString(_apiKeyKey, _apiKey);
     }
     notifyListeners();
+  }
+
+  Future<void> setBackupProvider({
+    required String apiKey,
+    required String baseUrl,
+    required String model,
+  }) async {
+    _backupApiKey = apiKey.trim();
+    _backupBaseUrl = AiProviderConfig.normalizeBaseUrl(baseUrl);
+    _backupModel = model.trim().isEmpty
+        ? AiProviderConfig.defaultBackupModel
+        : model.trim();
+
+    await Future.wait([
+      if (_backupApiKey.isEmpty)
+        _preferences.remove(_backupApiKeyKey)
+      else
+        _preferences.setString(_backupApiKeyKey, _backupApiKey),
+      _preferences.setString(_backupBaseUrlKey, _backupBaseUrl),
+      _preferences.setString(_backupModelKey, _backupModel),
+    ]);
+    _syncAiProviderConfig();
+    notifyListeners();
+  }
+
+  void _syncAiProviderConfig() {
+    AiProviderConfig.update(
+      backupApiKey: _backupApiKey,
+      backupBaseUrl: _backupBaseUrl,
+      backupModel: _backupModel,
+    );
   }
 
   Future<void> setVoiceRepliesEnabled(bool value) async {
@@ -233,6 +289,22 @@ class LocalStore extends ChangeNotifier {
     await Future.wait([
       _preferences.setString(_rapDraftKey, draft),
       _preferences.setString(_rapResultKey, result),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> sendTextToStudio(String text) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+
+    _activeSongId = '';
+    _rapDraft = cleanText;
+    _rapResult = cleanText;
+    _studioRevision++;
+    await Future.wait([
+      _preferences.setString(_rapDraftKey, _rapDraft),
+      _preferences.setString(_rapResultKey, _rapResult),
+      _preferences.remove(_activeSongIdKey),
     ]);
     notifyListeners();
   }

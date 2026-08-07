@@ -533,8 +533,8 @@ ${draft.isEmpty ? 'Няма чернова. Създай съдържаниет�
 
   Future<void> _generateWithAi() async {
     final apiKey = widget.store.apiKey.trim();
-    if (apiKey.isEmpty) {
-      _showMessage('Първо запази Gemini API ключа в раздел „Чат“.');
+    if (!widget.store.hasAnyAiProvider) {
+      _showMessage('Първо добави Gemini или резервен AI доставчик в раздел „AI“.');
       return;
     }
 
@@ -581,8 +581,8 @@ ${draft.isEmpty ? 'Няма чернова. Създай съдържаниет�
     required void Function(String result) applyResult,
   }) async {
     final apiKey = widget.store.apiKey.trim();
-    if (apiKey.isEmpty) {
-      _showMessage('Първо запази Gemini API ключа в раздел „Чат“.');
+    if (!widget.store.hasAnyAiProvider) {
+      _showMessage('Първо добави Gemini или резервен AI доставчик в раздел „AI“.');
       return;
     }
 
@@ -1073,8 +1073,8 @@ $exclude''';
   Future<void> _generateTitleWithAi() async {
     final apiKey = widget.store.apiKey.trim();
     final lyrics = _currentLyrics;
-    if (apiKey.isEmpty) {
-      _showMessage('Първо запази Gemini API ключа в раздел „Чат“.');
+    if (!widget.store.hasAnyAiProvider) {
+      _showMessage('Първо добави Gemini или резервен AI доставчик в раздел „AI“.');
       return;
     }
     if (lyrics.isEmpty) {
@@ -1121,8 +1121,8 @@ $excerpt
 
   Future<void> _improveSunoPromptWithAi() async {
     final apiKey = widget.store.apiKey.trim();
-    if (apiKey.isEmpty) {
-      _showMessage('Първо запази Gemini API ключа в раздел „Чат“.');
+    if (!widget.store.hasAnyAiProvider) {
+      _showMessage('Първо добави Gemini или резервен AI доставчик в раздел „AI“.');
       return;
     }
 
