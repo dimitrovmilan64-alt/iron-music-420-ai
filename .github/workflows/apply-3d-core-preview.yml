@@ -40,3 +40,5 @@ jobs:
           git diff --cached --check
           git commit -m "Build interactive 3D cannabis reactor core"
           git push origin HEAD:agent/3d-core-preview
+
+# trigger: 3d-core-v2
