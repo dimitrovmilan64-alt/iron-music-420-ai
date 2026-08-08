@@ -40,3 +40,5 @@ jobs:
           git diff --cached --check
           git commit -m "Add 3D core to build51 Hey Iron app"
           git push origin HEAD:agent/build51-3d-core-preview
+
+# trigger: build51-correct-base
