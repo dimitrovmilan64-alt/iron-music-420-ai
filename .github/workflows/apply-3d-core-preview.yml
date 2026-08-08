@@ -1,0 +1,42 @@
+name: Apply 3D Core Preview
+
+on:
+  push:
+    branches:
+      - agent/3d-core-preview
+    paths:
+      - scripts/apply_3d_cannabis_core.py
+      - .github/workflows/apply-3d-core-preview.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-core:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/3d-core-preview
+          fetch-depth: 0
+
+      - name: Apply 3D cannabis core
+        run: python3 scripts/apply_3d_cannabis_core.py
+
+      - name: Commit preview UI
+        shell: bash
+        run: |
+          if git diff --quiet -- lib/ui/common_widgets.dart; then
+            echo "No UI change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/ui/common_widgets.dart
+          git diff --cached --check
+          git commit -m "Build interactive 3D cannabis reactor core"
+          git push origin HEAD:agent/3d-core-preview
