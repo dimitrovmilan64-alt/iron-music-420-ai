@@ -35,6 +35,9 @@ void main() {
 
     expect(chat, contains('_toggleIronMode()'));
     expect(chat, contains("'ХЕЙ АЙРЪН'"));
+    expect(chat, contains('IronCoreState.speaking'));
+    expect(chat, contains("'IRON MUSIC 420 AI • ЯДРО'"));
+    expect(chat, isNot(contains('Активен • глас и чат на едно място')));
     expect(commands, isNot(contains('АКТИВИРАЙ IRON')));
     expect(commands, isNot(contains('ОТВОРИ AI РАЗГОВОРА')));
     expect(activity, isNot(contains('syncAiProviderSettings')));
@@ -44,6 +47,18 @@ void main() {
       ).existsSync(),
       isFalse,
     );
+  });
+
+  test('living core has depth and distinct interaction states', () {
+    final widgets = File('lib/ui/common_widgets.dart').readAsStringSync();
+
+    expect(widgets, contains('enum IronCoreState'));
+    expect(widgets, contains('class _IronCoreSpherePainter'));
+    expect(widgets, contains('class _IronCoreGlassPainter'));
+    expect(widgets, contains('Matrix4.identity()'));
+    expect(widgets, contains('IronCoreState.listening'));
+    expect(widgets, contains('IronCoreState.thinking'));
+    expect(widgets, contains('IronCoreState.speaking'));
   });
 
   test('duplicate native prompts cannot flood the unified chat queue', () {

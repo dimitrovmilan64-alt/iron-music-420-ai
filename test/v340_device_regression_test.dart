@@ -30,7 +30,7 @@ void main() {
     expect(commands, contains('nativeState ?? _flashlightOn'));
   });
 
-  test('build 53 hears only a guarded full wake phrase', () {
+  test('build 54 keeps the reliable guarded full wake phrase', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
@@ -73,7 +73,7 @@ void main() {
     expect(service, isNot(contains('Intent(Intent.ACTION_SEARCH)')));
   });
 
-  test('build 53 keeps any-song auto-play one-shot and YouTube-only', () {
+  test('build 54 keeps any-song auto-play one-shot and YouTube-only', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();
