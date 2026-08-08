@@ -26,9 +26,9 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _welcomeText =
-      'Готов съм. Добави поне един AI доставчик и ме попитай на български.';
+      'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.';
 
   final TextEditingController _messageController = TextEditingController();
   late final TextEditingController _apiKeyController;
@@ -44,6 +44,10 @@ class _ChatPageState extends State<ChatPage>
   late List<ChatMessage> _messages;
   bool _isLoading = false;
   bool _isListening = false;
+  bool _isSpeaking = false;
+  bool _ironActive = false;
+  bool _voiceToggleBusy = false;
+  bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
   List<Map<String, String>> _bulgarianVoices = const [];
   String _selectedVoiceName = '';
@@ -54,6 +58,8 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.store.addListener(_handleStoreChange);
     _coreController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -93,10 +99,16 @@ class _ChatPageState extends State<ChatPage>
         );
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadIronStatus();
+      _consumePendingChatVoiceRequest();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.store.removeListener(_handleStoreChange);
     _coreController.dispose();
     _flutterTts.stop();
     _automation.setNativeSpeechPartialListener(null);
@@ -109,6 +121,66 @@ class _ChatPageState extends State<ChatPage>
     _backupModelController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadIronStatus();
+      _consumePendingChatVoiceRequest();
+    }
+  }
+
+  void _handleStoreChange() {
+    if (!widget.store.hasPendingChatVoiceRequest ||
+        _processingPendingChatPrompt) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumePendingChatVoiceRequest();
+    });
+  }
+
+  Future<void> _consumePendingChatVoiceRequest() async {
+    if (!mounted || _processingPendingChatPrompt || _isLoading) return;
+    final prompt = widget.store.takePendingChatVoiceRequest();
+    if (prompt == null) return;
+
+    _processingPendingChatPrompt = true;
+    setState(() {
+      _messageController.text = prompt;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: prompt.length),
+      );
+    });
+    try {
+      await _sendMessage();
+    } finally {
+      _processingPendingChatPrompt = false;
+    }
+    if (widget.store.hasPendingChatVoiceRequest) {
+      _handleStoreChange();
+    }
+  }
+
+  Future<void> _loadIronStatus() async {
+    final active = await _automation.isIronVoiceActive();
+    if (!mounted) return;
+    setState(() => _ironActive = active);
+  }
+
+  Future<void> _toggleIronMode() async {
+    if (_voiceToggleBusy) return;
+    setState(() => _voiceToggleBusy = true);
+    final result = await _automation.execute(
+      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
+    );
+    if (!mounted) return;
+    setState(() {
+      _voiceToggleBusy = false;
+      if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
   }
 
   int _voiceScore(Map<String, String> voice) {
@@ -324,7 +396,7 @@ class _ChatPageState extends State<ChatPage>
                       voiceName: tempVoiceName,
                       voiceLocale: tempVoiceLocale,
                     );
-                    await _flutterTts.speak(
+                    await _playSpeechWithWakePaused(
                       'Здравей. Аз съм Iron Music 420 AI. Това е тест на българския глас.',
                     );
                   } catch (_) {
@@ -375,11 +447,31 @@ class _ChatPageState extends State<ChatPage>
         ? '${cleanText.substring(0, 3900)}. Краят е съкратен за гласовото прочитане.'
         : cleanText;
 
+    await _playSpeechWithWakePaused(textForSpeech);
+  }
+
+  Future<void> _playSpeechWithWakePaused(String text) async {
+    if (mounted) setState(() => _isSpeaking = true);
+    final resumeIronVoice = await _automation.pauseIronVoiceCapture();
     try {
+      if (resumeIronVoice) {
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      }
       await _flutterTts.stop();
-      await _flutterTts.speak(textForSpeech);
+      await _flutterTts
+          .speak(text)
+          .timeout(const Duration(minutes: 7));
     } catch (_) {
-      // Текстовият отговор остава наличен и без TTS.
+      try {
+        await _flutterTts.stop();
+      } catch (_) {
+        // The wake listener still has to be restored below.
+      }
+    } finally {
+      if (mounted) setState(() => _isSpeaking = false);
+      if (resumeIronVoice) {
+        await _automation.resumeIronVoiceCapture();
+      }
     }
   }
 
@@ -488,15 +580,6 @@ class _ChatPageState extends State<ChatPage>
     }
   }
 
-  Future<void> _syncNativeAiSettings() {
-    return _automation.syncAiProviderSettings(
-      geminiApiKey: widget.store.apiKey,
-      backupApiKey: widget.store.backupApiKey,
-      backupBaseUrl: widget.store.backupBaseUrl,
-      backupModel: widget.store.backupModel,
-    );
-  }
-
   Future<bool> _saveAiProviders() async {
     final geminiKey = _apiKeyController.text.trim();
     final backupKey = _backupApiKeyController.text.trim();
@@ -536,7 +619,6 @@ class _ChatPageState extends State<ChatPage>
       baseUrl: backupBaseUrl,
       model: backupModel,
     );
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return false;
     setState(() {});
@@ -547,7 +629,6 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _clearGeminiApiKey() async {
     _apiKeyController.clear();
     await widget.store.setApiKey('');
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
@@ -561,7 +642,6 @@ class _ChatPageState extends State<ChatPage>
       baseUrl: _backupBaseUrlController.text,
       model: _backupModelController.text,
     );
-    await _syncNativeAiSettings();
     _gemini.resetModel();
     if (!mounted) return;
     setState(() {});
@@ -890,6 +970,7 @@ class _ChatPageState extends State<ChatPage>
 
   Widget _roundAction({
     required IconData icon,
+    required String label,
     required String tooltip,
     required bool active,
     required VoidCallback? onPressed,
@@ -898,16 +979,16 @@ class _ChatPageState extends State<ChatPage>
       message: tooltip,
       child: Material(
         color: Colors.transparent,
-        shape: const CircleBorder(),
+        borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: onPressed,
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            width: 44,
-            height: 44,
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(18),
               color: active
                   ? ironGreen.withOpacity(0.16)
                   : Colors.black.withOpacity(0.28),
@@ -923,10 +1004,28 @@ class _ChatPageState extends State<ChatPage>
                     ]
                   : null,
             ),
-            child: Icon(
-              icon,
-              color: active ? ironGreen : Colors.white60,
-              size: 21,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  color: active ? ironGreen : Colors.white60,
+                  size: 18,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: active ? ironGreenSoft : Colors.white60,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -935,18 +1034,34 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Widget _buildAssistantCore(double size) {
-    final status = _isListening
-        ? 'СЛУШАМ'
-        : _isLoading
-            ? 'МИСЛЯ'
-            : 'ГОТОВ СЪМ';
+    final coreState = switch ((_isListening, _isSpeaking, _isLoading)) {
+      (true, _, _) => IronCoreState.listening,
+      (_, true, _) => IronCoreState.speaking,
+      (_, _, true) => IronCoreState.thinking,
+      _ => IronCoreState.idle,
+    };
+    final status = switch (coreState) {
+      IronCoreState.listening => 'СЛУШАМ',
+      IronCoreState.thinking => 'МИСЛЯ',
+      IronCoreState.speaking => 'ГОВОРЯ',
+      IronCoreState.idle => _ironActive
+          ? 'ЧАКАМ „ХЕЙ АЙРЪН“'
+          : 'ЯДРОТО Е В ПОКОЙ',
+    };
+    final statusColor = switch (coreState) {
+      IronCoreState.listening => const Color(0xFF70FFB0),
+      IronCoreState.thinking => const Color(0xFF00E5A0),
+      IronCoreState.speaking => const Color(0xFFA8FF70),
+      IronCoreState.idle => ironGreen,
+    };
 
     return AnimatedBuilder(
       animation: _coreController,
       builder: (context, _) {
-        final activity = (_isListening || _isLoading) ? 0.22 : 0.0;
-        final progress =
-            (_coreController.value * 0.72 + activity).clamp(0.0, 1.0).toDouble();
+        final activity = coreState == IronCoreState.idle ? 0.0 : 0.16;
+        final progress = (_coreController.value * 0.84 + activity)
+            .clamp(0.0, 1.0)
+            .toDouble();
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -957,49 +1072,72 @@ class _ChatPageState extends State<ChatPage>
                 onTap: _isLoading ? null : _toggleListening,
                 child: AnimatedScale(
                   duration: const Duration(milliseconds: 180),
-                  scale: _isListening ? 1.05 : 1.0,
-                  child: CannabisCore(progress: progress, size: size),
+                  scale: _isListening ? 1.025 : 1.0,
+                  child: CannabisCore(
+                    progress: progress,
+                    size: size,
+                    state: coreState,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              status,
-              style: TextStyle(
-                color: _isListening ? ironGreenSoft : ironGreen,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2.2,
-                shadows: const [Shadow(color: ironGreen, blurRadius: 10)],
+            const SizedBox(height: 5),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Text(
+                status,
+                key: ValueKey(status),
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.7,
+                  shadows: [Shadow(color: statusColor, blurRadius: 10)],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 9),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _roundAction(
-                  icon: _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                  tooltip: _isListening ? 'Спри слушането' : 'Микрофон',
-                  active: _isListening,
-                  onPressed: _isLoading ? null : _toggleListening,
+                Expanded(
+                  child: _roundAction(
+                    icon: _ironActive
+                        ? Icons.hearing_rounded
+                        : Icons.hearing_disabled_rounded,
+                    label: 'Хей Айрън',
+                    tooltip: _ironActive
+                        ? 'Изключи „Хей Айрън“'
+                        : 'Включи „Хей Айрън“',
+                    active: _ironActive,
+                    onPressed: _voiceToggleBusy ? null : _toggleIronMode,
+                  ),
                 ),
-                const SizedBox(width: 12),
-                _roundAction(
-                  icon: widget.store.voiceRepliesEnabled
-                      ? Icons.volume_up_rounded
-                      : Icons.volume_off_rounded,
-                  tooltip: widget.store.voiceRepliesEnabled
-                      ? (_voiceReady ? 'Гласовите отговори са включени' : 'Системен глас')
-                      : 'Гласовите отговори са изключени',
-                  active: widget.store.voiceRepliesEnabled,
-                  onPressed: _toggleVoiceReplies,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _roundAction(
+                    icon: widget.store.voiceRepliesEnabled
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded,
+                    label: 'Глас',
+                    tooltip: widget.store.voiceRepliesEnabled
+                        ? (_voiceReady
+                            ? 'Гласовите отговори са включени'
+                            : 'Системен глас')
+                        : 'Гласовите отговори са изключени',
+                    active: widget.store.voiceRepliesEnabled,
+                    onPressed: _toggleVoiceReplies,
+                  ),
                 ),
-                const SizedBox(width: 12),
-                _roundAction(
-                  icon: Icons.key_rounded,
-                  tooltip: 'AI доставчици',
-                  active: widget.store.hasAnyAiProvider,
-                  onPressed: _openApiKeySheet,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _roundAction(
+                    icon: Icons.key_rounded,
+                    label: 'AI',
+                    tooltip: 'AI доставчици',
+                    active: widget.store.hasAnyAiProvider,
+                    onPressed: _openApiKeySheet,
+                  ),
                 ),
               ],
             ),
@@ -1014,7 +1152,7 @@ class _ChatPageState extends State<ChatPage>
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
     final compactHeight = media.size.height < 720;
-    final coreSize = compactHeight ? 126.0 : 156.0;
+    final coreSize = compactHeight ? 158.0 : 192.0;
 
     return IronBackground(
       child: Column(
@@ -1028,7 +1166,7 @@ class _ChatPageState extends State<ChatPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'IRON MUSIC 420 AI',
+                        'ХЕЙ АЙРЪН',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1039,16 +1177,15 @@ class _ChatPageState extends State<ChatPage>
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        widget.store.hasAnyAiProvider
-                            ? 'Личен AI асистент'
-                            : 'Добави AI доставчик от менюто',
+                      const Text(
+                        'IRON MUSIC 420 AI • ЯДРО',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: ironGreen,
-                          fontSize: 11,
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
+                          letterSpacing: 1.15,
                         ),
                       ),
                     ],
@@ -1098,10 +1235,10 @@ class _ChatPageState extends State<ChatPage>
                 ? const SizedBox(height: 4)
                 : Padding(
                     padding: EdgeInsets.fromLTRB(
-                      12,
-                      compactHeight ? 4 : 8,
-                      12,
-                      8,
+                      14,
+                      compactHeight ? 1 : 3,
+                      14,
+                      7,
                     ),
                     child: _buildAssistantCore(coreSize),
                   ),
@@ -1110,7 +1247,7 @@ class _ChatPageState extends State<ChatPage>
             child: ListView.builder(
               controller: _scrollController,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
@@ -1150,11 +1287,11 @@ class _ChatPageState extends State<ChatPage>
             ),
           ),
           Container(
-            margin: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            margin: const EdgeInsets.fromLTRB(8, 3, 8, 8),
+            padding: const EdgeInsets.fromLTRB(12, 5, 5, 5),
             decoration: BoxDecoration(
               color: const Color(0xFF010A05).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: ironGreen.withOpacity(0.30)),
               boxShadow: [
                 BoxShadow(
@@ -1206,7 +1343,6 @@ class _ChatPageState extends State<ChatPage>
   }
 
 }
-
 class _ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final VoidCallback? onSendToStudio;
@@ -1234,10 +1370,10 @@ class _ChatBubble extends StatelessWidget {
     return Align(
       alignment: alignment,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.84,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.90,
         ),
         decoration: BoxDecoration(
           color: color,
@@ -1247,7 +1383,7 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(message.isUser ? 18 : 5),
             bottomRight: Radius.circular(message.isUser ? 5 : 18),
           ),
-          border: Border.all(color: borderColor.withOpacity(0.8)),
+          border: Border.all(color: borderColor.withOpacity(0.58)),
           boxShadow: [
             BoxShadow(
               color:
@@ -1268,7 +1404,7 @@ class _ChatBubble extends StatelessWidget {
                     style: TextStyle(
                       color: message.isUser ? ironGreen : Colors.white70,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                 ),
@@ -1310,10 +1446,14 @@ class _ChatBubble extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 4),
             SelectableText(
               cleanMarkdownForDisplay(message.text),
-              style: const TextStyle(color: Colors.white, height: 1.4),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.34,
+              ),
             ),
           ],
         ),

@@ -40,6 +40,18 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:stopWithTask="false" />
+        <service
+            android:name=".YoutubeAutoPlayAccessibilityService"
+            android:exported="true"
+            android:label="@string/youtube_autoplay_accessibility_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/youtube_autoplay_accessibility_service" />
+        </service>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

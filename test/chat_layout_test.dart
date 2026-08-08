@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ironmusic420ai/pages/chat_page.dart';
 import 'package:ironmusic420ai/services/local_store.dart';
+import 'package:ironmusic420ai/ui/common_widgets.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
+    expect(find.byType(CannabisCore), findsOneWidget);
+    expect(find.text('IRON MUSIC 420 AI • ЯДРО'), findsOneWidget);
+    expect(find.text('Хей Айрън'), findsOneWidget);
+    expect(find.text('Глас'), findsOneWidget);
+    expect(find.text('AI'), findsOneWidget);
 
     final apiButton = find.byTooltip('AI доставчици');
     expect(apiButton, findsOneWidget);
@@ -37,5 +43,26 @@ void main() {
     expect(find.text('AI доставчици'), findsOneWidget);
     expect(find.text('Запази AI доставчиците'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('living core paints every interaction state', (tester) async {
+    for (final state in IronCoreState.values) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(useMaterial3: true),
+          home: Scaffold(
+            body: Center(
+              child: CannabisCore(
+                progress: 0.62,
+                size: 192,
+                state: state,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: 'Core state: $state');
+    }
   });
 }

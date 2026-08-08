@@ -3,17 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('local commands are routed before cloud AI', () {
+  test('local commands stay native and free conversation enters one chat', () {
     final service = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
     ).readAsStringSync();
     final localIndex = service.indexOf('LocalVoiceCommandParser.parse');
-    final apiIndex = service.indexOf('if (!aiRouter.hasApiKey())');
+    final chatIndex = service.indexOf('openIronChatPrompt(originalCommand)');
 
     expect(localIndex, greaterThanOrEqualTo(0));
-    expect(apiIndex, greaterThan(localIndex));
+    expect(chatIndex, greaterThan(localIndex));
     expect(service, contains('executeLocalVoiceCommand'));
     expect(service, contains('openIronStudioRequest'));
+    expect(service, isNot(contains('GeminiVoiceRouter')));
+    expect(service, isNot(contains('executeCommand(')));
   });
 
   test('parser includes bilingual phone and music commands', () {
@@ -29,11 +31,12 @@ void main() {
       'направи рап текст',
       'дай рими',
       'направи припев',
-      'включи фенера',
-      'turn on flashlight',
     ]) {
       expect(parser, contains(phrase));
     }
+    expect(parser, contains('hasAny("фенер"'));
+    expect(parser, contains('hasAny("включи"'));
+    expect(parser, contains('"turn on"'));
   });
 
   test('native Studio request reaches the existing Rap Studio generator', () {
@@ -52,9 +55,12 @@ void main() {
     expect(studio, contains('_generateWithAi()'));
   });
 
-  test('offline wake list contains Hey Aaron variants', () {
+  test('offline wake list contains only calibrated full Hey Iron phrases', () {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
-    expect(script, contains('HEY_AARON_LEX'));
-    expect(script, contains('HEY_AARON_BG'));
+    expect(script, contains('HEY_IRON_LEX'));
+    expect(script, contains('HEY_IRON_BG'));
+    expect(script, contains('6.5, 0.03'));
+    expect(script, isNot(contains('HEY_AARON')));
+    expect(script, isNot(contains('NO_H')));
   });
 }

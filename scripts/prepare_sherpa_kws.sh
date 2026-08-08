@@ -46,7 +46,7 @@ if [[ "${model_ready}" != true ]]; then
 
   curl --location --fail --retry 3 --retry-delay 2 \
     --output "${archive}" "${MODEL_URL}"
-  tar -xjf "${archive}" -C "${temp_dir}"
+  tar --no-same-owner -xjf "${archive}" -C "${temp_dir}"
 
   source_dir="${temp_dir}/${MODEL_NAME}"
   rm -rf "${MODEL_DEST}"
@@ -87,52 +87,27 @@ for raw in lexicon_path.read_text(encoding="utf-8").splitlines():
 
 candidates: list[tuple[str, list[str], float, float]] = []
 
-# Use the model's own dictionary and make the complete phrase the easiest match.
+# The full two-word phrase is intentionally kept as the only trigger. The
+# per-keyword values below keep the Bulgarian pronunciation reachable while
+# remaining less permissive than build 51. The service keeps recent voice
+# evidence across the model's required trailing blank, so a valid phrase is not
+# discarded just because recognition is finalized after the speaker stops.
 for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
     for iron_index, iron in enumerate(lexicon.get("IRON", []), start=1):
         candidates.append(
-            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 5.0, 0.03)
-        )
-        if hey and hey[0] == "HH":
-            candidates.append(
-                (
-                    f"HEY_IRON_LEX_NO_H_{hey_index}_{iron_index}",
-                    hey[1:] + iron,
-                    4.7,
-                    0.04,
-                )
-            )
-
-# Common recognition variant: „Hey Aaron“ / „Хей Аарън“.
-for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
-    for aaron_index, aaron in enumerate(lexicon.get("AARON", []), start=1):
-        candidates.append(
-            (f"HEY_AARON_LEX_{hey_index}_{aaron_index}", hey + aaron, 4.8, 0.04)
+            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 6.5, 0.03)
         )
 
-# Bulgarian-accented, relaxed and compressed variants of „Хей Айрън“.
+# Bulgarian-accented full-phrase variants of „Хей Айрън“.
 candidates.extend(
     [
-        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 5.0, 0.03),
-        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 5.0, 0.03),
-        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 4.8, 0.03),
-        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 4.8, 0.03),
-        ("HEY_IRON_NO_H", ["EY1", "AY1", "R", "AH0", "N"], 4.7, 0.04),
-        ("HEY_IRON_NO_H_FAST", ["EY1", "AY1", "R", "N"], 4.7, 0.04),
-        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 4.7, 0.04),
-        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 4.7, 0.04),
-        ("HEY_IRON_NO_H_O", ["EY1", "AY1", "R", "AO0", "N"], 4.5, 0.04),
-        ("HEY_IRON_NO_H_OW", ["EY1", "AY1", "R", "OW0", "N"], 4.5, 0.04),
-        ("HEY_AARON_BG", ["HH", "EY1", "EH1", "R", "AH0", "N"], 4.6, 0.04),
-        ("HEY_AARON_BG_FAST", ["HH", "EY1", "EH1", "R", "N"], 4.5, 0.05),
-        ("HEY_AARON_NO_H", ["EY1", "EH1", "R", "AH0", "N"], 4.4, 0.05),
-        # Fallback for cases where the accented „Hey“ is missed. It remains
-        # slightly stricter than the full phrase to avoid accidental triggers.
-        ("IRON_LEX", ["AY1", "ER0", "N"], 4.2, 0.05),
-        ("IRON_BG", ["AY1", "R", "AH0", "N"], 4.2, 0.05),
-        ("IRON_BG_FAST", ["AY1", "R", "N"], 4.1, 0.05),
-        ("IRON_BG_O", ["AY1", "R", "AO0", "N"], 4.0, 0.06),
-        ("IRON_BG_OW", ["AY1", "R", "OW0", "N"], 4.0, 0.06),
+        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 6.5, 0.03),
     ]
 )
 

@@ -36,6 +36,7 @@ class AutomationService {
       MethodChannel('iron_music_420/automations');
   static bool _nativeHandlerInstalled = false;
   static void Function(String text)? _nativeSpeechPartialListener;
+  static void Function()? _pendingRequestListener;
 
   AutomationService() {
     _installNativeHandler();
@@ -51,12 +52,18 @@ class AutomationService {
           final text = arguments['text']?.toString().trim() ?? '';
           if (text.isNotEmpty) _nativeSpeechPartialListener?.call(text);
         }
+      } else if (call.method == 'ironRequestAvailable') {
+        _pendingRequestListener?.call();
       }
     });
   }
 
   void setNativeSpeechPartialListener(void Function(String text)? listener) {
     _nativeSpeechPartialListener = listener;
+  }
+
+  void setPendingRequestListener(void Function()? listener) {
+    _pendingRequestListener = listener;
   }
 
   Future<NativeSpeechResult> startNativeSpeechRecognition() async {
@@ -101,31 +108,20 @@ class AutomationService {
     }
   }
 
-  Future<void> syncGeminiApiKey(String apiKey) async {
+  Future<bool> pauseIronVoiceCapture() async {
     try {
-      await _channel.invokeMethod<bool>('syncGeminiApiKey', {
-        'apiKey': apiKey.trim(),
-      });
+      return await _channel.invokeMethod<bool>('pauseIronVoiceCapture') ??
+          false;
     } catch (_) {
-      // The chat remains usable even if native voice sync is unavailable.
+      return false;
     }
   }
 
-  Future<void> syncAiProviderSettings({
-    required String geminiApiKey,
-    required String backupApiKey,
-    required String backupBaseUrl,
-    required String backupModel,
-  }) async {
+  Future<void> resumeIronVoiceCapture() async {
     try {
-      await _channel.invokeMethod<bool>('syncAiProviderSettings', {
-        'geminiApiKey': geminiApiKey.trim(),
-        'backupApiKey': backupApiKey.trim(),
-        'backupBaseUrl': backupBaseUrl.trim(),
-        'backupModel': backupModel.trim(),
-      });
+      await _channel.invokeMethod<bool>('resumeIronVoiceCapture');
     } catch (_) {
-      // Flutter chat and studio remain usable even if native sync is unavailable.
+      // Voice playback must not affect the text response.
     }
   }
 
@@ -140,9 +136,45 @@ class AutomationService {
     }
   }
 
+  Future<bool?> flashlightState() async {
+    try {
+      return await _channel.invokeMethod<bool>('execute', {
+        'action': 'flash_status',
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> isYoutubeAutoPlayEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('execute', {
+            'action': 'youtube_autoplay_status',
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<AutomationResult> openYoutubeAutoPlaySettings() =>
+      execute('youtube_autoplay_settings');
+
   Future<int?> consumeIronSection() async {
     try {
       return await _channel.invokeMethod<int>('consumeIronSection');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> consumeChatVoiceRequest() async {
+    try {
+      final prompt = await _channel.invokeMethod<String>(
+        'consumeChatVoiceRequest',
+      );
+      final cleanPrompt = prompt?.trim() ?? '';
+      return cleanPrompt.isEmpty ? null : cleanPrompt;
     } catch (_) {
       return null;
     }

@@ -495,69 +495,124 @@ class NeonPill extends StatelessWidget {
   }
 }
 
+enum IronCoreState {
+  idle,
+  listening,
+  thinking,
+  speaking,
+}
+
+Color _ironCoreStateColor(IronCoreState state) {
+  return switch (state) {
+    IronCoreState.idle => ironGreen,
+    IronCoreState.listening => const Color(0xFF70FFB0),
+    IronCoreState.thinking => const Color(0xFF00E5A0),
+    IronCoreState.speaking => const Color(0xFFA8FF70),
+  };
+}
+
+double _ironCoreEnergy(IronCoreState state) {
+  return switch (state) {
+    IronCoreState.idle => 0.32,
+    IronCoreState.listening => 0.88,
+    IronCoreState.thinking => 1.0,
+    IronCoreState.speaking => 0.78,
+  };
+}
+
 class CannabisCore extends StatelessWidget {
   final double progress;
   final double size;
+  final IronCoreState state;
 
   const CannabisCore({
     super.key,
     required this.progress,
     this.size = 300,
+    this.state = IronCoreState.idle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final pulse = 0.92 + progress * 0.08;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Transform.scale(
-            scale: pulse,
-            child: Container(
-              width: size * 0.88,
-              height: size * 0.88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: ironGreen.withOpacity(0.18 + progress * 0.13),
-                    blurRadius: 36 + progress * 18,
-                    spreadRadius: 4,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Transform.rotate(
-            angle: (progress - 0.5) * math.pi * 0.012,
-            child: Image.asset(
-              'assets/images/hud_core_exact.png',
-              width: size,
-              height: size,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-              errorBuilder: (context, error, stackTrace) => CustomPaint(
-                size: Size.square(size),
-                painter: _HudCorePainter(progress: progress),
-              ),
-            ),
-          ),
-          IgnorePointer(
-            child: Container(
-              width: size * 0.79,
-              height: size * 0.79,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.05 + progress * 0.04),
+    final energy = _ironCoreEnergy(state);
+    final cycle = progress * math.pi * 2;
+    final breath = 0.965 +
+        ((math.sin(cycle) + 1) * 0.5) * (0.012 + energy * 0.018);
+    final leafOffset = Offset(
+      math.sin(cycle * 0.72) * size * 0.018,
+      math.cos(cycle * 0.58) * size * 0.010,
+    );
+    final leafTransform = Matrix4.identity()
+      ..setEntry(3, 2, 0.0014)
+      ..rotateX(math.sin(cycle * 0.54) * 0.055)
+      ..rotateY(math.cos(cycle * 0.46) * 0.070);
+
+    return RepaintBoundary(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _IronCoreSpherePainter(
+                  progress: progress,
+                  state: state,
                 ),
               ),
             ),
-          ),
-        ],
+            Transform.scale(
+              scale: breath,
+              child: ClipOval(
+                child: Opacity(
+                  opacity: 0.54 + energy * 0.12,
+                  child: Transform.rotate(
+                    angle: math.sin(cycle * 0.40) * 0.012,
+                    child: Image.asset(
+                      'assets/images/hud_core_exact.png',
+                      width: size * 0.93,
+                      height: size * 0.93,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (context, error, stackTrace) => CustomPaint(
+                        size: Size.square(size * 0.93),
+                        painter: _HudCorePainter(progress: progress),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Transform.translate(
+              offset: leafOffset,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: leafTransform,
+                child: SizedBox.square(
+                  dimension: size * 0.64,
+                  child: CustomPaint(
+                    painter: _CannabisLeafPainter(
+                      glow: (0.42 + energy * 0.48 + progress * 0.10)
+                          .clamp(0.0, 1.0)
+                          .toDouble(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _IronCoreGlassPainter(
+                    progress: progress,
+                    state: state,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -671,6 +726,206 @@ class IronNavItem {
   });
 }
 
+class _IronCoreSpherePainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _IronCoreSpherePainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.455;
+    final stateColor = _ironCoreStateColor(state);
+    final energy = _ironCoreEnergy(state);
+    final cycle = progress * math.pi * 2;
+
+    final auraPaint = Paint()
+      ..color = stateColor.withOpacity(0.16 + energy * 0.12)
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        18 + energy * 11,
+      );
+    canvas.drawCircle(center, radius * (0.94 + progress * 0.025), auraPaint);
+
+    final sphereRect = Rect.fromCircle(center: center, radius: radius);
+    final spherePaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.34, -0.42),
+        radius: 1.12,
+        colors: [
+          Colors.white.withOpacity(0.12 + energy * 0.04),
+          stateColor.withOpacity(0.15 + energy * 0.08),
+          const Color(0xFF00190B).withOpacity(0.98),
+          const Color(0xFF000402),
+        ],
+        stops: const [0.0, 0.22, 0.66, 1.0],
+      ).createShader(sphereRect);
+    canvas.drawCircle(center, radius, spherePaint);
+
+    final orbitPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.2 + energy * 0.8
+      ..shader = SweepGradient(
+        transform: GradientRotation(cycle * 0.36),
+        colors: [
+          Colors.transparent,
+          stateColor.withOpacity(0.18),
+          stateColor.withOpacity(0.84),
+          Colors.white.withOpacity(0.65),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.26, 0.47, 0.54, 0.72],
+      ).createShader(sphereRect);
+
+    for (var index = 0; index < 3; index++) {
+      final orbitRadius = radius * (0.68 + index * 0.115);
+      final rect = Rect.fromCircle(center: center, radius: orbitRadius);
+      canvas.drawArc(
+        rect,
+        cycle * (index.isEven ? 0.28 : -0.22) + index * 1.7,
+        math.pi * (0.30 + index * 0.07),
+        false,
+        orbitPaint,
+      );
+    }
+
+    final particlePaint = Paint()..style = PaintingStyle.fill;
+    for (var index = 0; index < 14; index++) {
+      final angle = cycle * (0.08 + index % 3 * 0.025) +
+          index * math.pi * 2 / 14;
+      final particleRadius = radius * (0.62 + (index % 4) * 0.075);
+      final flicker = (math.sin(cycle * 1.7 + index * 1.9) + 1) * 0.5;
+      particlePaint.color = stateColor.withOpacity(
+        0.10 + flicker * (0.18 + energy * 0.18),
+      );
+      canvas.drawCircle(
+        center + Offset(
+          math.cos(angle) * particleRadius,
+          math.sin(angle) * particleRadius * 0.88,
+        ),
+        0.8 + flicker * 1.2,
+        particlePaint,
+      );
+    }
+
+    if (state == IronCoreState.listening) {
+      final pulsePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = stateColor.withOpacity(0.46 - progress * 0.26);
+      canvas.drawCircle(
+        center,
+        radius * (0.72 + progress * 0.20),
+        pulsePaint,
+      );
+    } else if (state == IronCoreState.speaking) {
+      final voicePaint = Paint()
+        ..color = stateColor.withOpacity(0.58)
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 1.5;
+      for (var index = 0; index < 24; index++) {
+        final angle = index * math.pi * 2 / 24;
+        final wave = (math.sin(cycle * 2.2 + index * 0.92) + 1) * 0.5;
+        final start = radius * 0.74;
+        final end = start + 3 + wave * radius * 0.07;
+        canvas.drawLine(
+          center + Offset(math.cos(angle) * start, math.sin(angle) * start),
+          center + Offset(math.cos(angle) * end, math.sin(angle) * end),
+          voicePaint,
+        );
+      }
+    } else if (state == IronCoreState.thinking) {
+      final nodePaint = Paint()
+        ..color = stateColor.withOpacity(0.84)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+      for (var index = 0; index < 3; index++) {
+        final angle = cycle * (0.72 + index * 0.11) + index * 2.1;
+        canvas.drawCircle(
+          center + Offset(
+            math.cos(angle) * radius * (0.66 + index * 0.10),
+            math.sin(angle) * radius * (0.66 + index * 0.10),
+          ),
+          2.2 + index * 0.4,
+          nodePaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _IronCoreSpherePainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.state != state;
+}
+
+class _IronCoreGlassPainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _IronCoreGlassPainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.455;
+    final stateColor = _ironCoreStateColor(state);
+    final sphereRect = Rect.fromCircle(center: center, radius: radius);
+
+    final edgePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..shader = SweepGradient(
+        transform: GradientRotation(progress * math.pi * 0.32),
+        colors: [
+          stateColor.withOpacity(0.12),
+          Colors.white.withOpacity(0.72),
+          stateColor.withOpacity(0.72),
+          Colors.transparent,
+          stateColor.withOpacity(0.12),
+        ],
+      ).createShader(sphereRect);
+    canvas.drawCircle(center, radius, edgePaint);
+
+    final highlightRect = Rect.fromCenter(
+      center: Offset(size.width * 0.41, size.height * 0.30),
+      width: size.width * 0.40,
+      height: size.height * 0.13,
+    );
+    final highlightPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.white.withOpacity(0.17),
+          Colors.white.withOpacity(0.015),
+        ],
+      ).createShader(highlightRect);
+    canvas.drawOval(highlightRect, highlightPaint);
+
+    final lowerShade = Paint()
+      ..color = Colors.black.withOpacity(0.30)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.shortestSide * 0.055
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.88),
+      math.pi * 0.13,
+      math.pi * 0.74,
+      false,
+      lowerShade,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _IronCoreGlassPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.state != state;
+}
+
 class _PanelAccentPainter extends CustomPainter {
   final Color color;
 
@@ -687,7 +942,12 @@ class _PanelAccentPainter extends CustomPainter {
       ..lineTo(math.min(size.width * 0.34, 105), 1)
       ..moveTo(size.width - 1, size.height * 0.58)
       ..lineTo(size.width - 1, size.height - 16)
-      ..quadraticBezierTo(size.width - 1, size.height - 1, size.width - 16, size.height - 1)
+      ..quadraticBezierTo(
+        size.width - 1,
+        size.height - 1,
+        size.width - 16,
+        size.height - 1,
+      )
       ..lineTo(size.width * 0.72, size.height - 1);
     canvas.drawPath(path, paint);
   }
@@ -883,21 +1143,23 @@ class _CannabisLeafPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.79);
+    final center = Offset(size.width / 2, size.height * 0.76);
     final scale = size.shortestSide;
 
     final glowPaint = Paint()
       ..color = ironGreen.withOpacity(0.20 + glow * 0.14)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
     final fillPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
+      ..shader = const RadialGradient(
+        center: Alignment(-0.30, -0.38),
+        radius: 1.15,
         colors: [
-          Color(0xFF00451F),
-          Color(0xFF00C95A),
-          Color(0xFF33FF88),
+          Color(0xFFB8FFD0),
+          Color(0xFF24FF82),
+          Color(0xFF008D43),
+          Color(0xFF002812),
         ],
+        stops: [0.0, 0.24, 0.66, 1.0],
       ).createShader(Offset.zero & size);
     final outlinePaint = Paint()
       ..color = const Color(0xFF8CFFB4).withOpacity(0.98)
@@ -911,13 +1173,13 @@ class _CannabisLeafPainter extends CustomPainter {
       ..strokeWidth = math.max(0.7, scale * 0.0065);
 
     final leaflets = <({double angle, double length, double width, int teeth})>[
-      (angle: -0.96, length: 0.39, width: 0.050, teeth: 3),
-      (angle: -0.64, length: 0.56, width: 0.068, teeth: 4),
-      (angle: -0.33, length: 0.72, width: 0.082, teeth: 5),
-      (angle: 0.00, length: 0.86, width: 0.090, teeth: 6),
-      (angle: 0.33, length: 0.72, width: 0.082, teeth: 5),
-      (angle: 0.64, length: 0.56, width: 0.068, teeth: 4),
-      (angle: 0.96, length: 0.39, width: 0.050, teeth: 3),
+      (angle: -0.96, length: 0.33, width: 0.050, teeth: 3),
+      (angle: -0.64, length: 0.48, width: 0.068, teeth: 4),
+      (angle: -0.33, length: 0.62, width: 0.082, teeth: 5),
+      (angle: 0.00, length: 0.72, width: 0.090, teeth: 6),
+      (angle: 0.33, length: 0.62, width: 0.082, teeth: 5),
+      (angle: 0.64, length: 0.48, width: 0.068, teeth: 4),
+      (angle: 0.96, length: 0.33, width: 0.050, teeth: 3),
     ];
 
     for (final leaflet in leaflets) {

@@ -61,4 +61,23 @@ void main() {
       ['stopChatSpeechRecognition', 'cancelChatSpeechRecognition'],
     );
   });
+
+  test('voice playback pauses and restores the wake microphone', () async {
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+
+    final service = AutomationService();
+    final paused = await service.pauseIronVoiceCapture();
+    await service.resumeIronVoiceCapture();
+
+    expect(paused, isTrue);
+    expect(
+      calls,
+      ['pauseIronVoiceCapture', 'resumeIronVoiceCapture'],
+    );
+  });
 }
