@@ -31,13 +31,15 @@ void main() {
     expect(find.byType(CannabisCore), findsOneWidget);
     expect(find.text('IRON'), findsOneWidget);
     expect(find.text('MUSIC 420 AI'), findsOneWidget);
-    expect(find.text('CHAT'), findsOneWidget);
-    expect(find.text('COMMANDS'), findsOneWidget);
-    expect(find.text('MUSIC MODE'), findsOneWidget);
-    expect(find.text('KEYBOARD'), findsOneWidget);
+    expect(find.text('Чат'), findsOneWidget);
+    expect(find.text('ДОКОСНИ ЯДРОТО'), findsOneWidget);
+    expect(find.text('CHAT'), findsNothing);
+    expect(find.text('COMMANDS'), findsNothing);
+    expect(find.text('MUSIC MODE'), findsNothing);
+    expect(find.text('KEYBOARD'), findsNothing);
 
-    await tester.ensureVisible(find.text('CHAT'));
-    await tester.tap(find.text('CHAT'));
+    await tester.ensureVisible(find.text('Чат'));
+    await tester.tap(find.text('Чат'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('CHAT WITH IRON'), findsOneWidget);
 
