@@ -9,69 +9,14 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-build57:
-    if: github.event.head_commit.message == 'Apply Build 57 source-only patch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          token: ${{ github.token }}
-      - name: Apply source patch
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          common = Path('lib/ui/common_widgets.dart')
-          text = common.read_text()
-          text = text.replace('    final leafOffset = Offset(\n      math.sin(cycle * 0.72) * size * 0.018,\n      math.cos(cycle * 0.58) * size * 0.010,\n    );\n    final leafTransform = Matrix4.identity()\n      ..setEntry(3, 2, 0.0014)\n      ..rotateX(math.sin(cycle * 0.54) * 0.055)\n      ..rotateY(math.cos(cycle * 0.46) * 0.070);\n\n', '')
-          overlay_start = text.find('            Transform.translate(\n              offset: leafOffset,')
-          if overlay_start != -1:
-              overlay_end = text.find('            Positioned.fill(\n              child: IgnorePointer(', overlay_start)
-              if overlay_end == -1:
-                  raise SystemExit('overlay end marker not found')
-              text = text[:overlay_start] + text[overlay_end:]
-          class_start = text.find('\nclass _CannabisLeafPainter extends CustomPainter {')
-          if class_start != -1:
-              text = text[:class_start].rstrip() + '\n'
-          common.write_text(text)
-
-          pubspec = Path('pubspec.yaml')
-          text = pubspec.read_text()
-          text = text.replace('version: 3.4.0+56', 'version: 3.4.0+57')
-          pubspec.write_text(text)
-
-          Path('README.md').write_text('# Iron Music 420 AI\n\nFlutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.\n\n## Current main build\n\n- Version: `3.4.0+57`\n- Build name: `v3.4.0 build 57 single-leaf HUD`\n- APK artifact: `iron-music-420-ai-v3.4.0-build57-single-leaf-hud`\n\n## Build 57 single-leaf HUD\n\n- Makes the first screen a HUD control center instead of the chat stream.\n- Keeps one large glowing cannabis leaf inside the core.\n- Removes the duplicate painted leaf overlay from the core.\n- Moves the chat behind `CHAT` and `KEYBOARD` actions.\n- Adds working HUD actions for commands, songs, flashlight, settings and voice.\n- Keeps the existing signed Android package so the APK can update the installed app.\n')
-
-          changelog = Path('CHANGELOG_V340_SINGLE_CHAT_VOICE_CORE.md')
-          text = changelog.read_text()
-          if '## Build 57 single-leaf HUD' not in text:
-              text += '\n\n## Build 57 single-leaf HUD\n\n- Removes the extra painted cannabis overlay from the core.\n- Keeps the generated `hud_core_exact.png` core leaf as the single visible leaf.\n- Preserves the HUD-first layout and the fixed Bulgarian voice path.\n'
-          changelog.write_text(text)
-
-          test = Path('test/unified_hey_iron_chat_test.dart')
-          text = test.read_text()
-          text = text.replace("    expect(widgets, contains('Matrix4.identity()'));", "    expect(widgets, contains('assets/images/hud_core_exact.png'));\n    expect(widgets, isNot(contains('class _CannabisLeafPainter')));")
-          if "isNot(contains('class _CannabisLeafPainter'))" not in text:
-              raise SystemExit('single-leaf regression assertion not written')
-          test.write_text(text)
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/ui/common_widgets.dart pubspec.yaml README.md CHANGELOG_V340_SINGLE_CHAT_VOICE_CORE.md test/unified_hey_iron_chat_test.dart
-          git diff --cached --check
-          git commit -m "Build 57 single leaf HUD"
-          git push
-
   build-apk:
-    if: github.event.head_commit.message != 'Apply Build 57 source-only patch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
