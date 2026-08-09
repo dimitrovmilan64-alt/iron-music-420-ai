@@ -4,9 +4,16 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
 ## Current main build
 
-- Version: `3.4.0+62`
-- Build name: `v3.4.0 build 62 real 3D core`
-- APK artifact: `iron-music-420-ai-v3.4.0-build62-real-3d-core`
+- Version: `3.4.0+63`
+- Build name: `v3.4.0 build 63 reference HUD core`
+- APK artifact: `iron-music-420-ai-v3.4.0-build63-reference-hud-core`
+
+## Build 63 reference HUD core
+
+- Rebuilds the first screen around the supplied sci-fi HUD references.
+- Adds side action/status panels, top online/mic controls and a bottom `HEY IRON` command dock.
+- Adds a segmented machine ring around the 3D cannabis core for a stronger reactor look.
+- Keeps the Build 62 code-drawn leaf and the fixed Bulgarian voice path.
 
 ## Build 62 real 3D core
 
