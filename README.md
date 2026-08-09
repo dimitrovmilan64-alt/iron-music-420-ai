@@ -4,16 +4,16 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
 ## Current main build
 
-- Version: `3.4.0+58`
-- Build name: `v3.4.0 build 58 living leaf veins`
-- APK artifact: `iron-music-420-ai-v3.4.0-build58-living-leaf-veins`
+- Version: `3.4.0+59`
+- Build name: `v3.4.0 build 59 single leaf only`
+- APK artifact: `iron-music-420-ai-v3.4.0-build59-single-leaf-only`
 
-## Build 58 living leaf veins
+## Build 59 single leaf only
 
 - Makes the first screen a HUD control center instead of the chat stream.
-- Keeps one large glowing cannabis leaf inside the core.
-- Removes the duplicate painted leaf overlay from the core.
-- Adds visible pulsing veins and energy sparks over the single core leaf.
+- Keeps one large glowing cannabis leaf inside the center core only.
+- Removes duplicate leaf-like symbols from the bottom nav, wake-word status and background.
+- Keeps visible pulsing veins and energy sparks over the single core leaf.
 - Moves the chat behind `CHAT` and `KEYBOARD` actions.
 - Adds working HUD actions for commands, songs, flashlight, settings and voice.
 - Keeps the existing signed Android package so the APK can update the installed app.
