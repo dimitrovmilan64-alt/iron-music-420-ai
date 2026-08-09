@@ -538,15 +538,6 @@ class CannabisCore extends StatelessWidget {
     final cycle = progress * math.pi * 2;
     final breath = 0.965 +
         ((math.sin(cycle) + 1) * 0.5) * (0.012 + energy * 0.018);
-    final leafOffset = Offset(
-      math.sin(cycle * 0.72) * size * 0.018,
-      math.cos(cycle * 0.58) * size * 0.010,
-    );
-    final leafTransform = Matrix4.identity()
-      ..setEntry(3, 2, 0.0014)
-      ..rotateX(math.sin(cycle * 0.54) * 0.055)
-      ..rotateY(math.cos(cycle * 0.46) * 0.070);
-
     return RepaintBoundary(
       child: SizedBox(
         width: size,
@@ -579,23 +570,6 @@ class CannabisCore extends StatelessWidget {
                         size: Size.square(size * 0.93),
                         painter: _HudCorePainter(progress: progress),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Transform.translate(
-              offset: leafOffset,
-              child: Transform(
-                alignment: Alignment.center,
-                transform: leafTransform,
-                child: SizedBox.square(
-                  dimension: size * 0.64,
-                  child: CustomPaint(
-                    painter: _CannabisLeafPainter(
-                      glow: (0.42 + energy * 0.48 + progress * 0.10)
-                          .clamp(0.0, 1.0)
-                          .toDouble(),
                     ),
                   ),
                 ),
@@ -1196,136 +1170,4 @@ class _HudCorePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _HudCorePainter oldDelegate) =>
       oldDelegate.progress != progress;
-}
-
-class _CannabisLeafPainter extends CustomPainter {
-  final double glow;
-
-  const _CannabisLeafPainter({required this.glow});
-
-  Path _serratedLeaflet({
-    required double length,
-    required double width,
-    required int teeth,
-  }) {
-    final path = Path()..moveTo(0, 0);
-    final steps = teeth * 2 + 2;
-
-    for (var i = 1; i < steps; i++) {
-      final t = i / steps;
-      final envelope = math.pow(math.sin(math.pi * t), 0.72).toDouble();
-      final serration = i.isEven ? 1.0 : 0.58;
-      path.lineTo(-width * envelope * serration, -length * t);
-    }
-
-    path.lineTo(0, -length);
-
-    for (var i = steps - 1; i >= 1; i--) {
-      final t = i / steps;
-      final envelope = math.pow(math.sin(math.pi * t), 0.72).toDouble();
-      final serration = i.isEven ? 1.0 : 0.58;
-      path.lineTo(width * envelope * serration, -length * t);
-    }
-
-    return path..close();
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.76);
-    final scale = size.shortestSide;
-
-    final glowPaint = Paint()
-      ..color = ironGreen.withOpacity(0.20 + glow * 0.14)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-    final fillPaint = Paint()
-      ..shader = const RadialGradient(
-        center: Alignment(-0.30, -0.38),
-        radius: 1.15,
-        colors: [
-          Color(0xFFB8FFD0),
-          Color(0xFF24FF82),
-          Color(0xFF008D43),
-          Color(0xFF002812),
-        ],
-        stops: [0.0, 0.24, 0.66, 1.0],
-      ).createShader(Offset.zero & size);
-    final outlinePaint = Paint()
-      ..color = const Color(0xFF8CFFB4).withOpacity(0.98)
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = math.max(1.0, scale * 0.012);
-    final veinPaint = Paint()
-      ..color = const Color(0xFFB8FFD0).withOpacity(0.62)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = math.max(0.7, scale * 0.0065);
-
-    final leaflets = <({double angle, double length, double width, int teeth})>[
-      (angle: -0.96, length: 0.33, width: 0.050, teeth: 3),
-      (angle: -0.64, length: 0.48, width: 0.068, teeth: 4),
-      (angle: -0.33, length: 0.62, width: 0.082, teeth: 5),
-      (angle: 0.00, length: 0.72, width: 0.090, teeth: 6),
-      (angle: 0.33, length: 0.62, width: 0.082, teeth: 5),
-      (angle: 0.64, length: 0.48, width: 0.068, teeth: 4),
-      (angle: 0.96, length: 0.33, width: 0.050, teeth: 3),
-    ];
-
-    for (final leaflet in leaflets) {
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate(leaflet.angle);
-
-      final length = scale * leaflet.length;
-      final width = scale * leaflet.width;
-      final path = _serratedLeaflet(
-        length: length,
-        width: width,
-        teeth: leaflet.teeth,
-      );
-
-      canvas.drawPath(path, glowPaint);
-      canvas.drawPath(path, fillPaint);
-      canvas.drawPath(path, outlinePaint);
-      canvas.drawLine(Offset.zero, Offset(0, -length * 0.96), veinPaint);
-
-      for (var tooth = 1; tooth <= leaflet.teeth; tooth++) {
-        final t = tooth / (leaflet.teeth + 1);
-        final envelope = math.pow(math.sin(math.pi * t), 0.72).toDouble();
-        final x = width * envelope * 0.82;
-        final y = -length * t;
-        canvas.drawLine(
-          Offset(0, y + length * 0.035),
-          Offset(-x, y - length * 0.025),
-          veinPaint,
-        );
-        canvas.drawLine(
-          Offset(0, y + length * 0.035),
-          Offset(x, y - length * 0.025),
-          veinPaint,
-        );
-      }
-
-      canvas.restore();
-    }
-
-    final stemGlow = Paint()
-      ..color = ironGreen.withOpacity(0.32)
-      ..strokeWidth = math.max(4, scale * 0.034)
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
-    final stemPaint = Paint()
-      ..color = const Color(0xFF59FF96)
-      ..strokeWidth = math.max(1.8, scale * 0.017)
-      ..strokeCap = StrokeCap.round;
-
-    final stemStart = center.translate(0, -scale * 0.025);
-    final stemEnd = center.translate(0, scale * 0.19);
-    canvas.drawLine(stemStart, stemEnd, stemGlow);
-    canvas.drawLine(stemStart, stemEnd, stemPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _CannabisLeafPainter oldDelegate) =>
-      oldDelegate.glow != glow;
 }

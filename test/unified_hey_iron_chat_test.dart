@@ -62,7 +62,8 @@ void main() {
     expect(widgets, contains('class _IronCoreSpherePainter'));
     expect(widgets, contains('class _IronCoreGlassPainter'));
     expect(widgets, contains('class _IronCorePedestalPainter'));
-    expect(widgets, contains('Matrix4.identity()'));
+    expect(widgets, contains('assets/images/hud_core_exact.png'));
+    expect(widgets, isNot(contains('class _CannabisLeafPainter')));
     expect(widgets, contains('IronCoreState.listening'));
     expect(widgets, contains('IronCoreState.thinking'));
     expect(widgets, contains('IronCoreState.speaking'));

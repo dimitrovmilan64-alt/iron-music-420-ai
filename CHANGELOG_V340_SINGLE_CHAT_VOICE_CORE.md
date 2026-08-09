@@ -94,3 +94,10 @@
 - Keeps chat available behind the `CHAT` and `KEYBOARD` controls.
 - Adds direct HUD controls for commands, music mode, flashlight, settings and voice status.
 - Keeps the fixed Bulgarian voice path untouched.
+
+
+## Build 57 single-leaf HUD
+
+- Removes the extra painted cannabis overlay from the core.
+- Keeps the generated `hud_core_exact.png` core leaf as the single visible leaf.
+- Preserves the HUD-first layout and the fixed Bulgarian voice path.
