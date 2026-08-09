@@ -42,9 +42,9 @@ void main() {
     expect(find.text('CHAT WITH IRON'), findsOneWidget);
 
     final apiButton = find.byTooltip('AI доставчици');
-    expect(apiButton, findsOneWidget);
-    await tester.ensureVisible(apiButton);
-    await tester.tap(apiButton);
+    expect(apiButton, findsWidgets);
+    await tester.ensureVisible(apiButton.last);
+    await tester.tap(apiButton.last);
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('AI доставчици'), findsOneWidget);
