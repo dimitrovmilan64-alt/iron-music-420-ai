@@ -540,6 +540,7 @@ class CannabisCore extends StatelessWidget {
         ((math.sin(cycle) + 1) * 0.5) * (0.012 + energy * 0.018);
     final leafPulse =
         0.992 + math.sin(cycle * 1.35) * (0.006 + energy * 0.010);
+    final leafTurn = math.sin(cycle * 0.44) * 0.045;
     return RepaintBoundary(
       child: SizedBox(
         width: size,
@@ -555,22 +556,22 @@ class CannabisCore extends StatelessWidget {
                 ),
               ),
             ),
-            Transform.scale(
-              scale: breath,
-              child: ClipOval(
-                child: Opacity(
-                  opacity: 0.54 + energy * 0.12,
-                  child: Transform.rotate(
-                    angle: math.sin(cycle * 0.40) * 0.012,
-                    child: Image.asset(
-                      'assets/images/hud_core_exact.png',
-                      width: size * 0.93,
-                      height: size * 0.93,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (context, error, stackTrace) => CustomPaint(
-                        size: Size.square(size * 0.93),
-                        painter: _HudCorePainter(progress: progress),
+            Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0009)
+                ..rotateX(-0.10)
+                ..rotateY(leafTurn),
+              child: Transform.translate(
+                offset: Offset(0, size * 0.018),
+                child: Transform.scale(
+                  scale: breath,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      size: Size.square(size * 0.62),
+                      painter: _IronCoreLeafPainter(
+                        progress: progress,
+                        state: state,
                       ),
                     ),
                   ),
@@ -579,13 +580,21 @@ class CannabisCore extends StatelessWidget {
             ),
             Transform.scale(
               scale: leafPulse,
-              child: ClipOval(
+              child: Transform.translate(
+                offset: Offset(0, size * 0.018),
                 child: IgnorePointer(
-                  child: CustomPaint(
-                    size: Size.square(size * 0.93),
-                    painter: _LivingLeafVeinPainter(
-                      progress: progress,
-                      state: state,
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.0009)
+                      ..rotateX(-0.10)
+                      ..rotateY(leafTurn),
+                    child: CustomPaint(
+                      size: Size.square(size * 0.62),
+                      painter: _LivingLeafVeinPainter(
+                        progress: progress,
+                        state: state,
+                      ),
                     ),
                   ),
                 ),
@@ -619,6 +628,230 @@ class CannabisCore extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _IronCoreLeafPainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _IronCoreLeafPainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final energy = _ironCoreEnergy(state);
+    final cycle = progress * math.pi * 2;
+    final root = Offset(size.width * 0.50, size.height * 0.70);
+    final leafPath = _leafSilhouette(size);
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.46)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.035);
+    canvas.drawPath(
+      leafPath.shift(Offset(size.width * 0.018, size.height * 0.030)),
+      shadowPaint,
+    );
+
+    final bodyPaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.32, -0.42),
+        radius: 1.10,
+        colors: [
+          Colors.white.withOpacity(0.18),
+          const Color(0xFF78FF92).withOpacity(0.62 + energy * 0.10),
+          const Color(0xFF0DA34D).withOpacity(0.94),
+          const Color(0xFF043D20).withOpacity(0.98),
+        ],
+        stops: const [0.0, 0.20, 0.58, 1.0],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(leafPath, bodyPaint);
+
+    final innerShade = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withOpacity(0.10),
+          Colors.transparent,
+          Colors.black.withOpacity(0.26),
+        ],
+        stops: const [0.0, 0.42, 1.0],
+      ).createShader(Offset.zero & size)
+      ..blendMode = BlendMode.srcATop;
+    canvas.drawPath(leafPath, innerShade);
+
+    final rimPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * 0.008
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withOpacity(0.42),
+          const Color(0xFF73FF91).withOpacity(0.70),
+          const Color(0xFF0D5A2B).withOpacity(0.58),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(leafPath, rimPaint);
+
+    final midribPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = size.width * 0.010
+      ..color = const Color(0xFFD5FFE0).withOpacity(0.45)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.003);
+    final fineVeinPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = size.width * 0.0032
+      ..color = const Color(0xFFDBFFE4).withOpacity(0.30);
+
+    final veinTargets = <Offset>[
+      Offset(size.width * 0.50, size.height * 0.25),
+      Offset(size.width * 0.29, size.height * 0.34),
+      Offset(size.width * 0.18, size.height * 0.50),
+      Offset(size.width * 0.28, size.height * 0.62),
+      Offset(size.width * 0.39, size.height * 0.75),
+      Offset(size.width * 0.71, size.height * 0.34),
+      Offset(size.width * 0.82, size.height * 0.50),
+      Offset(size.width * 0.72, size.height * 0.62),
+      Offset(size.width * 0.61, size.height * 0.75),
+    ];
+
+    canvas.save();
+    canvas.clipPath(leafPath);
+    for (var i = 0; i < veinTargets.length; i++) {
+      final target = veinTargets[i];
+      final path = _veinPath(root, target, (target.dx - root.dx) * 0.00020);
+      canvas.drawPath(path, i == 0 ? midribPaint : fineVeinPaint);
+      _drawSideVeins(canvas, root, target, fineVeinPaint, size);
+    }
+
+    final lifeGlowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * (0.004 + energy * 0.002)
+      ..color = const Color(0xFFB7FFC7)
+          .withOpacity(0.16 + ((math.sin(cycle * 1.8) + 1) * 0.5) * 0.14)
+      ..blendMode = BlendMode.plus
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
+    canvas.drawPath(
+      _veinPath(root, Offset(size.width * 0.50, size.height * 0.25), 0),
+      lifeGlowPaint,
+    );
+    canvas.restore();
+  }
+
+  void _drawSideVeins(
+    Canvas canvas,
+    Offset root,
+    Offset tip,
+    Paint paint,
+    Size size,
+  ) {
+    final direction = tip - root;
+    final length = direction.distance;
+    if (length <= 0) return;
+    final unit = direction / length;
+    final normal = Offset(-unit.dy, unit.dx);
+    final sign = tip.dx < root.dx ? -1.0 : 1.0;
+
+    for (var j = 1; j <= 3; j++) {
+      final base = root + direction * (0.24 + j * 0.14);
+      final sideLength = length * (0.08 + j * 0.012);
+      final branchTip = base + normal * sideLength * sign;
+      final path = Path()
+        ..moveTo(base.dx, base.dy)
+        ..quadraticBezierTo(
+          (base.dx + branchTip.dx) * 0.5 + unit.dx * size.width * 0.012,
+          (base.dy + branchTip.dy) * 0.5 + unit.dy * size.width * 0.012,
+          branchTip.dx,
+          branchTip.dy,
+        );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  Path _veinPath(Offset root, Offset tip, double bend) {
+    final control = Offset(
+      (root.dx + tip.dx) * 0.5 + bend,
+      (root.dy + tip.dy) * 0.5 - (root.dy - tip.dy).abs() * 0.08,
+    );
+    return Path()
+      ..moveTo(root.dx, root.dy)
+      ..quadraticBezierTo(control.dx, control.dy, tip.dx, tip.dy);
+  }
+
+  Path _leafSilhouette(Size size) {
+    final root = Offset(size.width * 0.50, size.height * 0.70);
+    final lobes = <Path>[
+      _leaflet(root, Offset(size.width * 0.50, size.height * 0.25), 0.064),
+      _leaflet(root, Offset(size.width * 0.29, size.height * 0.34), 0.052),
+      _leaflet(root, Offset(size.width * 0.18, size.height * 0.50), 0.050),
+      _leaflet(root, Offset(size.width * 0.28, size.height * 0.62), 0.042),
+      _leaflet(root, Offset(size.width * 0.39, size.height * 0.75), 0.032),
+      _leaflet(root, Offset(size.width * 0.71, size.height * 0.34), 0.052),
+      _leaflet(root, Offset(size.width * 0.82, size.height * 0.50), 0.050),
+      _leaflet(root, Offset(size.width * 0.72, size.height * 0.62), 0.042),
+      _leaflet(root, Offset(size.width * 0.61, size.height * 0.75), 0.032),
+    ];
+    var combined = lobes.first;
+    for (final lobe in lobes.skip(1)) {
+      combined = Path.combine(PathOperation.union, combined, lobe);
+    }
+    final stem = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(size.width * 0.50, size.height * 0.77),
+            width: size.width * 0.022,
+            height: size.height * 0.18,
+          ),
+          Radius.circular(size.width * 0.012),
+        ),
+      );
+    return Path.combine(PathOperation.union, combined, stem);
+  }
+
+  Path _leaflet(Offset root, Offset tip, double widthFactor) {
+    final direction = tip - root;
+    final length = direction.distance;
+    if (length == 0) return Path();
+    final unit = direction / length;
+    final normal = Offset(-unit.dy, unit.dx);
+    final waist = root + direction * 0.52;
+    final width = length * widthFactor;
+    return Path()
+      ..moveTo(root.dx, root.dy)
+      ..cubicTo(
+        root.dx + normal.dx * width * 0.32,
+        root.dy + normal.dy * width * 0.32,
+        waist.dx + normal.dx * width,
+        waist.dy + normal.dy * width,
+        tip.dx,
+        tip.dy,
+      )
+      ..cubicTo(
+        waist.dx - normal.dx * width,
+        waist.dy - normal.dy * width,
+        root.dx - normal.dx * width * 0.32,
+        root.dy - normal.dy * width * 0.32,
+        root.dx,
+        root.dy,
+      )
+      ..close();
+  }
+
+  @override
+  bool shouldRepaint(covariant _IronCoreLeafPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.state != state;
   }
 }
 
