@@ -1362,30 +1362,33 @@ class _ChatPageState extends State<ChatPage>
         children: [
           SizedBox(
             height: 38,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: List.generate(17, (index) {
-                final distance = (index - 8).abs();
-                final height = 8.0 + (8 - distance) * (active ? 2.9 : 1.4);
-                return Container(
-                  width: 2,
-                  height: height.clamp(6.0, 32.0).toDouble(),
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(active ? 0.86 : 0.45),
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: color.withOpacity(0.30),
-                              blurRadius: 8,
-                            ),
-                          ]
-                        : null,
-                  ),
-                );
-              }),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: List.generate(17, (index) {
+                  final distance = (index - 8).abs();
+                  final height = 8.0 + (8 - distance) * (active ? 2.9 : 1.4);
+                  return Container(
+                    width: 2,
+                    height: height.clamp(6.0, 32.0).toDouble(),
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(active ? 0.86 : 0.45),
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: active
+                          ? [
+                              BoxShadow(
+                                color: color.withOpacity(0.30),
+                                blurRadius: 8,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  );
+                }),
+              ),
             ),
           ),
           const SizedBox(height: 8),
