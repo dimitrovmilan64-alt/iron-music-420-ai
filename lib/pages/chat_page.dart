@@ -1267,6 +1267,156 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
+  Widget _bottomHudAction({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+    bool active = false,
+  }) {
+    final color = active ? ironGreenSoft : ironGreen;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            height: 72,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(active ? 0.42 : 0.32),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: color.withOpacity(active ? 0.64 : 0.28)),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(active ? 0.18 : 0.08),
+                  blurRadius: active ? 22 : 14,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: active ? ironGreenSoft : Colors.white60,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _voiceWavePanel({
+    required String title,
+    required String value,
+    required bool active,
+  }) {
+    final color = active ? ironGreenSoft : Colors.white54;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.34),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(active ? 0.44 : 0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(active ? 0.14 : 0.04),
+            blurRadius: 18,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: List.generate(17, (index) {
+                final distance = (index - 8).abs();
+                final height = 8.0 + (8 - distance) * (active ? 2.9 : 1.4);
+                return Container(
+                  width: 2,
+                  height: height.clamp(6.0, 32.0).toDouble(),
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(active ? 0.86 : 0.45),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: color.withOpacity(0.30),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : null,
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAssistantCore(double size) {
     final coreState = switch ((_isListening, _isSpeaking, _isLoading)) {
       (true, _, _) => IronCoreState.listening,
@@ -1402,241 +1552,411 @@ class _ChatPageState extends State<ChatPage>
   Widget _buildHudDashboard() {
     final media = MediaQuery.of(context);
     final compactHeight = media.size.height < 760;
-    final coreSize = (media.size.width * (compactHeight ? 0.86 : 0.94))
-        .clamp(300.0, 410.0)
+    final narrow = media.size.width < 390;
+    final now = DateTime.now();
+    final time =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final date =
+        '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
+    final coreState = switch ((_isListening, _isSpeaking, _isLoading)) {
+      (true, _, _) => IronCoreState.listening,
+      (_, true, _) => IronCoreState.speaking,
+      (_, _, true) => IronCoreState.thinking,
+      _ => IronCoreState.idle,
+    };
+    final status = switch (coreState) {
+      IronCoreState.listening => 'LISTENING',
+      IronCoreState.thinking => 'THINKING',
+      IronCoreState.speaking => 'SPEAKING',
+      IronCoreState.idle => _ironActive ? 'ONLINE' : 'STANDBY',
+    };
+    final subtitle = switch (coreState) {
+      IronCoreState.listening => 'I AM LISTENING',
+      IronCoreState.thinking => 'PROCESSING',
+      IronCoreState.speaking => 'VOICE OUTPUT',
+      IronCoreState.idle => _ironActive ? 'SAY HEY IRON' : 'TAP TO WAKE',
+    };
+    final statusColor = switch (coreState) {
+      IronCoreState.listening => const Color(0xFF70FFB0),
+      IronCoreState.thinking => const Color(0xFF00E5A0),
+      IronCoreState.speaking => const Color(0xFFA8FF70),
+      IronCoreState.idle => ironGreen,
+    };
+    final coreSize = (media.size.width * (compactHeight ? 1.04 : 1.10))
+        .clamp(330.0, 470.0)
         .toDouble();
 
+    PopupMenuButton<String> menuButton({
+      required IconData icon,
+      required String tooltip,
+    }) {
+      return PopupMenuButton<String>(
+        tooltip: tooltip,
+        icon: Icon(icon, color: Colors.white),
+        onSelected: (value) {
+          if (value == 'api') {
+            _openApiKeySheet();
+          } else if (value == 'voice') {
+            _openVoiceSettings();
+          } else if (value == 'history') {
+            _clearHistory();
+          } else if (value == 'tools') {
+            widget.onOpenTools?.call();
+          } else if (value == 'studio') {
+            widget.onOpenStudio?.call();
+          } else if (value == 'songs') {
+            widget.onOpenSongs?.call();
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(value: 'api', child: Text('AI доставчици')),
+          const PopupMenuItem(value: 'voice', child: Text('Настройки на гласа')),
+          if (widget.onOpenSongs != null)
+            const PopupMenuItem(value: 'songs', child: Text('Песни')),
+          if (widget.onOpenStudio != null)
+            const PopupMenuItem(value: 'studio', child: Text('Студио')),
+          if (widget.onOpenTools != null)
+            const PopupMenuItem(value: 'tools', child: Text('Инструменти')),
+          const PopupMenuItem(value: 'history', child: Text('Изчисти историята')),
+        ],
+      );
+    }
+
     return IronBackground(
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  _hudChip(
-                    icon: Icons.circle_rounded,
-                    label: _ironActive ? 'ONLINE' : 'STANDBY',
-                    active: _ironActive,
-                  ),
-                  const Spacer(),
-                  PopupMenuButton<String>(
-                    tooltip: 'Настройки',
-                    icon: const Icon(
-                      Icons.more_horiz_rounded,
-                      color: ironGreen,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          narrow ? 10 : 14,
+          8,
+          narrow ? 10 : 14,
+          12,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                menuButton(icon: Icons.menu_rounded, tooltip: 'Меню'),
+                const SizedBox(width: 8),
+                _hudChip(
+                  icon: Icons.circle_rounded,
+                  label: _ironActive ? 'ONLINE' : 'OFFLINE',
+                  active: _ironActive,
+                ),
+                const Spacer(),
+                Tooltip(
+                  message: _isListening ? 'Спри слушането' : 'Говори',
+                  child: Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _isLoading ? null : _toggleListening,
+                      child: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: (_isListening ? ironGreen : Colors.black)
+                              .withOpacity(_isListening ? 0.22 : 0.32),
+                          border: Border.all(
+                            color: ironGreen.withOpacity(0.46),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: ironGreen.withOpacity(
+                                _isListening ? 0.28 : 0.10,
+                              ),
+                              blurRadius: 18,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                          color: _isListening ? Colors.redAccent : ironGreen,
+                          size: 26,
+                        ),
+                      ),
                     ),
-                    onSelected: (value) {
-                      if (value == 'api') {
-                        _openApiKeySheet();
-                      } else if (value == 'voice') {
-                        _openVoiceSettings();
-                      } else if (value == 'history') {
-                        _clearHistory();
-                      } else if (value == 'tools') {
-                        widget.onOpenTools?.call();
-                      } else if (value == 'studio') {
-                        widget.onOpenStudio?.call();
-                      } else if (value == 'songs') {
-                        widget.onOpenSongs?.call();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'api',
-                        child: Text('AI доставчици'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'voice',
-                        child: Text('Настройки на гласа'),
-                      ),
-                      if (widget.onOpenSongs != null)
-                        const PopupMenuItem(
-                          value: 'songs',
-                          child: Text('Песни'),
-                        ),
-                      if (widget.onOpenStudio != null)
-                        const PopupMenuItem(
-                          value: 'studio',
-                          child: Text('Студио'),
-                        ),
-                      if (widget.onOpenTools != null)
-                        const PopupMenuItem(
-                          value: 'tools',
-                          child: Text('Инструменти'),
-                        ),
-                      const PopupMenuItem(
-                        value: 'history',
-                        child: Text('Изчисти историята'),
-                      ),
-                    ],
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                menuButton(icon: Icons.more_horiz_rounded, tooltip: 'Настройки'),
+              ],
+            ),
+            Expanded(
+              child: AnimatedBuilder(
+                animation: _coreController,
+                builder: (context, _) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final safeCoreSize = coreSize
+                          .clamp(300.0, constraints.maxHeight * 0.72)
+                          .toDouble();
+                      final sideWidth =
+                          (constraints.maxWidth * (narrow ? 0.31 : 0.34))
+                              .clamp(104.0, 150.0)
+                              .toDouble();
+                      final panelTop = compactHeight ? 112.0 : 140.0;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: Column(
+                              children: [
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'IRON',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: ironGreenSoft,
+                                    fontSize: 42,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 8,
+                                  ),
+                                ),
+                                Text(
+                                  'MUSIC 420 AI',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.86),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 3.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 7),
+                                Text(
+                                  '• $status •',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.8,
+                                    shadows: [
+                                      Shadow(
+                                        color: statusColor,
+                                        blurRadius: 14,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(height: compactHeight ? 4 : 10),
+                                Expanded(
+                                  child: Center(
+                                    child: GestureDetector(
+                                      onTap: _isLoading ? null : _toggleListening,
+                                      child: AnimatedScale(
+                                        duration:
+                                            const Duration(milliseconds: 180),
+                                        scale: _isListening ? 1.035 : 1.0,
+                                        child: CannabisCore(
+                                          progress: _coreController.value,
+                                          size: safeCoreSize,
+                                          state: coreState,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: compactHeight ? 6 : 10),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            top: panelTop,
+                            width: sideWidth,
+                            child: Column(
+                              children: [
+                                _hudPanel(
+                                  icon: Icons.chat_bubble_outline_rounded,
+                                  title: 'CHAT',
+                                  subtitle: 'Talk with Iron',
+                                  onTap: _openChatPanel,
+                                ),
+                                SizedBox(height: compactHeight ? 7 : 10),
+                                _hudPanel(
+                                  icon: Icons.terminal_rounded,
+                                  title: 'COMMANDS',
+                                  subtitle: 'Voice & Actions',
+                                  onTap: widget.onOpenTools,
+                                ),
+                                SizedBox(height: compactHeight ? 7 : 10),
+                                _hudPanel(
+                                  icon: Icons.music_note_rounded,
+                                  title: 'MUSIC MODE',
+                                  subtitle: 'Iron Music 420',
+                                  onTap: widget.onOpenStudio,
+                                  active: widget.onOpenStudio != null,
+                                ),
+                                if (!compactHeight) ...[
+                                  const SizedBox(height: 10),
+                                  _hudPanel(
+                                    icon: Icons.settings_rounded,
+                                    title: 'SETTINGS',
+                                    subtitle: 'Control Center',
+                                    onTap: _openApiKeySheet,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            top: panelTop + (compactHeight ? 8 : 18),
+                            width: sideWidth,
+                            child: Column(
+                              children: [
+                                _statusPanel(
+                                  icon: Icons.schedule_rounded,
+                                  title: time,
+                                  value: date,
+                                ),
+                                SizedBox(height: compactHeight ? 7 : 10),
+                                _voiceWavePanel(
+                                  title: 'VOICE',
+                                  value: _isListening
+                                      ? 'ACTIVE'
+                                      : widget.store.voiceRepliesEnabled
+                                          ? 'READY'
+                                          : 'MUTED',
+                                  active: _isListening ||
+                                      widget.store.voiceRepliesEnabled,
+                                ),
+                                SizedBox(height: compactHeight ? 7 : 10),
+                                _statusPanel(
+                                  icon: _ironActive
+                                      ? Icons.mic_rounded
+                                      : Icons.mic_off_rounded,
+                                  title: 'WAKE WORD',
+                                  value: _ironActive ? 'HEY IRON' : 'OFF',
+                                  active: _ironActive,
+                                ),
+                                if (!compactHeight) ...[
+                                  const SizedBox(height: 10),
+                                  _statusPanel(
+                                    icon: Icons.verified_user_outlined,
+                                    title: 'PRIVACY',
+                                    value: 'PROTECTED',
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: sideWidth * 0.74,
+                            right: sideWidth * 0.74,
+                            bottom: compactHeight ? 2 : 10,
+                            child: IgnorePointer(
+                              child: Container(
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      ironGreen.withOpacity(0.42),
+                                      ironGreen.withOpacity(0.10),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
               ),
-              Expanded(
-                child: AnimatedBuilder(
-                  animation: _coreController,
-                  builder: (context, _) {
-                    final coreState = switch ((_isListening, _isSpeaking, _isLoading)) {
-                      (true, _, _) => IronCoreState.listening,
-                      (_, true, _) => IronCoreState.speaking,
-                      (_, _, true) => IronCoreState.thinking,
-                      _ => IronCoreState.idle,
-                    };
-                    final status = switch (coreState) {
-                      IronCoreState.listening => 'СЛУШАМ',
-                      IronCoreState.thinking => 'МИСЛЯ',
-                      IronCoreState.speaking => 'ГОВОРЯ',
-                      IronCoreState.idle => _ironActive
-                          ? 'КАЖИ „ХЕЙ АЙРЪН“'
-                          : 'ДОКОСНИ ЯДРОТО',
-                    };
-                    final statusColor = switch (coreState) {
-                      IronCoreState.listening => const Color(0xFF70FFB0),
-                      IronCoreState.thinking => const Color(0xFF00E5A0),
-                      IronCoreState.speaking => const Color(0xFFA8FF70),
-                      IronCoreState.idle => ironGreen,
-                    };
-                    return LayoutBuilder(
-                      builder: (context, constraints) {
-                        final safeCoreSize = coreSize
-                            .clamp(260.0, constraints.maxHeight * 0.72)
-                            .toDouble();
-                        return Column(
+            ),
+            Row(
+              children: [
+                _bottomHudAction(
+                  icon: Icons.bolt_rounded,
+                  title: 'QUICK ACTION',
+                  subtitle: 'Tap to Speak',
+                  onTap: _isLoading ? null : _toggleListening,
+                  active: _isListening,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  flex: 2,
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(28),
+                    child: InkWell(
+                      onTap: _isLoading ? null : _toggleListening,
+                      borderRadius: BorderRadius.circular(28),
+                      child: Container(
+                        height: 72,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.40),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: statusColor.withOpacity(0.38),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColor.withOpacity(0.16),
+                              blurRadius: 22,
+                            ),
+                          ],
+                        ),
+                        child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
-                              'IRON',
+                            Text(
+                              'HEY IRON',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 36,
+                                color: statusColor,
+                                fontSize: 23,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: 7,
+                                letterSpacing: 3.0,
+                                shadows: [
+                                  Shadow(
+                                    color: statusColor,
+                                    blurRadius: 14,
+                                  ),
+                                ],
                               ),
                             ),
+                            const SizedBox(height: 4),
                             Text(
-                              'MUSIC 420 AI',
+                              subtitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.78),
-                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.72),
+                                fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                letterSpacing: 2.5,
-                              ),
-                            ),
-                            SizedBox(height: compactHeight ? 6 : 14),
-                            GestureDetector(
-                              onTap: _isLoading ? null : _toggleListening,
-                              child: AnimatedScale(
-                                duration: const Duration(milliseconds: 180),
-                                scale: _isListening ? 1.035 : 1.0,
-                                child: CannabisCore(
-                                  progress: _coreController.value,
-                                  size: safeCoreSize,
-                                  state: coreState,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: compactHeight ? 8 : 16),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 180),
-                              child: Text(
-                                status,
-                                key: ValueKey(status),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 2.2,
-                                  shadows: [
-                                    Shadow(color: statusColor, blurRadius: 12),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _ironActive
-                                  ? 'живото ядро слуша за теб'
-                                  : 'докосни за разговор',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.58),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.4,
                               ),
                             ),
                           ],
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.34),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: ironGreen.withOpacity(0.20)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: ironGreen.withOpacity(0.10),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    _coreDockButton(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      label: 'Чат',
-                      onTap: _openChatPanel,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Tooltip(
-                        message: _isListening ? 'Спри слушането' : 'Говори',
-                        child: FilledButton(
-                          onPressed: _isLoading ? null : _toggleListening,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(58),
-                            shape: const CircleBorder(),
-                            padding: EdgeInsets.zero,
-                            backgroundColor:
-                                _isListening ? Colors.redAccent : ironGreen,
-                            foregroundColor: Colors.black,
-                          ),
-                          child: Icon(
-                            _isListening
-                                ? Icons.stop_rounded
-                                : Icons.mic_rounded,
-                            size: 28,
-                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    _coreDockButton(
-                      icon: widget.store.voiceRepliesEnabled
-                          ? Icons.volume_up_rounded
-                          : Icons.volume_off_rounded,
-                      label: 'Глас',
-                      active: widget.store.voiceRepliesEnabled,
-                      onTap: _toggleVoiceReplies,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 9),
+                _bottomHudAction(
+                  icon: Icons.keyboard_rounded,
+                  title: 'KEYBOARD',
+                  subtitle: 'Type Message',
+                  onTap: _openChatPanel,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
