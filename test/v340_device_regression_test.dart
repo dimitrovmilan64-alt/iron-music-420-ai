@@ -3,18 +3,21 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('main navigation exposes one Hey Iron chat', () {
+  test('main navigation exposes the clean Hey Iron core', () {
     final main = File('lib/main.dart').readAsStringSync();
     final chat = File('lib/pages/chat_page.dart').readAsStringSync();
 
     expect(main, contains("label: 'Хей Айрън'"));
+    expect(main, contains('onOpenStudio: () => _openSection(1)'));
     expect(main, contains('onOpenSongs: () => _openSection(2)'));
+    expect(main, contains('_currentIndex == 0'));
     expect(chat, contains("'IRON'"));
     expect(chat, contains("_chatPanelOpen ? _buildChatMode() : _buildHudDashboard()"));
-    expect(chat, contains("title: 'MUSIC MODE'"));
-    expect(chat, contains("label: 'Хей Айрън'"));
+    expect(chat, contains('_coreDockButton'));
+    expect(chat, contains("label: 'Чат'"));
+    expect(chat, contains("'ДОКОСНИ ЯДРОТО'"));
     expect(chat, contains("'MUSIC 420 AI'"));
-    expect(chat, contains("title: 'VOICE STATUS'"));
+    expect(chat, isNot(contains('GridView.count')));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
   });
 
