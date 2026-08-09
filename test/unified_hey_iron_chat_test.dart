@@ -72,11 +72,16 @@ void main() {
     expect(widgets, contains('Matrix4.identity()'));
     expect(widgets, contains('rotateY(leafTurn)'));
     expect(widgets, contains('Size.square(size * _ironCoreLeafScale)'));
+    expect(widgets, contains('const double _ironCoreLeafScale = 0.76'));
     expect(widgets, contains('class _LivingLeafVeinPainter'));
     expect(widgets, contains('leafPulse'));
     expect(widgets, contains('_ironCannabisLeafSilhouette'));
     expect(widgets, contains('_ironCannabisLeaflet'));
     expect(widgets, contains('_ironLeafTipTargets'));
+    expect(widgets, contains('size.height * 0.04'));
+    expect(widgets, contains('size.height * 0.53'));
+    expect(widgets, isNot(contains('0.235')));
+    expect(widgets, isNot(contains('0.225')));
     expect(widgets, contains('canvas.clipPath(leafMask)'));
     expect(widgets, contains('PathOperation.union'));
     expect(widgets, contains('castShadowPaint'));

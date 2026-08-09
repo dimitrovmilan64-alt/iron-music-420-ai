@@ -520,23 +520,21 @@ double _ironCoreEnergy(IronCoreState state) {
   };
 }
 
-const double _ironCoreLeafScale = 0.70;
+const double _ironCoreLeafScale = 0.76;
 
 Offset _ironLeafRoot(Size size) {
-  return Offset(size.width * 0.50, size.height * 0.72);
+  return Offset(size.width * 0.50, size.height * 0.79);
 }
 
 List<Offset> _ironLeafTipTargets(Size size) {
   return [
-    Offset(size.width * 0.50, size.height * 0.13),
-    Offset(size.width * 0.31, size.height * 0.25),
-    Offset(size.width * 0.13, size.height * 0.43),
-    Offset(size.width * 0.23, size.height * 0.58),
-    Offset(size.width * 0.36, size.height * 0.70),
-    Offset(size.width * 0.69, size.height * 0.25),
-    Offset(size.width * 0.87, size.height * 0.43),
-    Offset(size.width * 0.77, size.height * 0.58),
-    Offset(size.width * 0.64, size.height * 0.70),
+    Offset(size.width * 0.50, size.height * 0.04),
+    Offset(size.width * 0.35, size.height * 0.14),
+    Offset(size.width * 0.21, size.height * 0.31),
+    Offset(size.width * 0.12, size.height * 0.53),
+    Offset(size.width * 0.65, size.height * 0.14),
+    Offset(size.width * 0.79, size.height * 0.31),
+    Offset(size.width * 0.88, size.height * 0.53),
   ];
 }
 
@@ -544,15 +542,13 @@ Path _ironCannabisLeafSilhouette(Size size) {
   final root = _ironLeafRoot(size);
   final targets = _ironLeafTipTargets(size);
   final widths = <double>[
-    0.235,
-    0.225,
-    0.205,
-    0.170,
-    0.130,
-    0.225,
-    0.205,
-    0.170,
-    0.130,
+    0.060,
+    0.070,
+    0.074,
+    0.064,
+    0.070,
+    0.074,
+    0.064,
   ];
 
   var combined = _ironCannabisLeaflet(root, targets.first, widths.first);
@@ -568,11 +564,11 @@ Path _ironCannabisLeafSilhouette(Size size) {
     ..addRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
-          center: Offset(size.width * 0.50, size.height * 0.84),
-          width: size.width * 0.035,
-          height: size.height * 0.25,
+          center: Offset(size.width * 0.50, size.height * 0.89),
+          width: size.width * 0.020,
+          height: size.height * 0.18,
         ),
-        Radius.circular(size.width * 0.018),
+        Radius.circular(size.width * 0.010),
       ),
     );
   return Path.combine(PathOperation.union, combined, stem);
@@ -585,15 +581,15 @@ Path _ironCannabisLeaflet(Offset root, Offset tip, double widthFactor) {
   final unit = direction / length;
   final normal = Offset(-unit.dy, unit.dx);
   final maxWidth = length * widthFactor;
-  const steps = 14;
+  const steps = 24;
 
   final rightEdge = <Offset>[];
   final leftEdge = <Offset>[];
   for (var i = 0; i <= steps; i++) {
     final t = i / steps;
     final spine = Offset.lerp(tip, root, t)!;
-    final profile = math.sin(t * math.pi);
-    final serration = i.isEven ? 1.0 : 0.82;
+    final profile = math.pow(math.sin(t * math.pi), 0.82).toDouble();
+    final serration = i.isEven ? 1.0 : 0.86;
     final width = maxWidth * profile * serration;
     rightEdge.add(spine + normal * width);
     leftEdge.add(spine - normal * width);
@@ -856,9 +852,9 @@ class _IronCoreLeafPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.030
-      ..color = const Color(0xFF49FF72).withOpacity(0.34 + energy * 0.10)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.030);
+      ..strokeWidth = size.width * 0.020
+      ..color = const Color(0xFF49FF72).withOpacity(0.30 + energy * 0.08)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.022);
     canvas.drawPath(leafPath, massGlowPaint);
 
     final bodyPaint = Paint()
@@ -866,12 +862,12 @@ class _IronCoreLeafPainter extends CustomPainter {
         center: const Alignment(-0.32, -0.42),
         radius: 1.10,
         colors: [
-          Colors.white.withOpacity(0.24),
-          const Color(0xFF8CFF9D).withOpacity(0.78 + energy * 0.08),
-          const Color(0xFF0DA34D).withOpacity(0.94),
+          Colors.white.withOpacity(0.14),
+          const Color(0xFF7BFF93).withOpacity(0.70 + energy * 0.07),
+          const Color(0xFF079047).withOpacity(0.88),
           const Color(0xFF043D20).withOpacity(0.98),
         ],
-        stops: const [0.0, 0.24, 0.62, 1.0],
+        stops: const [0.0, 0.20, 0.58, 1.0],
       ).createShader(Offset.zero & size);
     canvas.drawPath(leafPath, bodyPaint);
 
@@ -880,9 +876,9 @@ class _IronCoreLeafPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.10),
+          Colors.white.withOpacity(0.08),
           Colors.transparent,
-          Colors.black.withOpacity(0.26),
+          Colors.black.withOpacity(0.34),
         ],
         stops: const [0.0, 0.42, 1.0],
       ).createShader(Offset.zero & size)
@@ -893,13 +889,13 @@ class _IronCoreLeafPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.010
+      ..strokeWidth = size.width * 0.008
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.52),
-          const Color(0xFF73FF91).withOpacity(0.82),
+          Colors.white.withOpacity(0.45),
+          const Color(0xFF73FF91).withOpacity(0.78),
           const Color(0xFF0D5A2B).withOpacity(0.58),
         ],
       ).createShader(Offset.zero & size);
@@ -909,15 +905,15 @@ class _IronCoreLeafPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = size.width * 0.012
-      ..color = const Color(0xFFD5FFE0).withOpacity(0.54)
+      ..strokeWidth = size.width * 0.009
+      ..color = const Color(0xFFD5FFE0).withOpacity(0.50)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.003);
     final fineVeinPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = size.width * 0.0040
-      ..color = const Color(0xFFDBFFE4).withOpacity(0.34);
+      ..strokeWidth = size.width * 0.0028
+      ..color = const Color(0xFFDBFFE4).withOpacity(0.28);
 
     final veinTargets = _ironLeafTipTargets(size);
 

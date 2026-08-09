@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 66 real cannabis leaf fix
+
+- Replaces the maple-like broad core shape with a narrow seven-blade cannabis silhouette.
+- Lowers and thins the stem so it no longer dominates the sphere.
+- Reduces the flat pale fill and keeps the pulsing veins clipped inside the corrected leaf.
+- Preserves the Build 65 published voice path and mobile HUD layout.
+
 ## Build 65 real leaf core fix
 
 - Replaces the stick-thin leaf mask in the central sphere with wider serrated cannabis leaflets.
