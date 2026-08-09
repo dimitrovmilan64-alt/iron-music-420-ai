@@ -1,0 +1,40 @@
+name: Apply Build 66 Source Patch
+
+on:
+  push:
+    branches:
+      - 'agent/build66-publish-*'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply exact build 66 patch
+        run: |
+          set -euo pipefail
+          cat patches/build66.patch.b64.* | tr -d '\n\r' | base64 -d > /tmp/build66.patch
+          echo '5425994a55664b60bb64e1fa1788f77f0e316c762507e1a2cbfa45e349f4afc4  /tmp/build66.patch' | sha256sum -c -
+          test "$(git hash-object /tmp/build66.patch)" = '7595da85c5f8ce3d91cc0b33750d25a8731fa4b0'
+          git apply /tmp/build66.patch
+          test "$(git hash-object lib/ui/common_widgets.dart)" = '16f4b2573d26f38f2946de39efcb20e2b1e72c25'
+          grep -q 'const double _ironCoreLeafScale = 0.76' lib/ui/common_widgets.dart
+          grep -q 'size.height \* 0.04' lib/ui/common_widgets.dart
+          grep -q 'size.height \* 0.53' lib/ui/common_widgets.dart
+          if grep -q '0.235' lib/ui/common_widgets.dart; then exit 1; fi
+          if grep -q '0.225' lib/ui/common_widgets.dart; then exit 1; fi
+          git rm patches/build66.patch.b64.* .github/workflows/apply-build66-source.yml
+          git add .github/workflows/android-build.yml CHANGELOG_V340_SINGLE_CHAT_VOICE_CORE.md README.md lib/ui/common_widgets.dart pubspec.yaml test/unified_hey_iron_chat_test.dart
+          test "$(git write-tree)" = '1f526f0dfd7a111c24832990d76a106bd0958bf4'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply build 66 real cannabis leaf source"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
