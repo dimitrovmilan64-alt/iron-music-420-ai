@@ -44,7 +44,7 @@ jobs:
         run: bash scripts/prepare_sherpa_kws.sh
       - name: Get Flutter packages
         run: flutter pub get
-      - name: Analyze v3.4.0 build 63
+      - name: Analyze v3.4.0 build 64
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Test all Flutter regressions
         run: flutter test
@@ -66,6 +66,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build63-reference-hud-core
+          name: iron-music-420-ai-v3.4.0-build64-mobile-core-fix
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
