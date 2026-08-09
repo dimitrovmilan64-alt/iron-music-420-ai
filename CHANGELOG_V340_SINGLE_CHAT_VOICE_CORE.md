@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 64 mobile core fix
+
+- Removes the Build 63 side HUD overlay from the phone first screen after real-device review.
+- Keeps the sci-fi core and segmented machine ring while moving controls below the core.
+- Prevents clipped action/status text and keeps the bottom `HEY IRON` dock inside the viewport.
+- Leaves the native Bulgarian voice path untouched.
+
 ## Build 63 reference HUD core
 
 - Rebuilds the first screen to match the supplied sci-fi HUD references more closely.
