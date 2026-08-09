@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 61 3D core aligned veins
+
+- Clips the animated vein pulse inside a cannabis leaf silhouette instead of painting over the whole orb.
+- Reduces vein overlay intensity so the existing leaf veins stay readable.
+- Adds stronger sphere depth: cast shadow, inner lower shade, rim lift and glass highlight.
+- Preserves the clean Build 60 first screen and the fixed Bulgarian voice path.
+
 ## Build 60 clean core interface
 
 - Replaces the HUD control center with a minimal living-core start screen.
