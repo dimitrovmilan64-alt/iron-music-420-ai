@@ -17,166 +17,43 @@ concurrency:
 
 jobs:
   apply-build57:
-    if: github.event.head_commit.message == 'Apply Build 57 through android workflow'
+    if: github.event.head_commit.message == 'Apply Build 57 through valid android workflow'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ github.token }}
-
-      - name: Apply final Build 57 source patch
+      - name: Apply source patch
         run: |
           python3 <<'PY'
           from pathlib import Path
-
           common = Path('lib/ui/common_widgets.dart')
           text = common.read_text()
-          text = text.replace("""    final leafOffset = Offset(
-      math.sin(cycle * 0.72) * size * 0.018,
-      math.cos(cycle * 0.58) * size * 0.010,
-    );
-    final leafTransform = Matrix4.identity()
-      ..setEntry(3, 2, 0.0014)
-      ..rotateX(math.sin(cycle * 0.54) * 0.055)
-      ..rotateY(math.cos(cycle * 0.46) * 0.070);
-
-""", "")
-          start = text.index("""            Transform.translate(
-              offset: leafOffset,""")
-          end = text.index("""            Positioned.fill(
-              child: IgnorePointer(""", start)
+          text = text.replace('    final leafOffset = Offset(\n      math.sin(cycle * 0.72) * size * 0.018,\n      math.cos(cycle * 0.58) * size * 0.010,\n    );\n    final leafTransform = Matrix4.identity()\n      ..setEntry(3, 2, 0.0014)\n      ..rotateX(math.sin(cycle * 0.54) * 0.055)\n      ..rotateY(math.cos(cycle * 0.46) * 0.070);\n\n', '')
+          start = text.index('            Transform.translate(\n              offset: leafOffset,')
+          end = text.index('            Positioned.fill(\n              child: IgnorePointer(', start)
           text = text[:start] + text[end:]
           class_start = text.index('\nclass _CannabisLeafPainter extends CustomPainter {')
-          text = text[:class_start].rstrip() + '\n'
-          common.write_text(text)
-
+          common.write_text(text[:class_start].rstrip() + '\n')
           Path('pubspec.yaml').write_text(Path('pubspec.yaml').read_text().replace('version: 3.4.0+56', 'version: 3.4.0+57'))
-
-          Path('README.md').write_text("""# Iron Music 420 AI
-
-Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
-
-## Current main build
-
-- Version: `3.4.0+57`
-- Build name: `v3.4.0 build 57 single-leaf HUD`
-- APK artifact: `iron-music-420-ai-v3.4.0-build57-single-leaf-hud`
-
-## Build 57 single-leaf HUD
-
-- Makes the first screen a HUD control center instead of the chat stream.
-- Keeps one large glowing cannabis leaf inside the core.
-- Moves the chat behind `CHAT` and `KEYBOARD` actions.
-- Adds working HUD actions for commands, songs, flashlight, settings and voice.
-- Keeps the existing signed Android package so the APK can update the installed app.
-""")
-
+          Path('README.md').write_text('# Iron Music 420 AI\n\nFlutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.\n\n## Current main build\n\n- Version: `3.4.0+57`\n- Build name: `v3.4.0 build 57 single-leaf HUD`\n- APK artifact: `iron-music-420-ai-v3.4.0-build57-single-leaf-hud`\n\n## Build 57 single-leaf HUD\n\n- Makes the first screen a HUD control center instead of the chat stream.\n- Keeps one large glowing cannabis leaf inside the core.\n- Moves the chat behind `CHAT` and `KEYBOARD` actions.\n- Adds working HUD actions for commands, songs, flashlight, settings and voice.\n- Keeps the existing signed Android package so the APK can update the installed app.\n')
           changelog = Path('CHANGELOG_V340_SINGLE_CHAT_VOICE_CORE.md')
           text = changelog.read_text()
           if '## Build 57 single-leaf HUD' not in text:
-              text += """
-
-## Build 57 single-leaf HUD
-
-- Removes the extra painted cannabis overlay from the core.
-- Keeps the generated `hud_core_exact.png` core leaf as the single visible leaf.
-- Preserves the HUD-first layout and the fixed Bulgarian voice path.
-"""
+              text += '\n\n## Build 57 single-leaf HUD\n\n- Removes the extra painted cannabis overlay from the core.\n- Keeps the generated `hud_core_exact.png` core leaf as the single visible leaf.\n- Preserves the HUD-first layout and the fixed Bulgarian voice path.\n'
           changelog.write_text(text)
-
           test = Path('test/unified_hey_iron_chat_test.dart')
           text = test.read_text()
           text = text.replace("    expect(widgets, contains('Matrix4.identity()'));", "    expect(widgets, contains('assets/images/hud_core_exact.png'));\n    expect(widgets, isNot(contains('class _CannabisLeafPainter')));")
           test.write_text(text)
-
-          Path('.github/workflows/android-build.yml').write_text("""name: Android build
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-concurrency:
-  group: android-build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  build-apk:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Prepare stable test signing key
-        shell: bash
-        run: |
-          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
-          keytool -list \\
-            -keystore android/app/iron-test-key.jks \\
-            -storepass iron420test \\
-            -alias iron-test
-
-      - name: Prepare offline Hey Iron engine
-        run: bash scripts/prepare_sherpa_kws.sh
-
-      - name: Get Flutter packages
-        run: flutter pub get
-
-      - name: Analyze v3.4.0 build 57
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos
-
-      - name: Test all Flutter regressions
-        run: flutter test
-
-      - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
-
-      - name: Test native voice lifecycle
-        working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
-
-      - name: Verify stable APK certificate
-        shell: bash
-        run: |
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          test -x "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \\
-            | tee /tmp/iron-apk-certificate.txt
-          grep -Fi \\
-            'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \\
-            /tmp/iron-apk-certificate.txt
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: iron-music-420-ai-v3.4.0-build57-single-leaf-hud
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-""")
-
+          workflow = Path('.github/workflows/android-build.yml')
+          text = workflow.read_text()
+          text = text.replace('Analyze v3.4.0 build 56', 'Analyze v3.4.0 build 57')
+          text = text.replace('iron-music-420-ai-v3.4.0-build56-hud-control-center', 'iron-music-420-ai-v3.4.0-build57-single-leaf-hud')
+          workflow.write_text(text)
           Path('.github/workflows/apply-build57-single-leaf.yml').unlink(missing_ok=True)
           PY
-
-      - name: Commit final Build 57
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -185,26 +62,22 @@ jobs:
           git push
 
   build-apk:
-    if: github.event.head_commit.message != 'Apply Build 57 through android workflow'
+    if: github.event.head_commit.message != 'Apply Build 57 through valid android workflow'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
       - name: Prepare stable test signing key
         shell: bash
         run: |
@@ -213,26 +86,19 @@ jobs:
             -keystore android/app/iron-test-key.jks \
             -storepass iron420test \
             -alias iron-test
-
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh
-
       - name: Get Flutter packages
         run: flutter pub get
-
       - name: Analyze v3.4.0 build 57
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
-
       - name: Test all Flutter regressions
         run: flutter test
-
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
-
       - name: Test native voice lifecycle
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --no-daemon
-
       - name: Verify stable APK certificate
         shell: bash
         run: |
@@ -243,7 +109,6 @@ jobs:
           grep -Fi \
             'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
             /tmp/iron-apk-certificate.txt
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
