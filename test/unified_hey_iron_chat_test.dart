@@ -37,16 +37,17 @@ void main() {
     expect(chat, contains('_buildHudDashboard()'));
     expect(chat, contains('_buildChatMode()'));
     expect(chat, contains("'IRON'"));
-    expect(chat, contains('_coreDockButton'));
-    expect(chat, contains("label: 'Чат'"));
-    expect(chat, contains("'ДОКОСНИ ЯДРОТО'"));
-    expect(chat, contains("label: 'Хей Айрън'"));
+    expect(chat, contains('_bottomHudAction'));
+    expect(chat, contains('_voiceWavePanel'));
+    expect(chat, contains("title: 'CHAT'"));
+    expect(chat, contains("title: 'COMMANDS'"));
+    expect(chat, contains("title: 'MUSIC MODE'"));
+    expect(chat, contains("title: 'KEYBOARD'"));
+    expect(chat, contains("'HEY IRON'"));
     expect(chat, contains('IronCoreState.speaking'));
     expect(chat, contains("'MUSIC 420 AI'"));
     expect(chat, isNot(contains('GridView.count')));
-    expect(chat, isNot(contains("title: 'COMMANDS'")));
     expect(chat, isNot(contains("title: 'FLASHLIGHT'")));
-    expect(chat, isNot(contains("title: 'PRIVACY'")));
     expect(chat, isNot(contains('Активен • глас и чат на едно място')));
     expect(commands, isNot(contains('АКТИВИРАЙ IRON')));
     expect(commands, isNot(contains('ОТВОРИ AI РАЗГОВОРА')));
@@ -64,6 +65,7 @@ void main() {
 
     expect(widgets, contains('enum IronCoreState'));
     expect(widgets, contains('class _IronCoreSpherePainter'));
+    expect(widgets, contains('class _IronCoreMachineRingPainter'));
     expect(widgets, contains('class _IronCoreGlassPainter'));
     expect(widgets, contains('class _IronCorePedestalPainter'));
     expect(widgets, contains('class _IronCoreLeafPainter'));
