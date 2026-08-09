@@ -635,29 +635,32 @@ class _LivingLeafVeinPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final energy = _ironCoreEnergy(state);
     final cycle = progress * math.pi * 2;
-    final center = Offset(size.width * 0.50, size.height * 0.53);
-    final stemTop = Offset(size.width * 0.50, size.height * 0.28);
-    final stemBottom = Offset(size.width * 0.50, size.height * 0.76);
+    final root = Offset(size.width * 0.50, size.height * 0.69);
+    final tip = Offset(size.width * 0.50, size.height * 0.27);
     final pulse = 0.55 +
         ((math.sin(cycle * 2.6) + 1) * 0.5) * (0.28 + energy * 0.22);
     final sweep = (progress * 1.35) % 1.0;
+
+    final leafMask = _leafSilhouette(size);
+    canvas.save();
+    canvas.clipPath(leafMask);
 
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.plus
-      ..color = const Color(0xFF86FF9B).withOpacity(0.16 + pulse * 0.16)
-      ..strokeWidth = size.width * (0.010 + energy * 0.006)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.012);
+      ..color = const Color(0xFF7EFF9A).withOpacity(0.05 + pulse * 0.10)
+      ..strokeWidth = size.width * (0.005 + energy * 0.003)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.006);
 
     final veinPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.plus
-      ..color = const Color(0xFFC7FFD4).withOpacity(0.30 + pulse * 0.30)
-      ..strokeWidth = size.width * (0.0036 + energy * 0.0018);
+      ..color = const Color(0xFFD8FFE1).withOpacity(0.13 + pulse * 0.18)
+      ..strokeWidth = size.width * (0.0018 + energy * 0.0010);
 
     final hotPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -669,8 +672,8 @@ class _LivingLeafVeinPainter extends CustomPainter {
         end: Alignment.topCenter,
         colors: [
           Colors.transparent,
-          const Color(0xFFFFFFFF).withOpacity(0.08),
-          const Color(0xFF74FF8D).withOpacity(0.70),
+          const Color(0xFFFFFFFF).withOpacity(0.03),
+          const Color(0xFF74FF8D).withOpacity(0.32),
           Colors.transparent,
         ],
         stops: [
@@ -680,89 +683,135 @@ class _LivingLeafVeinPainter extends CustomPainter {
           (sweep + 0.20).clamp(0.0, 1.0).toDouble(),
         ],
       ).createShader(Offset.zero & size)
-      ..strokeWidth = size.width * (0.006 + energy * 0.003)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
+      ..strokeWidth = size.width * (0.0028 + energy * 0.0016)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.0025);
 
-    Path stemPath() {
-      return Path()
-        ..moveTo(stemBottom.dx, stemBottom.dy)
-        ..quadraticBezierTo(
-          center.dx + math.sin(cycle) * size.width * 0.006,
-          center.dy,
-          stemTop.dx,
-          stemTop.dy,
-        );
-    }
-
-    final stem = stemPath();
-    canvas.drawPath(stem, glowPaint);
-    canvas.drawPath(stem, veinPaint);
-    canvas.drawPath(stem, hotPaint);
-
-    final veinTargets = <Offset>[
-      Offset(size.width * 0.24, size.height * 0.42),
-      Offset(size.width * 0.30, size.height * 0.52),
-      Offset(size.width * 0.23, size.height * 0.60),
-      Offset(size.width * 0.38, size.height * 0.34),
-      Offset(size.width * 0.62, size.height * 0.34),
-      Offset(size.width * 0.76, size.height * 0.42),
-      Offset(size.width * 0.70, size.height * 0.52),
-      Offset(size.width * 0.77, size.height * 0.60),
+    final veins = <Path>[
+      _veinPath(root, tip, 0),
+      _veinPath(root, Offset(size.width * 0.29, size.height * 0.36), -0.030),
+      _veinPath(root, Offset(size.width * 0.19, size.height * 0.51), -0.040),
+      _veinPath(root, Offset(size.width * 0.28, size.height * 0.62), -0.024),
+      _veinPath(root, Offset(size.width * 0.39, size.height * 0.74), -0.010),
+      _veinPath(root, Offset(size.width * 0.71, size.height * 0.36), 0.030),
+      _veinPath(root, Offset(size.width * 0.81, size.height * 0.51), 0.040),
+      _veinPath(root, Offset(size.width * 0.72, size.height * 0.62), 0.024),
+      _veinPath(root, Offset(size.width * 0.61, size.height * 0.74), 0.010),
     ];
 
-    for (var i = 0; i < veinTargets.length; i++) {
-      final target = veinTargets[i];
-      final side = target.dx < center.dx ? -1.0 : 1.0;
-      final phase = cycle * 2.1 + i * 0.72;
-      final localPulse = 0.58 + ((math.sin(phase) + 1) * 0.5) * 0.42;
-      final start = Offset(
-        center.dx + side * size.width * 0.012,
-        center.dy - size.height * (0.010 + (i % 4) * 0.028),
-      );
-      final control = Offset(
-        (start.dx + target.dx) * 0.5 + side * size.width * 0.045,
-        (start.dy + target.dy) * 0.5 - size.height * 0.018,
-      );
-      final path = Path()
-        ..moveTo(start.dx, start.dy)
-        ..quadraticBezierTo(control.dx, control.dy, target.dx, target.dy);
-      final branchGlow = Paint()
+    for (var i = 0; i < veins.length; i++) {
+      final local = 0.55 + ((math.sin(cycle * 2.0 + i * 0.9) + 1) * 0.5) * 0.45;
+      final glow = Paint()
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..blendMode = BlendMode.plus
-        ..color = const Color(0xFF69FF86).withOpacity(0.10 + localPulse * 0.18)
-        ..strokeWidth = size.width * (0.007 + localPulse * 0.004)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.007);
-      final branchLine = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..blendMode = BlendMode.plus
-        ..color = const Color(0xFFDAFFE3).withOpacity(0.22 + localPulse * 0.34)
-        ..strokeWidth = size.width * (0.0026 + localPulse * 0.0018);
-      canvas.drawPath(path, branchGlow);
-      canvas.drawPath(path, branchLine);
-      if ((sweep - i / veinTargets.length).abs() < 0.18) {
-        canvas.drawPath(path, hotPaint);
-      }
+        ..color = const Color(0xFF69FF86).withOpacity(0.035 + local * 0.075)
+        ..strokeWidth = size.width * (0.0038 + local * 0.0015)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
+      canvas.drawPath(veins[i], glow);
+      canvas.drawPath(veins[i], veinPaint);
+      _drawMovingPulse(canvas, veins[i], hotPaint, sweep + i * 0.075);
     }
 
     final sparkPaint = Paint()
       ..style = PaintingStyle.fill
       ..blendMode = BlendMode.plus
-      ..color = const Color(0xFFC8FFD4).withOpacity(0.30 + energy * 0.22)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.006);
+      ..color = const Color(0xFFC8FFD4).withOpacity(0.10 + energy * 0.12)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
 
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < 5; i++) {
       final t = (progress * (0.55 + i * 0.08) + i * 0.137) % 1.0;
       final side = i.isEven ? -1.0 : 1.0;
-      final x = center.dx +
-          side * math.sin(t * math.pi) * size.width * (0.08 + i * 0.012);
-      final y = stemBottom.dy - t * size.height * 0.45;
-      final radius = size.width * (0.003 + ((math.sin(cycle + i) + 1) * 0.5) * 0.004);
+      final x = root.dx +
+          side * math.sin(t * math.pi) * size.width * (0.05 + i * 0.010);
+      final y = root.dy - t * size.height * 0.37;
+      final radius =
+          size.width * (0.0018 + ((math.sin(cycle + i) + 1) * 0.5) * 0.0024);
       canvas.drawCircle(Offset(x, y), radius, sparkPaint);
     }
+    canvas.restore();
+  }
+
+  Path _veinPath(Offset root, Offset tip, double bend) {
+    final control = Offset(
+      (root.dx + tip.dx) * 0.5 + (tip.dx - root.dx).abs() * bend,
+      (root.dy + tip.dy) * 0.5 - (root.dy - tip.dy).abs() * 0.08,
+    );
+    return Path()
+      ..moveTo(root.dx, root.dy)
+      ..quadraticBezierTo(control.dx, control.dy, tip.dx, tip.dy);
+  }
+
+  void _drawMovingPulse(Canvas canvas, Path path, Paint paint, double phase) {
+    final metric = path.computeMetrics().isEmpty
+        ? null
+        : path.computeMetrics().first;
+    if (metric == null || metric.length <= 0) return;
+    final t = phase % 1.0;
+    final start = (t - 0.18).clamp(0.0, 1.0).toDouble() * metric.length;
+    final end = (t + 0.05).clamp(0.0, 1.0).toDouble() * metric.length;
+    if (end <= start) return;
+    canvas.drawPath(metric.extractPath(start, end), paint);
+  }
+
+  Path _leafSilhouette(Size size) {
+    final root = Offset(size.width * 0.50, size.height * 0.70);
+    final lobes = <Path>[
+      _leaflet(root, Offset(size.width * 0.50, size.height * 0.25), 0.064),
+      _leaflet(root, Offset(size.width * 0.29, size.height * 0.34), 0.052),
+      _leaflet(root, Offset(size.width * 0.18, size.height * 0.50), 0.050),
+      _leaflet(root, Offset(size.width * 0.28, size.height * 0.62), 0.042),
+      _leaflet(root, Offset(size.width * 0.39, size.height * 0.75), 0.032),
+      _leaflet(root, Offset(size.width * 0.71, size.height * 0.34), 0.052),
+      _leaflet(root, Offset(size.width * 0.82, size.height * 0.50), 0.050),
+      _leaflet(root, Offset(size.width * 0.72, size.height * 0.62), 0.042),
+      _leaflet(root, Offset(size.width * 0.61, size.height * 0.75), 0.032),
+    ];
+    var combined = lobes.first;
+    for (final lobe in lobes.skip(1)) {
+      combined = Path.combine(PathOperation.union, combined, lobe);
+    }
+    final stem = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(size.width * 0.50, size.height * 0.76),
+            width: size.width * 0.018,
+            height: size.height * 0.18,
+          ),
+          Radius.circular(size.width * 0.010),
+        ),
+      );
+    return Path.combine(PathOperation.union, combined, stem);
+  }
+
+  Path _leaflet(Offset root, Offset tip, double widthFactor) {
+    final direction = tip - root;
+    final length = direction.distance;
+    if (length == 0) return Path();
+    final unit = direction / length;
+    final normal = Offset(-unit.dy, unit.dx);
+    final waist = root + direction * 0.52;
+    final width = length * widthFactor;
+    return Path()
+      ..moveTo(root.dx, root.dy)
+      ..cubicTo(
+        root.dx + normal.dx * width * 0.32,
+        root.dy + normal.dy * width * 0.32,
+        waist.dx + normal.dx * width,
+        waist.dy + normal.dy * width,
+        tip.dx,
+        tip.dy,
+      )
+      ..cubicTo(
+        waist.dx - normal.dx * width,
+        waist.dy - normal.dy * width,
+        root.dx - normal.dx * width * 0.32,
+        root.dy - normal.dy * width * 0.32,
+        root.dx,
+        root.dy,
+      )
+      ..close();
   }
 
   @override
@@ -904,20 +953,60 @@ class _IronCoreSpherePainter extends CustomPainter {
       );
     canvas.drawCircle(center, radius * (0.94 + progress * 0.025), auraPaint);
 
+    final castShadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.58)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.16);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: center.translate(0, radius * 0.16),
+        width: radius * 1.72,
+        height: radius * 1.42,
+      ),
+      castShadowPaint,
+    );
+
     final sphereRect = Rect.fromCircle(center: center, radius: radius);
     final spherePaint = Paint()
       ..shader = RadialGradient(
-        center: const Alignment(-0.34, -0.42),
-        radius: 1.12,
+        center: const Alignment(-0.38, -0.46),
+        radius: 1.06,
         colors: [
-          Colors.white.withOpacity(0.12 + energy * 0.04),
-          stateColor.withOpacity(0.15 + energy * 0.08),
-          const Color(0xFF00190B).withOpacity(0.98),
+          Colors.white.withOpacity(0.18 + energy * 0.05),
+          stateColor.withOpacity(0.20 + energy * 0.10),
+          const Color(0xFF003214).withOpacity(0.88),
+          const Color(0xFF001007).withOpacity(0.98),
           const Color(0xFF000402),
         ],
-        stops: const [0.0, 0.22, 0.66, 1.0],
+        stops: const [0.0, 0.18, 0.48, 0.76, 1.0],
       ).createShader(sphereRect);
     canvas.drawCircle(center, radius, spherePaint);
+
+    final innerDepthPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = radius * 0.11
+      ..color = Colors.black.withOpacity(0.30)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.045);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.90),
+      math.pi * 0.03,
+      math.pi * 0.88,
+      false,
+      innerDepthPaint,
+    );
+
+    final leftLiftPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = radius * 0.020
+      ..color = Colors.white.withOpacity(0.16 + energy * 0.08)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.010);
+    canvas.drawArc(
+      Rect.fromCircle(center: center.translate(-radius * 0.02, -radius * 0.02), radius: radius * 0.88),
+      math.pi * 0.92,
+      math.pi * 0.42,
+      false,
+      leftLiftPaint,
+    );
 
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -1048,23 +1137,41 @@ class _IronCoreGlassPainter extends CustomPainter {
 
     final highlightRect = Rect.fromCenter(
       center: Offset(size.width * 0.41, size.height * 0.30),
-      width: size.width * 0.40,
-      height: size.height * 0.13,
+      width: size.width * 0.44,
+      height: size.height * 0.15,
     );
     final highlightPaint = Paint()
       ..shader = LinearGradient(
         colors: [
-          Colors.white.withOpacity(0.17),
+          Colors.white.withOpacity(0.24),
+          Colors.white.withOpacity(0.07),
           Colors.white.withOpacity(0.015),
         ],
       ).createShader(highlightRect);
     canvas.drawOval(highlightRect, highlightPaint);
 
-    final lowerShade = Paint()
-      ..color = Colors.black.withOpacity(0.30)
+    final glassCutPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.shortestSide * 0.055
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.shortestSide * 0.010
+      ..color = Colors.white.withOpacity(0.12)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.8);
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: center.translate(-radius * 0.07, -radius * 0.10),
+        radius: radius * 0.78,
+      ),
+      math.pi * 1.05,
+      math.pi * 0.34,
+      false,
+      glassCutPaint,
+    );
+
+    final lowerShade = Paint()
+      ..color = Colors.black.withOpacity(0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.shortestSide * 0.072
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius * 0.88),
       math.pi * 0.13,
