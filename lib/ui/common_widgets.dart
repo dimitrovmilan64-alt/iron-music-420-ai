@@ -611,6 +611,20 @@ class CannabisCore extends StatelessWidget {
                 ),
               ),
             ),
+            Positioned(
+              left: size * 0.12,
+              right: size * 0.12,
+              bottom: size * 0.045,
+              height: size * 0.20,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _IronCorePedestalPainter(
+                    progress: progress,
+                    state: state,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -923,6 +937,81 @@ class _IronCoreGlassPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _IronCoreGlassPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.state != state;
+}
+
+class _IronCorePedestalPainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _IronCorePedestalPainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final color = _ironCoreStateColor(state);
+    final center = Offset(size.width / 2, size.height * 0.62);
+    final cycle = progress * math.pi * 2;
+    final glow = 0.42 + (math.sin(cycle) + 1) * 0.11;
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.34)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: center.translate(0, size.height * 0.12),
+        width: size.width * 0.86,
+        height: size.height * 0.38,
+      ),
+      shadowPaint,
+    );
+
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          color.withOpacity(glow),
+          Colors.white.withOpacity(0.32),
+          color.withOpacity(glow),
+          Colors.transparent,
+        ],
+      ).createShader(Offset.zero & size);
+
+    for (var index = 0; index < 3; index++) {
+      final width = size.width * (0.58 + index * 0.14);
+      final height = size.height * (0.24 + index * 0.055);
+      canvas.drawOval(
+        Rect.fromCenter(center: center, width: width, height: height),
+        basePaint,
+      );
+    }
+
+    final beamPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          color.withOpacity(0.00),
+          color.withOpacity(0.13),
+          color.withOpacity(0.00),
+        ],
+      ).createShader(Offset.zero & size);
+
+    final beamPath = Path()
+      ..moveTo(size.width * 0.31, 0)
+      ..lineTo(size.width * 0.69, 0)
+      ..lineTo(size.width * 0.58, center.dy)
+      ..lineTo(size.width * 0.42, center.dy)
+      ..close();
+    canvas.drawPath(beamPath, beamPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IronCorePedestalPainter oldDelegate) =>
       oldDelegate.progress != progress || oldDelegate.state != state;
 }
 
