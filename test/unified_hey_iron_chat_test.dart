@@ -66,7 +66,10 @@ void main() {
     expect(widgets, contains('class _IronCoreSpherePainter'));
     expect(widgets, contains('class _IronCoreGlassPainter'));
     expect(widgets, contains('class _IronCorePedestalPainter'));
-    expect(widgets, contains('assets/images/hud_core_exact.png'));
+    expect(widgets, contains('class _IronCoreLeafPainter'));
+    expect(widgets, contains('Matrix4.identity()'));
+    expect(widgets, contains('rotateY(leafTurn)'));
+    expect(widgets, contains('Size.square(size * 0.62)'));
     expect(widgets, contains('class _LivingLeafVeinPainter'));
     expect(widgets, contains('leafPulse'));
     expect(widgets, contains('_leafSilhouette'));
@@ -79,6 +82,10 @@ void main() {
     expect(widgets, contains('IronCoreState.listening'));
     expect(widgets, contains('IronCoreState.thinking'));
     expect(widgets, contains('IronCoreState.speaking'));
+
+    final chat = File('lib/pages/chat_page.dart').readAsStringSync();
+    expect(chat, contains("'РАЗГОВОР С IRON'"));
+    expect(chat, contains('Назад към ядрото'));
   });
 
   test('duplicate native prompts cannot flood the unified chat queue', () {
