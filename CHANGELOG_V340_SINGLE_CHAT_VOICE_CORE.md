@@ -96,6 +96,12 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 67 exact core leaf restore
+
+- Restores `assets/images/hud_core_exact.png` as the only leaf body inside the central sphere.
+- Removes the code-drawn replacement leaf, path-union silhouette and old leaf mask helpers.
+- Keeps the pulsing vein/light overlay, glass depth and mobile HUD layout intact.
+
 ## Build 66 real cannabis leaf fix
 
 - Replaces the maple-like broad core shape with a narrow seven-blade cannabis silhouette.
@@ -116,51 +122,3 @@
 - Keeps the sci-fi core and segmented machine ring while moving controls below the core.
 - Prevents clipped action/status text and keeps the bottom `HEY IRON` dock inside the viewport.
 - Leaves the native Bulgarian voice path untouched.
-
-## Build 63 reference HUD core
-
-- Rebuilds the first screen to match the supplied sci-fi HUD references more closely.
-- Adds left action panels, right status panels, top online/mic controls and a bottom `HEY IRON` dock.
-- Adds a segmented machine ring around the core so the center reads more like a 3D reactor.
-- Keeps the Build 62 code-drawn cannabis leaf and leaves the native Bulgarian voice path untouched.
-
-## Build 62 real 3D core
-
-- Replaces the flat `hud_core_exact.png` core body with a code-drawn 3D cannabis leaf inside the glass sphere.
-- Keeps the pulsing vein overlay locked to the same leaf silhouette so veins do not cross empty space.
-- Adds subtle pseudo-perspective leaf motion inside the orb while preserving the clean Build 60 first screen.
-- Renames the chat transition away from HUD wording and keeps the fixed Bulgarian voice path untouched.
-
-## Build 61 3D core aligned veins
-
-- Clips the animated vein pulse inside a cannabis leaf silhouette instead of painting over the whole orb.
-- Reduces vein overlay intensity so the existing leaf veins stay readable.
-- Adds stronger sphere depth: cast shadow, inner lower shade, rim lift and glass highlight.
-- Preserves the clean Build 60 first screen and the fixed Bulgarian voice path.
-
-## Build 60 clean core interface
-
-- Replaces the HUD control center with a minimal living-core start screen.
-- Removes the start-screen command grid, status cards and bottom tab bar.
-- Keeps the large animated cannabis core as the main interaction target.
-- Leaves chat, microphone and voice controls close to the core without crowding it.
-- Preserves the fixed Bulgarian voice path.
-
-## Build 59 single leaf only
-
-- Keeps the cannabis leaf only inside the center HUD core.
-- Replaces the bottom `Хей Айрън` tab icon with a chat icon.
-- Replaces the wake-word status leaf icon with a radar icon.
-- Removes the faint background mini-leaf watermarks.
-
-## Build 58 living leaf veins
-
-- Adds a visible animated vein layer over the single HUD core cannabis leaf.
-- Keeps Build 57's duplicate-leaf fix: the generated `hud_core_exact.png` remains the only leaf body.
-- Makes the core read as alive through pulsing vein glow, moving energy highlights and small sparks.
-
-## Build 57 single-leaf HUD
-
-- Removes the extra painted cannabis overlay from the core.
-- Keeps the generated `hud_core_exact.png` core leaf as the single visible leaf.
-- Preserves the HUD-first layout and the fixed Bulgarian voice path.
