@@ -55,6 +55,7 @@ void main() {
     expect(widgets, contains('enum IronCoreState'));
     expect(widgets, contains('class _IronCoreSpherePainter'));
     expect(widgets, contains('class _IronCoreGlassPainter'));
+    expect(widgets, contains('class _IronCorePedestalPainter'));
     expect(widgets, contains('Matrix4.identity()'));
     expect(widgets, contains('IronCoreState.listening'));
     expect(widgets, contains('IronCoreState.thinking'));
