@@ -34,7 +34,11 @@ void main() {
     ).readAsStringSync();
 
     expect(chat, contains('_toggleIronMode()'));
+    expect(chat, contains('_buildHudDashboard()'));
+    expect(chat, contains('_buildChatMode()'));
     expect(chat, contains("'IRON'"));
+    expect(chat, contains("title: 'CHAT'"));
+    expect(chat, contains("title: 'KEYBOARD'"));
     expect(chat, contains("label: 'Хей Айрън'"));
     expect(chat, contains('IronCoreState.speaking'));
     expect(chat, contains("'IRON MUSIC 420 AI • ЯДРО'"));
