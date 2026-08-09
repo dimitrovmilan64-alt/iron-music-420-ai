@@ -538,7 +538,8 @@ class CannabisCore extends StatelessWidget {
     final cycle = progress * math.pi * 2;
     final breath = 0.965 +
         ((math.sin(cycle) + 1) * 0.5) * (0.012 + energy * 0.018);
-    final leafPulse = 0.992 + math.sin(cycle * 1.35) * (0.006 + energy * 0.010);
+    final leafPulse =
+        0.992 + math.sin(cycle * 1.35) * (0.006 + energy * 0.010);
     return RepaintBoundary(
       child: SizedBox(
         width: size,
@@ -637,7 +638,8 @@ class _LivingLeafVeinPainter extends CustomPainter {
     final center = Offset(size.width * 0.50, size.height * 0.53);
     final stemTop = Offset(size.width * 0.50, size.height * 0.28);
     final stemBottom = Offset(size.width * 0.50, size.height * 0.76);
-    final pulse = 0.55 + ((math.sin(cycle * 2.6) + 1) * 0.5) * (0.28 + energy * 0.22);
+    final pulse = 0.55 +
+        ((math.sin(cycle * 2.6) + 1) * 0.5) * (0.28 + energy * 0.22);
     final sweep = (progress * 1.35) % 1.0;
 
     final glowPaint = Paint()
@@ -755,7 +757,8 @@ class _LivingLeafVeinPainter extends CustomPainter {
     for (var i = 0; i < 7; i++) {
       final t = (progress * (0.55 + i * 0.08) + i * 0.137) % 1.0;
       final side = i.isEven ? -1.0 : 1.0;
-      final x = center.dx + side * math.sin(t * math.pi) * size.width * (0.08 + i * 0.012);
+      final x = center.dx +
+          side * math.sin(t * math.pi) * size.width * (0.08 + i * 0.012);
       final y = stemBottom.dy - t * size.height * 0.45;
       final radius = size.width * (0.003 + ((math.sin(cycle + i) + 1) * 0.5) * 0.004);
       canvas.drawCircle(Offset(x, y), radius, sparkPaint);
@@ -1222,44 +1225,6 @@ class _HudBackgroundPainter extends CustomPainter {
     }
     canvas.drawPath(wave, hudPaint);
 
-    final watermarkPaint = Paint()
-      ..color = ironGreen.withOpacity(0.035)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.09, size.height * 0.58),
-      18,
-      watermarkPaint,
-    );
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.91, size.height * 0.79),
-      22,
-      watermarkPaint,
-    );
-  }
-
-  void _drawTinyLeaf(
-    Canvas canvas,
-    Offset center,
-    double radius,
-    Paint paint,
-  ) {
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    for (final angle in [-1.0, -0.55, 0.0, 0.55, 1.0]) {
-      canvas.save();
-      canvas.rotate(angle);
-      final path = Path()
-        ..moveTo(0, radius * 0.25)
-        ..quadraticBezierTo(-radius * 0.24, -radius * 0.1, 0, -radius)
-        ..quadraticBezierTo(radius * 0.24, -radius * 0.1, 0, radius * 0.25);
-      canvas.drawPath(path, paint);
-      canvas.restore();
-    }
-    canvas.drawLine(Offset.zero, Offset(0, radius * 0.7), paint);
-    canvas.restore();
   }
 
   @override
