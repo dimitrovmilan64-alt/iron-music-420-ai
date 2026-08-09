@@ -4,9 +4,15 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
 ## Current main build
 
-- Version: `3.4.0+64`
-- Build name: `v3.4.0 build 64 mobile core fix`
-- APK artifact: `iron-music-420-ai-v3.4.0-build64-mobile-core-fix`
+- Version: `3.4.0+65`
+- Build name: `v3.4.0 build 65 real leaf core fix`
+- APK artifact: `iron-music-420-ai-v3.4.0-build65-real-leaf-core-fix`
+
+## Build 65 real leaf core fix
+
+- Replaces the stick-thin core leaf silhouette with wider serrated cannabis leaflets.
+- Locks the animated vein pulse to the same broader leaf mask so it no longer reads as loose rods.
+- Keeps the glass sphere, mobile HUD layout and native Bulgarian voice path untouched.
 
 ## Build 64 mobile core fix
 

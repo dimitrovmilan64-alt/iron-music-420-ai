@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 65 real leaf core fix
+
+- Replaces the stick-thin leaf mask in the central sphere with wider serrated cannabis leaflets.
+- Uses one shared cannabis leaf silhouette for both the filled body and the pulsing vein overlay.
+- Enlarges the core leaf slightly so it reads as the living nucleus instead of a small line drawing.
+- Preserves the Build 64 mobile layout and the native Bulgarian voice path.
+
 ## Build 64 mobile core fix
 
 - Removes the Build 63 side HUD overlay from the phone first screen after real-device review.

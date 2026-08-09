@@ -71,10 +71,12 @@ void main() {
     expect(widgets, contains('class _IronCoreLeafPainter'));
     expect(widgets, contains('Matrix4.identity()'));
     expect(widgets, contains('rotateY(leafTurn)'));
-    expect(widgets, contains('Size.square(size * 0.62)'));
+    expect(widgets, contains('Size.square(size * _ironCoreLeafScale)'));
     expect(widgets, contains('class _LivingLeafVeinPainter'));
     expect(widgets, contains('leafPulse'));
-    expect(widgets, contains('_leafSilhouette'));
+    expect(widgets, contains('_ironCannabisLeafSilhouette'));
+    expect(widgets, contains('_ironCannabisLeaflet'));
+    expect(widgets, contains('_ironLeafTipTargets'));
     expect(widgets, contains('canvas.clipPath(leafMask)'));
     expect(widgets, contains('PathOperation.union'));
     expect(widgets, contains('castShadowPaint'));
