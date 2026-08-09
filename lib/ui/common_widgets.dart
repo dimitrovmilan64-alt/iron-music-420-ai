@@ -520,6 +520,96 @@ double _ironCoreEnergy(IronCoreState state) {
   };
 }
 
+const double _ironCoreLeafScale = 0.70;
+
+Offset _ironLeafRoot(Size size) {
+  return Offset(size.width * 0.50, size.height * 0.72);
+}
+
+List<Offset> _ironLeafTipTargets(Size size) {
+  return [
+    Offset(size.width * 0.50, size.height * 0.13),
+    Offset(size.width * 0.31, size.height * 0.25),
+    Offset(size.width * 0.13, size.height * 0.43),
+    Offset(size.width * 0.23, size.height * 0.58),
+    Offset(size.width * 0.36, size.height * 0.70),
+    Offset(size.width * 0.69, size.height * 0.25),
+    Offset(size.width * 0.87, size.height * 0.43),
+    Offset(size.width * 0.77, size.height * 0.58),
+    Offset(size.width * 0.64, size.height * 0.70),
+  ];
+}
+
+Path _ironCannabisLeafSilhouette(Size size) {
+  final root = _ironLeafRoot(size);
+  final targets = _ironLeafTipTargets(size);
+  final widths = <double>[
+    0.235,
+    0.225,
+    0.205,
+    0.170,
+    0.130,
+    0.225,
+    0.205,
+    0.170,
+    0.130,
+  ];
+
+  var combined = _ironCannabisLeaflet(root, targets.first, widths.first);
+  for (var i = 1; i < targets.length; i++) {
+    combined = Path.combine(
+      PathOperation.union,
+      combined,
+      _ironCannabisLeaflet(root, targets[i], widths[i]),
+    );
+  }
+
+  final stem = Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(size.width * 0.50, size.height * 0.84),
+          width: size.width * 0.035,
+          height: size.height * 0.25,
+        ),
+        Radius.circular(size.width * 0.018),
+      ),
+    );
+  return Path.combine(PathOperation.union, combined, stem);
+}
+
+Path _ironCannabisLeaflet(Offset root, Offset tip, double widthFactor) {
+  final direction = root - tip;
+  final length = direction.distance;
+  if (length == 0) return Path();
+  final unit = direction / length;
+  final normal = Offset(-unit.dy, unit.dx);
+  final maxWidth = length * widthFactor;
+  const steps = 14;
+
+  final rightEdge = <Offset>[];
+  final leftEdge = <Offset>[];
+  for (var i = 0; i <= steps; i++) {
+    final t = i / steps;
+    final spine = Offset.lerp(tip, root, t)!;
+    final profile = math.sin(t * math.pi);
+    final serration = i.isEven ? 1.0 : 0.82;
+    final width = maxWidth * profile * serration;
+    rightEdge.add(spine + normal * width);
+    leftEdge.add(spine - normal * width);
+  }
+
+  final path = Path()
+    ..moveTo(tip.dx, tip.dy);
+  for (var i = 1; i < rightEdge.length; i++) {
+    path.lineTo(rightEdge[i].dx, rightEdge[i].dy);
+  }
+  for (var i = leftEdge.length - 2; i >= 0; i--) {
+    path.lineTo(leftEdge[i].dx, leftEdge[i].dy);
+  }
+  return path..close();
+}
+
 class CannabisCore extends StatelessWidget {
   final double progress;
   final double size;
@@ -576,7 +666,7 @@ class CannabisCore extends StatelessWidget {
                   scale: breath,
                   child: IgnorePointer(
                     child: CustomPaint(
-                      size: Size.square(size * 0.62),
+                      size: Size.square(size * _ironCoreLeafScale),
                       painter: _IronCoreLeafPainter(
                         progress: progress,
                         state: state,
@@ -598,7 +688,7 @@ class CannabisCore extends StatelessWidget {
                       ..rotateX(-0.10)
                       ..rotateY(leafTurn),
                     child: CustomPaint(
-                      size: Size.square(size * 0.62),
+                      size: Size.square(size * _ironCoreLeafScale),
                       painter: _LivingLeafVeinPainter(
                         progress: progress,
                         state: state,
@@ -751,8 +841,8 @@ class _IronCoreLeafPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final energy = _ironCoreEnergy(state);
     final cycle = progress * math.pi * 2;
-    final root = Offset(size.width * 0.50, size.height * 0.70);
-    final leafPath = _leafSilhouette(size);
+    final root = _ironLeafRoot(size);
+    final leafPath = _ironCannabisLeafSilhouette(size);
 
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.46)
@@ -762,17 +852,26 @@ class _IronCoreLeafPainter extends CustomPainter {
       shadowPaint,
     );
 
+    final massGlowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * 0.030
+      ..color = const Color(0xFF49FF72).withOpacity(0.34 + energy * 0.10)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.030);
+    canvas.drawPath(leafPath, massGlowPaint);
+
     final bodyPaint = Paint()
       ..shader = RadialGradient(
         center: const Alignment(-0.32, -0.42),
         radius: 1.10,
         colors: [
-          Colors.white.withOpacity(0.18),
-          const Color(0xFF78FF92).withOpacity(0.62 + energy * 0.10),
+          Colors.white.withOpacity(0.24),
+          const Color(0xFF8CFF9D).withOpacity(0.78 + energy * 0.08),
           const Color(0xFF0DA34D).withOpacity(0.94),
           const Color(0xFF043D20).withOpacity(0.98),
         ],
-        stops: const [0.0, 0.20, 0.58, 1.0],
+        stops: const [0.0, 0.24, 0.62, 1.0],
       ).createShader(Offset.zero & size);
     canvas.drawPath(leafPath, bodyPaint);
 
@@ -794,13 +893,13 @@ class _IronCoreLeafPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.008
+      ..strokeWidth = size.width * 0.010
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.42),
-          const Color(0xFF73FF91).withOpacity(0.70),
+          Colors.white.withOpacity(0.52),
+          const Color(0xFF73FF91).withOpacity(0.82),
           const Color(0xFF0D5A2B).withOpacity(0.58),
         ],
       ).createShader(Offset.zero & size);
@@ -810,27 +909,17 @@ class _IronCoreLeafPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = size.width * 0.010
-      ..color = const Color(0xFFD5FFE0).withOpacity(0.45)
+      ..strokeWidth = size.width * 0.012
+      ..color = const Color(0xFFD5FFE0).withOpacity(0.54)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.003);
     final fineVeinPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = size.width * 0.0032
-      ..color = const Color(0xFFDBFFE4).withOpacity(0.30);
+      ..strokeWidth = size.width * 0.0040
+      ..color = const Color(0xFFDBFFE4).withOpacity(0.34);
 
-    final veinTargets = <Offset>[
-      Offset(size.width * 0.50, size.height * 0.25),
-      Offset(size.width * 0.29, size.height * 0.34),
-      Offset(size.width * 0.18, size.height * 0.50),
-      Offset(size.width * 0.28, size.height * 0.62),
-      Offset(size.width * 0.39, size.height * 0.75),
-      Offset(size.width * 0.71, size.height * 0.34),
-      Offset(size.width * 0.82, size.height * 0.50),
-      Offset(size.width * 0.72, size.height * 0.62),
-      Offset(size.width * 0.61, size.height * 0.75),
-    ];
+    final veinTargets = _ironLeafTipTargets(size);
 
     canvas.save();
     canvas.clipPath(leafPath);
@@ -849,10 +938,7 @@ class _IronCoreLeafPainter extends CustomPainter {
           .withOpacity(0.16 + ((math.sin(cycle * 1.8) + 1) * 0.5) * 0.14)
       ..blendMode = BlendMode.plus
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
-    canvas.drawPath(
-      _veinPath(root, Offset(size.width * 0.50, size.height * 0.25), 0),
-      lifeGlowPaint,
-    );
+    canvas.drawPath(_veinPath(root, veinTargets.first, 0), lifeGlowPaint);
     canvas.restore();
   }
 
@@ -868,21 +954,25 @@ class _IronCoreLeafPainter extends CustomPainter {
     if (length <= 0) return;
     final unit = direction / length;
     final normal = Offset(-unit.dy, unit.dx);
-    final sign = tip.dx < root.dx ? -1.0 : 1.0;
+    final sides = (tip.dx - root.dx).abs() < size.width * 0.025
+        ? const [-1.0, 1.0]
+        : [tip.dx < root.dx ? -1.0 : 1.0];
 
     for (var j = 1; j <= 3; j++) {
       final base = root + direction * (0.24 + j * 0.14);
       final sideLength = length * (0.08 + j * 0.012);
-      final branchTip = base + normal * sideLength * sign;
-      final path = Path()
-        ..moveTo(base.dx, base.dy)
-        ..quadraticBezierTo(
-          (base.dx + branchTip.dx) * 0.5 + unit.dx * size.width * 0.012,
-          (base.dy + branchTip.dy) * 0.5 + unit.dy * size.width * 0.012,
-          branchTip.dx,
-          branchTip.dy,
-        );
-      canvas.drawPath(path, paint);
+      for (final sign in sides) {
+        final branchTip = base + normal * sideLength * sign;
+        final path = Path()
+          ..moveTo(base.dx, base.dy)
+          ..quadraticBezierTo(
+            (base.dx + branchTip.dx) * 0.5 + unit.dx * size.width * 0.012,
+            (base.dy + branchTip.dy) * 0.5 + unit.dy * size.width * 0.012,
+            branchTip.dx,
+            branchTip.dy,
+          );
+        canvas.drawPath(path, paint);
+      }
     }
   }
 
@@ -894,66 +984,6 @@ class _IronCoreLeafPainter extends CustomPainter {
     return Path()
       ..moveTo(root.dx, root.dy)
       ..quadraticBezierTo(control.dx, control.dy, tip.dx, tip.dy);
-  }
-
-  Path _leafSilhouette(Size size) {
-    final root = Offset(size.width * 0.50, size.height * 0.70);
-    final lobes = <Path>[
-      _leaflet(root, Offset(size.width * 0.50, size.height * 0.25), 0.064),
-      _leaflet(root, Offset(size.width * 0.29, size.height * 0.34), 0.052),
-      _leaflet(root, Offset(size.width * 0.18, size.height * 0.50), 0.050),
-      _leaflet(root, Offset(size.width * 0.28, size.height * 0.62), 0.042),
-      _leaflet(root, Offset(size.width * 0.39, size.height * 0.75), 0.032),
-      _leaflet(root, Offset(size.width * 0.71, size.height * 0.34), 0.052),
-      _leaflet(root, Offset(size.width * 0.82, size.height * 0.50), 0.050),
-      _leaflet(root, Offset(size.width * 0.72, size.height * 0.62), 0.042),
-      _leaflet(root, Offset(size.width * 0.61, size.height * 0.75), 0.032),
-    ];
-    var combined = lobes.first;
-    for (final lobe in lobes.skip(1)) {
-      combined = Path.combine(PathOperation.union, combined, lobe);
-    }
-    final stem = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(size.width * 0.50, size.height * 0.77),
-            width: size.width * 0.022,
-            height: size.height * 0.18,
-          ),
-          Radius.circular(size.width * 0.012),
-        ),
-      );
-    return Path.combine(PathOperation.union, combined, stem);
-  }
-
-  Path _leaflet(Offset root, Offset tip, double widthFactor) {
-    final direction = tip - root;
-    final length = direction.distance;
-    if (length == 0) return Path();
-    final unit = direction / length;
-    final normal = Offset(-unit.dy, unit.dx);
-    final waist = root + direction * 0.52;
-    final width = length * widthFactor;
-    return Path()
-      ..moveTo(root.dx, root.dy)
-      ..cubicTo(
-        root.dx + normal.dx * width * 0.32,
-        root.dy + normal.dy * width * 0.32,
-        waist.dx + normal.dx * width,
-        waist.dy + normal.dy * width,
-        tip.dx,
-        tip.dy,
-      )
-      ..cubicTo(
-        waist.dx - normal.dx * width,
-        waist.dy - normal.dy * width,
-        root.dx - normal.dx * width * 0.32,
-        root.dy - normal.dy * width * 0.32,
-        root.dx,
-        root.dy,
-      )
-      ..close();
   }
 
   @override
@@ -975,13 +1005,13 @@ class _LivingLeafVeinPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final energy = _ironCoreEnergy(state);
     final cycle = progress * math.pi * 2;
-    final root = Offset(size.width * 0.50, size.height * 0.69);
-    final tip = Offset(size.width * 0.50, size.height * 0.27);
+    final root = _ironLeafRoot(size);
+    final veinTargets = _ironLeafTipTargets(size);
     final pulse = 0.55 +
         ((math.sin(cycle * 2.6) + 1) * 0.5) * (0.28 + energy * 0.22);
     final sweep = (progress * 1.35) % 1.0;
 
-    final leafMask = _leafSilhouette(size);
+    final leafMask = _ironCannabisLeafSilhouette(size);
     canvas.save();
     canvas.clipPath(leafMask);
 
@@ -990,17 +1020,17 @@ class _LivingLeafVeinPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.plus
-      ..color = const Color(0xFF7EFF9A).withOpacity(0.05 + pulse * 0.10)
-      ..strokeWidth = size.width * (0.005 + energy * 0.003)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.006);
+      ..color = const Color(0xFF7EFF9A).withOpacity(0.045 + pulse * 0.085)
+      ..strokeWidth = size.width * (0.0045 + energy * 0.0024)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.005);
 
     final veinPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.plus
-      ..color = const Color(0xFFD8FFE1).withOpacity(0.13 + pulse * 0.18)
-      ..strokeWidth = size.width * (0.0018 + energy * 0.0010);
+      ..color = const Color(0xFFD8FFE1).withOpacity(0.10 + pulse * 0.15)
+      ..strokeWidth = size.width * (0.0017 + energy * 0.0008);
 
     final hotPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -1013,7 +1043,7 @@ class _LivingLeafVeinPainter extends CustomPainter {
         colors: [
           Colors.transparent,
           const Color(0xFFFFFFFF).withOpacity(0.03),
-          const Color(0xFF74FF8D).withOpacity(0.32),
+          const Color(0xFF74FF8D).withOpacity(0.25),
           Colors.transparent,
         ],
         stops: [
@@ -1023,19 +1053,12 @@ class _LivingLeafVeinPainter extends CustomPainter {
           (sweep + 0.20).clamp(0.0, 1.0).toDouble(),
         ],
       ).createShader(Offset.zero & size)
-      ..strokeWidth = size.width * (0.0028 + energy * 0.0016)
+      ..strokeWidth = size.width * (0.0022 + energy * 0.0012)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.0025);
 
     final veins = <Path>[
-      _veinPath(root, tip, 0),
-      _veinPath(root, Offset(size.width * 0.29, size.height * 0.36), -0.030),
-      _veinPath(root, Offset(size.width * 0.19, size.height * 0.51), -0.040),
-      _veinPath(root, Offset(size.width * 0.28, size.height * 0.62), -0.024),
-      _veinPath(root, Offset(size.width * 0.39, size.height * 0.74), -0.010),
-      _veinPath(root, Offset(size.width * 0.71, size.height * 0.36), 0.030),
-      _veinPath(root, Offset(size.width * 0.81, size.height * 0.51), 0.040),
-      _veinPath(root, Offset(size.width * 0.72, size.height * 0.62), 0.024),
-      _veinPath(root, Offset(size.width * 0.61, size.height * 0.74), 0.010),
+      for (final target in veinTargets)
+        _veinPath(root, target, (target.dx - root.dx) * 0.00022),
     ];
 
     for (var i = 0; i < veins.length; i++) {
@@ -1092,66 +1115,6 @@ class _LivingLeafVeinPainter extends CustomPainter {
     final end = (t + 0.05).clamp(0.0, 1.0).toDouble() * metric.length;
     if (end <= start) return;
     canvas.drawPath(metric.extractPath(start, end), paint);
-  }
-
-  Path _leafSilhouette(Size size) {
-    final root = Offset(size.width * 0.50, size.height * 0.70);
-    final lobes = <Path>[
-      _leaflet(root, Offset(size.width * 0.50, size.height * 0.25), 0.064),
-      _leaflet(root, Offset(size.width * 0.29, size.height * 0.34), 0.052),
-      _leaflet(root, Offset(size.width * 0.18, size.height * 0.50), 0.050),
-      _leaflet(root, Offset(size.width * 0.28, size.height * 0.62), 0.042),
-      _leaflet(root, Offset(size.width * 0.39, size.height * 0.75), 0.032),
-      _leaflet(root, Offset(size.width * 0.71, size.height * 0.34), 0.052),
-      _leaflet(root, Offset(size.width * 0.82, size.height * 0.50), 0.050),
-      _leaflet(root, Offset(size.width * 0.72, size.height * 0.62), 0.042),
-      _leaflet(root, Offset(size.width * 0.61, size.height * 0.75), 0.032),
-    ];
-    var combined = lobes.first;
-    for (final lobe in lobes.skip(1)) {
-      combined = Path.combine(PathOperation.union, combined, lobe);
-    }
-    final stem = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(size.width * 0.50, size.height * 0.76),
-            width: size.width * 0.018,
-            height: size.height * 0.18,
-          ),
-          Radius.circular(size.width * 0.010),
-        ),
-      );
-    return Path.combine(PathOperation.union, combined, stem);
-  }
-
-  Path _leaflet(Offset root, Offset tip, double widthFactor) {
-    final direction = tip - root;
-    final length = direction.distance;
-    if (length == 0) return Path();
-    final unit = direction / length;
-    final normal = Offset(-unit.dy, unit.dx);
-    final waist = root + direction * 0.52;
-    final width = length * widthFactor;
-    return Path()
-      ..moveTo(root.dx, root.dy)
-      ..cubicTo(
-        root.dx + normal.dx * width * 0.32,
-        root.dy + normal.dy * width * 0.32,
-        waist.dx + normal.dx * width,
-        waist.dy + normal.dy * width,
-        tip.dx,
-        tip.dy,
-      )
-      ..cubicTo(
-        waist.dx - normal.dx * width,
-        waist.dy - normal.dy * width,
-        root.dx - normal.dx * width * 0.32,
-        root.dy - normal.dy * width * 0.32,
-        root.dx,
-        root.dy,
-      )
-      ..close();
   }
 
   @override
