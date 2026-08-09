@@ -8,7 +8,10 @@ void main() {
     final chat = File('lib/pages/chat_page.dart').readAsStringSync();
 
     expect(main, contains("label: 'Хей Айрън'"));
+    expect(main, contains('onOpenSongs: () => _openSection(2)'));
     expect(chat, contains("'IRON'"));
+    expect(chat, contains("_chatPanelOpen ? _buildChatMode() : _buildHudDashboard()"));
+    expect(chat, contains("title: 'MUSIC MODE'"));
     expect(chat, contains("label: 'Хей Айрън'"));
     expect(chat, contains("'IRON MUSIC 420 AI • ЯДРО'"));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
