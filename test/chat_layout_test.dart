@@ -29,10 +29,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
     expect(find.byType(CannabisCore), findsOneWidget);
-    expect(find.text('IRON MUSIC 420 AI • ЯДРО'), findsOneWidget);
-    expect(find.text('Хей Айрън'), findsOneWidget);
-    expect(find.text('Глас'), findsOneWidget);
-    expect(find.text('AI'), findsOneWidget);
+    expect(find.text('IRON'), findsOneWidget);
+    expect(find.text('MUSIC 420 AI'), findsOneWidget);
+    expect(find.text('CHAT'), findsOneWidget);
+    expect(find.text('COMMANDS'), findsOneWidget);
+    expect(find.text('MUSIC MODE'), findsOneWidget);
+    expect(find.text('KEYBOARD'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('CHAT'));
+    await tester.tap(find.text('CHAT'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('CHAT WITH IRON'), findsOneWidget);
 
     final apiButton = find.byTooltip('AI доставчици');
     expect(apiButton, findsOneWidget);
