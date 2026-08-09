@@ -96,6 +96,14 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 60 clean core interface
+
+- Replaces the HUD control center with a minimal living-core start screen.
+- Removes the start-screen command grid, status cards and bottom tab bar.
+- Keeps the large animated cannabis core as the main interaction target.
+- Leaves chat, microphone and voice controls close to the core without crowding it.
+- Preserves the fixed Bulgarian voice path.
+
 ## Build 59 single leaf only
 
 - Keeps the cannabis leaf only inside the center HUD core.
