@@ -4,9 +4,15 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
 ## Current main build
 
-- Version: `3.4.0+66`
-- Build name: `v3.4.0 build 66 real cannabis leaf fix`
-- APK artifact: `iron-music-420-ai-v3.4.0-build66-real-cannabis-leaf-fix`
+- Version: `3.4.0+67`
+- Build name: `v3.4.0 build 67 exact core leaf restore`
+- APK artifact: `iron-music-420-ai-v3.4.0-build67-exact-core-leaf`
+
+## Build 67 exact core leaf restore
+
+- Restores `assets/images/hud_core_exact.png` as the only leaf body inside the central core.
+- Removes the code-drawn replacement leaf, silhouette helpers and path-union leaf mask.
+- Keeps the glass sphere, machine ring, pedestal and pulsing vein overlay around the real asset leaf.
 
 ## Build 66 real cannabis leaf fix
 
