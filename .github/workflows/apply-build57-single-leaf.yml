@@ -1,29 +1,22 @@
-name: Apply Build 57 single leaf HUD
+name: apply-build57-single-leaf
 
-on:
-  push:
-    branches:
-      - main
+on: push
 
 permissions:
   contents: write
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
-  apply-build57:
-    if: github.event.head_commit.message == 'Add one-time Build 57 single leaf updater'
+  apply:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Apply Build 57 patch
-        run: |
+          token: ${{ github.token }}
+      - run: |
+          if [ "${{ github.event.head_commit.message }}" != "Run Build 57 single leaf updater" ]; then
+            echo "Skipping"
+            exit 0
+          fi
           python3 <<'PY'
           from pathlib import Path
 
@@ -48,9 +41,7 @@ jobs:
           text = text[:class_start].rstrip() + '\n'
           common.write_text(text)
 
-          pubspec = Path('pubspec.yaml')
-          text = pubspec.read_text().replace('version: 3.4.0+56', 'version: 3.4.0+57')
-          pubspec.write_text(text)
+          Path('pubspec.yaml').write_text(Path('pubspec.yaml').read_text().replace('version: 3.4.0+56', 'version: 3.4.0+57'))
 
           workflow = Path('.github/workflows/android-build.yml')
           text = workflow.read_text()
@@ -58,8 +49,7 @@ jobs:
           text = text.replace('iron-music-420-ai-v3.4.0-build56-hud-control-center', 'iron-music-420-ai-v3.4.0-build57-single-leaf-hud')
           workflow.write_text(text)
 
-          readme = Path('README.md')
-          readme.write_text("""# Iron Music 420 AI
+          Path('README.md').write_text("""# Iron Music 420 AI
 
 Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
@@ -95,12 +85,8 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
           text = test.read_text()
           text = text.replace("    expect(widgets, contains('Matrix4.identity()'));", "    expect(widgets, contains('assets/images/hud_core_exact.png'));\n    expect(widgets, isNot(contains('class _CannabisLeafPainter')));")
           test.write_text(text)
-
-          Path('.github/workflows/apply-build57-single-leaf.yml').unlink(missing_ok=True)
+          Path('.github/workflows/apply-build57-single-leaf.yml').unlink()
           PY
-
-      - name: Commit Build 57
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
