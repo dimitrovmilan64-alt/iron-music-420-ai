@@ -66,6 +66,7 @@ void main() {
     expect(widgets, contains('class _LivingLeafVeinPainter'));
     expect(widgets, contains('leafPulse'));
     expect(widgets, isNot(contains('class _CannabisLeafPainter')));
+    expect(widgets, isNot(contains('_drawTinyLeaf')));
     expect(widgets, contains('IronCoreState.listening'));
     expect(widgets, contains('IronCoreState.thinking'));
     expect(widgets, contains('IronCoreState.speaking'));
