@@ -550,6 +550,14 @@ class CannabisCore extends StatelessWidget {
           children: [
             Positioned.fill(
               child: CustomPaint(
+                painter: _IronCoreMachineRingPainter(
+                  progress: progress,
+                  state: state,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: CustomPaint(
                 painter: _IronCoreSpherePainter(
                   progress: progress,
                   state: state,
@@ -628,6 +636,105 @@ class CannabisCore extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _IronCoreMachineRingPainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _IronCoreMachineRingPainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.465;
+    final color = _ironCoreStateColor(state);
+    final energy = _ironCoreEnergy(state);
+    final cycle = progress * math.pi * 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    final outerGlow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = radius * 0.035
+      ..color = color.withOpacity(0.05 + energy * 0.035)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.08);
+    canvas.drawCircle(center, radius * 0.98, outerGlow);
+
+    for (var layer = 0; layer < 5; layer++) {
+      final layerRadius = radius * (0.70 + layer * 0.074);
+      final layerRect = Rect.fromCircle(center: center, radius: layerRadius);
+      final basePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(1.0, radius * (0.006 + layer * 0.001))
+        ..color = color.withOpacity(0.08 + energy * 0.030);
+      canvas.drawCircle(center, layerRadius, basePaint);
+
+      final segmentPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.butt
+        ..strokeWidth = radius * (0.012 + layer * 0.003)
+        ..shader = SweepGradient(
+          transform: GradientRotation(cycle * (layer.isEven ? 0.18 : -0.13)),
+          colors: [
+            Colors.transparent,
+            color.withOpacity(0.16),
+            Colors.white.withOpacity(0.42),
+            color.withOpacity(0.72),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.24, 0.35, 0.48, 0.64],
+        ).createShader(layerRect);
+
+      final count = 9 + layer * 3;
+      for (var i = 0; i < count; i++) {
+        final start = cycle * (layer.isEven ? 0.05 : -0.04) +
+            i * math.pi * 2 / count;
+        final sweep = math.pi * (0.030 + (i % 4) * 0.008);
+        canvas.drawArc(layerRect, start, sweep, false, segmentPaint);
+      }
+    }
+
+    final tickPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square
+      ..strokeWidth = 1.0
+      ..color = color.withOpacity(0.30 + energy * 0.16);
+    for (var i = 0; i < 48; i++) {
+      final angle = i * math.pi * 2 / 48 + cycle * 0.015;
+      final longTick = i % 6 == 0;
+      final inner = radius * (longTick ? 0.79 : 0.84);
+      final outer = radius * 0.90;
+      canvas.drawLine(
+        center + Offset(math.cos(angle) * inner, math.sin(angle) * inner),
+        center + Offset(math.cos(angle) * outer, math.sin(angle) * outer),
+        tickPaint,
+      );
+    }
+
+    final flarePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = radius * 0.010
+      ..color = Colors.white.withOpacity(0.28 + energy * 0.12)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.010);
+    for (final angle in <double>[0, math.pi / 2, math.pi, math.pi * 1.5]) {
+      canvas.drawArc(
+        rect,
+        angle + cycle * 0.03,
+        math.pi * 0.035,
+        false,
+        flarePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _IronCoreMachineRingPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.state != state;
   }
 }
 
