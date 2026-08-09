@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 62 real 3D core
+
+- Replaces the flat `hud_core_exact.png` core body with a code-drawn 3D cannabis leaf inside the glass sphere.
+- Keeps the pulsing vein overlay locked to the same leaf silhouette so veins do not cross empty space.
+- Adds subtle pseudo-perspective leaf motion inside the orb while preserving the clean Build 60 first screen.
+- Renames the chat transition away from HUD wording and keeps the fixed Bulgarian voice path untouched.
+
 ## Build 61 3D core aligned veins
 
 - Clips the animated vein pulse inside a cannabis leaf silhouette instead of painting over the whole orb.
