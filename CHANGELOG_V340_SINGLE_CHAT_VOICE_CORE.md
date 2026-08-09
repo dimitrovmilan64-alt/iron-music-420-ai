@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 63 reference HUD core
+
+- Rebuilds the first screen to match the supplied sci-fi HUD references more closely.
+- Adds left action panels, right status panels, top online/mic controls and a bottom `HEY IRON` dock.
+- Adds a segmented machine ring around the core so the center reads more like a 3D reactor.
+- Keeps the Build 62 code-drawn cannabis leaf and leaves the native Bulgarian voice path untouched.
+
 ## Build 62 real 3D core
 
 - Replaces the flat `hud_core_exact.png` core body with a code-drawn 3D cannabis leaf inside the glass sphere.
