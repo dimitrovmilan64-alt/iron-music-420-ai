@@ -41,7 +41,8 @@ void main() {
     expect(chat, contains("title: 'KEYBOARD'"));
     expect(chat, contains("label: 'Хей Айрън'"));
     expect(chat, contains('IronCoreState.speaking'));
-    expect(chat, contains("'IRON MUSIC 420 AI • ЯДРО'"));
+    expect(chat, contains("'MUSIC 420 AI'"));
+    expect(chat, contains("title: 'VOICE STATUS'"));
     expect(chat, isNot(contains('Активен • глас и чат на едно място')));
     expect(commands, isNot(contains('АКТИВИРАЙ IRON')));
     expect(commands, isNot(contains('ОТВОРИ AI РАЗГОВОРА')));
