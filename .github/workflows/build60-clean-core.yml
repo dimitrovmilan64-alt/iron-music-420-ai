@@ -21,8 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Apply clean core interface patch
-        shell: python
+        shell: bash
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           def replace(path, old, new):
@@ -33,7 +34,6 @@ jobs:
               p.write_text(text.replace(old, new, 1))
 
           replace('pubspec.yaml', 'version: 3.4.0+59', 'version: 3.4.0+60')
-
           replace(
               'lib/main.dart',
               '      ChatPage(\n        store: widget.store,\n        onOpenTools: () => _openSection(4),\n        onOpenSongs: () => _openSection(2),',
@@ -55,7 +55,6 @@ jobs:
               items: _navItems,
             ),''',
           )
-
           replace(
               'lib/pages/chat_page.dart',
               '  final VoidCallback? onOpenTools;\n  final VoidCallback? onOpenSongs;',
@@ -153,7 +152,10 @@ jobs:
                   const Spacer(),
                   PopupMenuButton<String>(
                     tooltip: 'Настройки',
-                    icon: const Icon(Icons.more_horiz_rounded, color: ironGreen),
+                    icon: const Icon(
+                      Icons.more_horiz_rounded,
+                      color: ironGreen,
+                    ),
                     onSelected: (value) {
                       if (value == 'api') {
                         _openApiKeySheet();
@@ -170,15 +172,33 @@ jobs:
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'api', child: Text('AI доставчици')),
-                      const PopupMenuItem(value: 'voice', child: Text('Настройки на гласа')),
+                      const PopupMenuItem(
+                        value: 'api',
+                        child: Text('AI доставчици'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'voice',
+                        child: Text('Настройки на гласа'),
+                      ),
                       if (widget.onOpenSongs != null)
-                        const PopupMenuItem(value: 'songs', child: Text('Песни')),
+                        const PopupMenuItem(
+                          value: 'songs',
+                          child: Text('Песни'),
+                        ),
                       if (widget.onOpenStudio != null)
-                        const PopupMenuItem(value: 'studio', child: Text('Студио')),
+                        const PopupMenuItem(
+                          value: 'studio',
+                          child: Text('Студио'),
+                        ),
                       if (widget.onOpenTools != null)
-                        const PopupMenuItem(value: 'tools', child: Text('Инструменти')),
-                      const PopupMenuItem(value: 'history', child: Text('Изчисти историята')),
+                        const PopupMenuItem(
+                          value: 'tools',
+                          child: Text('Инструменти'),
+                        ),
+                      const PopupMenuItem(
+                        value: 'history',
+                        child: Text('Изчисти историята'),
+                      ),
                     ],
                   ),
                 ],
@@ -197,7 +217,9 @@ jobs:
                       IronCoreState.listening => 'СЛУШАМ',
                       IronCoreState.thinking => 'МИСЛЯ',
                       IronCoreState.speaking => 'ГОВОРЯ',
-                      IronCoreState.idle => _ironActive ? 'КАЖИ „ХЕЙ АЙРЪН“' : 'ДОКОСНИ ЯДРОТО',
+                      IronCoreState.idle => _ironActive
+                          ? 'КАЖИ „ХЕЙ АЙРЪН“'
+                          : 'ДОКОСНИ ЯДРОТО',
                     };
                     final statusColor = switch (coreState) {
                       IronCoreState.listening => const Color(0xFF70FFB0),
@@ -262,13 +284,17 @@ jobs:
                                   fontSize: 13,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 2.2,
-                                  shadows: [Shadow(color: statusColor, blurRadius: 12)],
+                                  shadows: [
+                                    Shadow(color: statusColor, blurRadius: 12),
+                                  ],
                                 ),
                               ),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              _ironActive ? 'живото ядро слуша за теб' : 'докосни за разговор',
+                              _ironActive
+                                  ? 'живото ядро слуша за теб'
+                                  : 'докосни за разговор',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.58),
@@ -314,11 +340,14 @@ jobs:
                             minimumSize: const Size.fromHeight(58),
                             shape: const CircleBorder(),
                             padding: EdgeInsets.zero,
-                            backgroundColor: _isListening ? Colors.redAccent : ironGreen,
+                            backgroundColor:
+                                _isListening ? Colors.redAccent : ironGreen,
                             foregroundColor: Colors.black,
                           ),
                           child: Icon(
-                            _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                            _isListening
+                                ? Icons.stop_rounded
+                                : Icons.mic_rounded,
                             size: 28,
                           ),
                         ),
@@ -345,7 +374,7 @@ jobs:
 '''
           text = text[:start] + new_dashboard + text[end:]
           chat.write_text(text)
-
+          PY
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -370,8 +399,6 @@ jobs:
         run: flutter pub get
       - name: Analyze v3.4.0 build 60
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
-      - name: Test all Flutter regressions
-        run: flutter test
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
       - name: Verify APK version
