@@ -79,3 +79,11 @@
 - Rejects bare „Iron/Айрън“ and the assistant's own „Слушам“ as chat prompts.
 - Collapses repeated greeting and duplicate voice prompts before they can flood the unified chat.
 - Adds executable native regression tests for wake gating, cooldowns and prompt filtering.
+
+## Build 55 core UI restart
+
+- Restarts the main chat UI around a larger central Iron core stage.
+- Keeps the fixed voice path untouched while refreshing only Flutter layout and visuals.
+- Adds compact HUD chips for wake, online and interaction states.
+- Adds a holographic platform under the 3D cannabis core.
+- Keeps the chat, microphone, voice replies and AI provider controls on the same screen.
