@@ -195,6 +195,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ChatPage(
         store: widget.store,
         onOpenTools: () => _openSection(4),
+        onOpenStudio: () => _openSection(1),
         onOpenSongs: () => _openSection(2),
         onSendToStudio: (text) async {
           await widget.store.sendTextToStudio(text);
@@ -277,11 +278,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: IronBottomNavigation(
-        selectedIndex: _currentIndex < _navItems.length ? _currentIndex : 0,
-        onSelected: _openSection,
-        items: _navItems,
-      ),
+      bottomNavigationBar: _currentIndex == 0
+          ? null
+          : IronBottomNavigation(
+              selectedIndex:
+                  _currentIndex < _navItems.length ? _currentIndex : 0,
+              onSelected: _openSection,
+              items: _navItems,
+            ),
     );
   }
 }
