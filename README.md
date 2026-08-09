@@ -4,14 +4,14 @@ Flutter Android app for the Iron Music 420 AI Bulgarian voice/chat assistant.
 
 ## Current main build
 
-- Version: `3.4.0+55`
-- Build name: `v3.4.0 build 55 core UI restart`
-- APK artifact: `iron-music-420-ai-v3.4.0-build55-core-ui-restart`
+- Version: `3.4.0+56`
+- Build name: `v3.4.0 build 56 HUD control center`
+- APK artifact: `iron-music-420-ai-v3.4.0-build56-hud-control-center`
 
-## Build 55 UI restart
+## Build 56 HUD control center
 
-- Restarts the main chat interface around a single central Iron core stage.
-- Keeps the cannabis leaf inside the glowing 3D core.
-- Adds HUD chips for wake state, online state, and voice activity.
-- Keeps compact controls for `Хей Айрън`, voice replies, and AI provider setup.
+- Makes the first screen a HUD control center instead of the chat stream.
+- Keeps the large glowing cannabis core as the visual center.
+- Moves the chat behind `CHAT` and `KEYBOARD` actions.
+- Adds working HUD actions for commands, songs, flashlight, settings and voice.
 - Keeps the existing signed Android package so the APK can update the installed app.
