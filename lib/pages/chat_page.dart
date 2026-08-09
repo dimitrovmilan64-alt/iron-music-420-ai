@@ -1657,14 +1657,14 @@ class _ChatPageState extends State<ChatPage>
               child: Row(
                 children: [
                   IconButton(
-                    tooltip: 'Назад към HUD',
+                    tooltip: 'Назад към ядрото',
                     onPressed: () => setState(() => _chatPanelOpen = false),
                     icon: const Icon(Icons.arrow_back_rounded),
                     color: ironGreen,
                   ),
                   const Expanded(
                     child: Text(
-                      'CHAT WITH IRON',
+                      'РАЗГОВОР С IRON',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
