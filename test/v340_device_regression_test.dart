@@ -13,7 +13,8 @@ void main() {
     expect(chat, contains("_chatPanelOpen ? _buildChatMode() : _buildHudDashboard()"));
     expect(chat, contains("title: 'MUSIC MODE'"));
     expect(chat, contains("label: 'Хей Айрън'"));
-    expect(chat, contains("'IRON MUSIC 420 AI • ЯДРО'"));
+    expect(chat, contains("'MUSIC 420 AI'"));
+    expect(chat, contains("title: 'VOICE STATUS'"));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
   });
 
