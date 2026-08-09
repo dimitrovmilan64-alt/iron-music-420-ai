@@ -1556,11 +1556,6 @@ class _ChatPageState extends State<ChatPage>
     final media = MediaQuery.of(context);
     final compactHeight = media.size.height < 760;
     final narrow = media.size.width < 390;
-    final now = DateTime.now();
-    final time =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-    final date =
-        '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
     final coreState = switch ((_isListening, _isSpeaking, _isLoading)) {
       (true, _, _) => IronCoreState.listening,
       (_, true, _) => IronCoreState.speaking,
@@ -1585,8 +1580,8 @@ class _ChatPageState extends State<ChatPage>
       IronCoreState.speaking => const Color(0xFFA8FF70),
       IronCoreState.idle => ironGreen,
     };
-    final coreSize = (media.size.width * (compactHeight ? 1.04 : 1.10))
-        .clamp(330.0, 470.0)
+    final coreSize = (media.size.width * 0.92)
+        .clamp(260.0, compactHeight ? 330.0 : 390.0)
         .toDouble();
 
     PopupMenuButton<String> menuButton({
@@ -1628,338 +1623,284 @@ class _ChatPageState extends State<ChatPage>
     return IronBackground(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          narrow ? 10 : 14,
+          narrow ? 12 : 16,
           8,
-          narrow ? 10 : 14,
-          12,
+          narrow ? 12 : 16,
+          10,
         ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                menuButton(icon: Icons.menu_rounded, tooltip: 'Меню'),
-                const SizedBox(width: 8),
-                _hudChip(
-                  icon: Icons.circle_rounded,
-                  label: _ironActive ? 'ONLINE' : 'OFFLINE',
-                  active: _ironActive,
-                ),
-                const Spacer(),
-                Tooltip(
-                  message: _isListening ? 'Спри слушането' : 'Говори',
-                  child: Material(
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _isLoading ? null : _toggleListening,
-                      child: Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: (_isListening ? ironGreen : Colors.black)
-                              .withOpacity(_isListening ? 0.22 : 0.32),
-                          border: Border.all(
-                            color: ironGreen.withOpacity(0.46),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: ironGreen.withOpacity(
-                                _isListening ? 0.28 : 0.10,
-                              ),
-                              blurRadius: 18,
-                            ),
-                          ],
+        child: AnimatedBuilder(
+          animation: _coreController,
+          builder: (context, _) {
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final actionWidth =
+                    ((constraints.maxWidth - 10) / 2)
+                        .clamp(130.0, 210.0)
+                        .toDouble();
+                final coreMaxByHeight =
+                    (constraints.maxHeight - (compactHeight ? 320 : 350))
+                        .clamp(235.0, coreSize)
+                        .toDouble();
+                final safeCoreSize = coreSize
+                    .clamp(235.0, coreMaxByHeight)
+                    .toDouble();
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        menuButton(icon: Icons.menu_rounded, tooltip: 'Меню'),
+                        const SizedBox(width: 8),
+                        _hudChip(
+                          icon: Icons.circle_rounded,
+                          label: _ironActive ? 'ONLINE' : 'OFFLINE',
+                          active: _ironActive,
                         ),
-                        child: Icon(
-                          _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                          color: _isListening ? Colors.redAccent : ironGreen,
-                          size: 26,
+                        const Spacer(),
+                        Tooltip(
+                          message: _isListening ? 'Спри слушането' : 'Говори',
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _isLoading ? null : _toggleListening,
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: (_isListening
+                                          ? ironGreen
+                                          : Colors.black)
+                                      .withOpacity(
+                                    _isListening ? 0.22 : 0.32,
+                                  ),
+                                  border: Border.all(
+                                    color: ironGreen.withOpacity(0.46),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: ironGreen.withOpacity(
+                                        _isListening ? 0.28 : 0.10,
+                                      ),
+                                      blurRadius: 18,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  _isListening
+                                      ? Icons.stop_rounded
+                                      : Icons.mic_rounded,
+                                  color: _isListening
+                                      ? Colors.redAccent
+                                      : ironGreen,
+                                  size: 26,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        menuButton(
+                          icon: Icons.more_horiz_rounded,
+                          tooltip: 'Настройки',
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: compactHeight ? 2 : 6),
+                    const Text(
+                      'IRON',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: ironGreenSoft,
+                        fontSize: 42,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 8,
+                      ),
+                    ),
+                    Text(
+                      'MUSIC 420 AI',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.86),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3.0,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '• $status •',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.8,
+                        shadows: [
+                          Shadow(color: statusColor, blurRadius: 14),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _isLoading ? null : _toggleListening,
+                          child: AnimatedScale(
+                            duration: const Duration(milliseconds: 180),
+                            scale: _isListening ? 1.035 : 1.0,
+                            child: CannabisCore(
+                              progress: _coreController.value,
+                              size: safeCoreSize,
+                              state: coreState,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                menuButton(icon: Icons.more_horiz_rounded, tooltip: 'Настройки'),
-              ],
-            ),
-            Expanded(
-              child: AnimatedBuilder(
-                animation: _coreController,
-                builder: (context, _) {
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final safeCoreSize = coreSize
-                          .clamp(300.0, constraints.maxHeight * 0.72)
-                          .toDouble();
-                      final sideWidth =
-                          (constraints.maxWidth * (narrow ? 0.31 : 0.34))
-                              .clamp(104.0, 150.0)
-                              .toDouble();
-                      final panelTop = compactHeight ? 112.0 : 140.0;
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned.fill(
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'IRON',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: ironGreenSoft,
-                                    fontSize: 42,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 8,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        SizedBox(
+                          width: actionWidth,
+                          child: _hudPanel(
+                            icon: Icons.chat_bubble_outline_rounded,
+                            title: 'CHAT',
+                            subtitle: 'Talk with Iron',
+                            onTap: _openChatPanel,
+                          ),
+                        ),
+                        SizedBox(
+                          width: actionWidth,
+                          child: _hudPanel(
+                            icon: Icons.terminal_rounded,
+                            title: 'COMMANDS',
+                            subtitle: 'Voice & Actions',
+                            onTap: widget.onOpenTools,
+                          ),
+                        ),
+                        SizedBox(
+                          width: actionWidth,
+                          child: _hudPanel(
+                            icon: Icons.music_note_rounded,
+                            title: 'MUSIC MODE',
+                            subtitle: 'Iron Music 420',
+                            onTap: widget.onOpenStudio,
+                            active: widget.onOpenStudio != null,
+                          ),
+                        ),
+                        SizedBox(
+                          width: actionWidth,
+                          child: _hudPanel(
+                            icon: widget.store.voiceRepliesEnabled
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            title: 'VOICE',
+                            subtitle: widget.store.voiceRepliesEnabled
+                                ? 'Replies Ready'
+                                : 'Replies Off',
+                            onTap: _toggleVoiceReplies,
+                            active: widget.store.voiceRepliesEnabled,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: compactHeight ? 8 : 10),
+                    Row(
+                      children: [
+                        _bottomHudAction(
+                          icon: Icons.bolt_rounded,
+                          title: 'TALK',
+                          subtitle: 'Tap Speak',
+                          onTap: _isLoading ? null : _toggleListening,
+                          active: _isListening,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          flex: 2,
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(28),
+                            child: InkWell(
+                              onTap: _isLoading ? null : _toggleListening,
+                              borderRadius: BorderRadius.circular(28),
+                              child: Container(
+                                height: 66,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.40),
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(
+                                    color: statusColor.withOpacity(0.38),
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: statusColor.withOpacity(0.16),
+                                      blurRadius: 22,
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  'MUSIC 420 AI',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.86),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 3.0,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                Text(
-                                  '• $status •',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.8,
-                                    shadows: [
-                                      Shadow(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'HEY IRON',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
                                         color: statusColor,
-                                        blurRadius: 14,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                SizedBox(height: compactHeight ? 4 : 10),
-                                Expanded(
-                                  child: Center(
-                                    child: GestureDetector(
-                                      onTap: _isLoading ? null : _toggleListening,
-                                      child: AnimatedScale(
-                                        duration:
-                                            const Duration(milliseconds: 180),
-                                        scale: _isListening ? 1.035 : 1.0,
-                                        child: CannabisCore(
-                                          progress: _coreController.value,
-                                          size: safeCoreSize,
-                                          state: coreState,
-                                        ),
+                                        fontSize: 21,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 2.7,
+                                        shadows: [
+                                          Shadow(
+                                            color: statusColor,
+                                            blurRadius: 14,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ),
-                                ),
-                                SizedBox(height: compactHeight ? 6 : 10),
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            top: panelTop,
-                            width: sideWidth,
-                            child: Column(
-                              children: [
-                                _hudPanel(
-                                  icon: Icons.chat_bubble_outline_rounded,
-                                  title: 'CHAT',
-                                  subtitle: 'Talk with Iron',
-                                  onTap: _openChatPanel,
-                                ),
-                                SizedBox(height: compactHeight ? 7 : 10),
-                                _hudPanel(
-                                  icon: Icons.terminal_rounded,
-                                  title: 'COMMANDS',
-                                  subtitle: 'Voice & Actions',
-                                  onTap: widget.onOpenTools,
-                                ),
-                                SizedBox(height: compactHeight ? 7 : 10),
-                                _hudPanel(
-                                  icon: Icons.music_note_rounded,
-                                  title: 'MUSIC MODE',
-                                  subtitle: 'Iron Music 420',
-                                  onTap: widget.onOpenStudio,
-                                  active: widget.onOpenStudio != null,
-                                ),
-                                if (!compactHeight) ...[
-                                  const SizedBox(height: 10),
-                                  _hudPanel(
-                                    icon: Icons.settings_rounded,
-                                    title: 'SETTINGS',
-                                    subtitle: 'Control Center',
-                                    onTap: _openApiKeySheet,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            top: panelTop + (compactHeight ? 8 : 18),
-                            width: sideWidth,
-                            child: Column(
-                              children: [
-                                _statusPanel(
-                                  icon: Icons.schedule_rounded,
-                                  title: time,
-                                  value: date,
-                                ),
-                                SizedBox(height: compactHeight ? 7 : 10),
-                                _voiceWavePanel(
-                                  title: 'VOICE',
-                                  value: _isListening
-                                      ? 'ACTIVE'
-                                      : widget.store.voiceRepliesEnabled
-                                          ? 'READY'
-                                          : 'MUTED',
-                                  active: _isListening ||
-                                      widget.store.voiceRepliesEnabled,
-                                ),
-                                SizedBox(height: compactHeight ? 7 : 10),
-                                _statusPanel(
-                                  icon: _ironActive
-                                      ? Icons.mic_rounded
-                                      : Icons.mic_off_rounded,
-                                  title: 'WAKE WORD',
-                                  value: _ironActive ? 'HEY IRON' : 'OFF',
-                                  active: _ironActive,
-                                ),
-                                if (!compactHeight) ...[
-                                  const SizedBox(height: 10),
-                                  _statusPanel(
-                                    icon: Icons.verified_user_outlined,
-                                    title: 'PRIVACY',
-                                    value: 'PROTECTED',
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            left: sideWidth * 0.74,
-                            right: sideWidth * 0.74,
-                            bottom: compactHeight ? 2 : 10,
-                            child: IgnorePointer(
-                              child: Container(
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  gradient: RadialGradient(
-                                    colors: [
-                                      ironGreen.withOpacity(0.42),
-                                      ironGreen.withOpacity(0.10),
-                                      Colors.transparent,
-                                    ],
-                                  ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.72),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            Row(
-              children: [
-                _bottomHudAction(
-                  icon: Icons.bolt_rounded,
-                  title: 'QUICK ACTION',
-                  subtitle: 'Tap to Speak',
-                  onTap: _isLoading ? null : _toggleListening,
-                  active: _isListening,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  flex: 2,
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(28),
-                    child: InkWell(
-                      onTap: _isLoading ? null : _toggleListening,
-                      borderRadius: BorderRadius.circular(28),
-                      child: Container(
-                        height: 72,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.40),
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color: statusColor.withOpacity(0.38),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: statusColor.withOpacity(0.16),
-                              blurRadius: 22,
-                            ),
-                          ],
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'HEY IRON',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 23,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 3.0,
-                                shadows: [
-                                  Shadow(
-                                    color: statusColor,
-                                    blurRadius: 14,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.72),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.4,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 9),
+                        _bottomHudAction(
+                          icon: Icons.keyboard_rounded,
+                          title: 'KEYBOARD',
+                          subtitle: 'Message',
+                          onTap: _openChatPanel,
                         ),
-                      ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                _bottomHudAction(
-                  icon: Icons.keyboard_rounded,
-                  title: 'KEYBOARD',
-                  subtitle: 'Type Message',
-                  onTap: _openChatPanel,
-                ),
-              ],
-            ),
-          ],
+                  ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
