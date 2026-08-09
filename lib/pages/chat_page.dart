@@ -1579,7 +1579,7 @@ class _ChatPageState extends State<ChatPage>
                     ),
                     const SizedBox(height: 10),
                     _statusPanel(
-                      icon: Icons.local_florist_rounded,
+                      icon: Icons.radar_rounded,
                       title: 'WAKE WORD',
                       value: 'HEY IRON',
                       active: true,
