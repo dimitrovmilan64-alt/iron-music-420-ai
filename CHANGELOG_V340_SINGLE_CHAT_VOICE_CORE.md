@@ -87,3 +87,10 @@
 - Adds compact HUD chips for wake, online and interaction states.
 - Adds a holographic platform under the 3D cannabis core.
 - Keeps the chat, microphone, voice replies and AI provider controls on the same screen.
+
+## Build 56 HUD control center
+
+- Replaces the first chat-first screen with a HUD-style Iron control center.
+- Keeps chat available behind the `CHAT` and `KEYBOARD` controls.
+- Adds direct HUD controls for commands, music mode, flashlight, settings and voice status.
+- Keeps the fixed Bulgarian voice path untouched.
