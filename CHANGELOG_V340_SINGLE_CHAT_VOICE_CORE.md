@@ -96,6 +96,12 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 58 living leaf veins
+
+- Adds a visible animated vein layer over the single HUD core cannabis leaf.
+- Keeps Build 57's duplicate-leaf fix: the generated `hud_core_exact.png` remains the only leaf body.
+- Makes the core read as alive through pulsing vein glow, moving energy highlights and small sparks.
+
 ## Build 57 single-leaf HUD
 
 - Removes the extra painted cannabis overlay from the core.

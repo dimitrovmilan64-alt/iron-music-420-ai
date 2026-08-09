@@ -538,6 +538,7 @@ class CannabisCore extends StatelessWidget {
     final cycle = progress * math.pi * 2;
     final breath = 0.965 +
         ((math.sin(cycle) + 1) * 0.5) * (0.012 + energy * 0.018);
+    final leafPulse = 0.992 + math.sin(cycle * 1.35) * (0.006 + energy * 0.010);
     return RepaintBoundary(
       child: SizedBox(
         width: size,
@@ -575,6 +576,20 @@ class CannabisCore extends StatelessWidget {
                 ),
               ),
             ),
+            Transform.scale(
+              scale: leafPulse,
+              child: ClipOval(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    size: Size.square(size * 0.93),
+                    painter: _LivingLeafVeinPainter(
+                      progress: progress,
+                      state: state,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
@@ -603,6 +618,153 @@ class CannabisCore extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _LivingLeafVeinPainter extends CustomPainter {
+  final double progress;
+  final IronCoreState state;
+
+  const _LivingLeafVeinPainter({
+    required this.progress,
+    required this.state,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final energy = _ironCoreEnergy(state);
+    final cycle = progress * math.pi * 2;
+    final center = Offset(size.width * 0.50, size.height * 0.53);
+    final stemTop = Offset(size.width * 0.50, size.height * 0.28);
+    final stemBottom = Offset(size.width * 0.50, size.height * 0.76);
+    final pulse = 0.55 + ((math.sin(cycle * 2.6) + 1) * 0.5) * (0.28 + energy * 0.22);
+    final sweep = (progress * 1.35) % 1.0;
+
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.plus
+      ..color = const Color(0xFF86FF9B).withOpacity(0.16 + pulse * 0.16)
+      ..strokeWidth = size.width * (0.010 + energy * 0.006)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.012);
+
+    final veinPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.plus
+      ..color = const Color(0xFFC7FFD4).withOpacity(0.30 + pulse * 0.30)
+      ..strokeWidth = size.width * (0.0036 + energy * 0.0018);
+
+    final hotPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.plus
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          Colors.transparent,
+          const Color(0xFFFFFFFF).withOpacity(0.08),
+          const Color(0xFF74FF8D).withOpacity(0.70),
+          Colors.transparent,
+        ],
+        stops: [
+          (sweep - 0.22).clamp(0.0, 1.0).toDouble(),
+          (sweep - 0.04).clamp(0.0, 1.0).toDouble(),
+          sweep.clamp(0.0, 1.0).toDouble(),
+          (sweep + 0.20).clamp(0.0, 1.0).toDouble(),
+        ],
+      ).createShader(Offset.zero & size)
+      ..strokeWidth = size.width * (0.006 + energy * 0.003)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.004);
+
+    Path stemPath() {
+      return Path()
+        ..moveTo(stemBottom.dx, stemBottom.dy)
+        ..quadraticBezierTo(
+          center.dx + math.sin(cycle) * size.width * 0.006,
+          center.dy,
+          stemTop.dx,
+          stemTop.dy,
+        );
+    }
+
+    final stem = stemPath();
+    canvas.drawPath(stem, glowPaint);
+    canvas.drawPath(stem, veinPaint);
+    canvas.drawPath(stem, hotPaint);
+
+    final veinTargets = <Offset>[
+      Offset(size.width * 0.24, size.height * 0.42),
+      Offset(size.width * 0.30, size.height * 0.52),
+      Offset(size.width * 0.23, size.height * 0.60),
+      Offset(size.width * 0.38, size.height * 0.34),
+      Offset(size.width * 0.62, size.height * 0.34),
+      Offset(size.width * 0.76, size.height * 0.42),
+      Offset(size.width * 0.70, size.height * 0.52),
+      Offset(size.width * 0.77, size.height * 0.60),
+    ];
+
+    for (var i = 0; i < veinTargets.length; i++) {
+      final target = veinTargets[i];
+      final side = target.dx < center.dx ? -1.0 : 1.0;
+      final phase = cycle * 2.1 + i * 0.72;
+      final localPulse = 0.58 + ((math.sin(phase) + 1) * 0.5) * 0.42;
+      final start = Offset(
+        center.dx + side * size.width * 0.012,
+        center.dy - size.height * (0.010 + (i % 4) * 0.028),
+      );
+      final control = Offset(
+        (start.dx + target.dx) * 0.5 + side * size.width * 0.045,
+        (start.dy + target.dy) * 0.5 - size.height * 0.018,
+      );
+      final path = Path()
+        ..moveTo(start.dx, start.dy)
+        ..quadraticBezierTo(control.dx, control.dy, target.dx, target.dy);
+      final branchGlow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..blendMode = BlendMode.plus
+        ..color = const Color(0xFF69FF86).withOpacity(0.10 + localPulse * 0.18)
+        ..strokeWidth = size.width * (0.007 + localPulse * 0.004)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.007);
+      final branchLine = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..blendMode = BlendMode.plus
+        ..color = const Color(0xFFDAFFE3).withOpacity(0.22 + localPulse * 0.34)
+        ..strokeWidth = size.width * (0.0026 + localPulse * 0.0018);
+      canvas.drawPath(path, branchGlow);
+      canvas.drawPath(path, branchLine);
+      if ((sweep - i / veinTargets.length).abs() < 0.18) {
+        canvas.drawPath(path, hotPaint);
+      }
+    }
+
+    final sparkPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..blendMode = BlendMode.plus
+      ..color = const Color(0xFFC8FFD4).withOpacity(0.30 + energy * 0.22)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.006);
+
+    for (var i = 0; i < 7; i++) {
+      final t = (progress * (0.55 + i * 0.08) + i * 0.137) % 1.0;
+      final side = i.isEven ? -1.0 : 1.0;
+      final x = center.dx + side * math.sin(t * math.pi) * size.width * (0.08 + i * 0.012);
+      final y = stemBottom.dy - t * size.height * 0.45;
+      final radius = size.width * (0.003 + ((math.sin(cycle + i) + 1) * 0.5) * 0.004);
+      canvas.drawCircle(Offset(x, y), radius, sparkPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LivingLeafVeinPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.state != state;
   }
 }
 

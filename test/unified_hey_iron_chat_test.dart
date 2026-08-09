@@ -63,6 +63,8 @@ void main() {
     expect(widgets, contains('class _IronCoreGlassPainter'));
     expect(widgets, contains('class _IronCorePedestalPainter'));
     expect(widgets, contains('assets/images/hud_core_exact.png'));
+    expect(widgets, contains('class _LivingLeafVeinPainter'));
+    expect(widgets, contains('leafPulse'));
     expect(widgets, isNot(contains('class _CannabisLeafPainter')));
     expect(widgets, contains('IronCoreState.listening'));
     expect(widgets, contains('IronCoreState.thinking'));
