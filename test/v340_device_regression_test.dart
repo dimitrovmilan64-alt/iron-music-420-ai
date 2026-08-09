@@ -13,9 +13,11 @@ void main() {
     expect(main, contains('_currentIndex == 0'));
     expect(chat, contains("'IRON'"));
     expect(chat, contains("_chatPanelOpen ? _buildChatMode() : _buildHudDashboard()"));
-    expect(chat, contains('_coreDockButton'));
-    expect(chat, contains("label: 'Чат'"));
-    expect(chat, contains("'ДОКОСНИ ЯДРОТО'"));
+    expect(chat, contains('_bottomHudAction'));
+    expect(chat, contains("title: 'CHAT'"));
+    expect(chat, contains("title: 'COMMANDS'"));
+    expect(chat, contains("title: 'KEYBOARD'"));
+    expect(chat, contains("'HEY IRON'"));
     expect(chat, contains("'MUSIC 420 AI'"));
     expect(chat, isNot(contains('GridView.count')));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
