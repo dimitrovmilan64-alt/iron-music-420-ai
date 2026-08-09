@@ -96,6 +96,13 @@
 - Keeps the fixed Bulgarian voice path untouched.
 
 
+## Build 59 single leaf only
+
+- Keeps the cannabis leaf only inside the center HUD core.
+- Replaces the bottom `Хей Айрън` tab icon with a chat icon.
+- Replaces the wake-word status leaf icon with a radar icon.
+- Removes the faint background mini-leaf watermarks.
+
 ## Build 58 living leaf veins
 
 - Adds a visible animated vein layer over the single HUD core cannabis leaf.
