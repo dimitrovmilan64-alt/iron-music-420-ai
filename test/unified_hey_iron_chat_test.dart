@@ -69,6 +69,11 @@ void main() {
     expect(widgets, contains('assets/images/hud_core_exact.png'));
     expect(widgets, contains('class _LivingLeafVeinPainter'));
     expect(widgets, contains('leafPulse'));
+    expect(widgets, contains('_leafSilhouette'));
+    expect(widgets, contains('canvas.clipPath(leafMask)'));
+    expect(widgets, contains('PathOperation.union'));
+    expect(widgets, contains('castShadowPaint'));
+    expect(widgets, contains('innerDepthPaint'));
     expect(widgets, isNot(contains('class _CannabisLeafPainter')));
     expect(widgets, isNot(contains('_drawTinyLeaf')));
     expect(widgets, contains('IronCoreState.listening'));
