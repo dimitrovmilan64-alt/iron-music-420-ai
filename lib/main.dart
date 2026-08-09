@@ -170,8 +170,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   static const _navItems = <IronNavItem>[
     IronNavItem(
-      icon: Icons.auto_awesome_outlined,
-      selectedIcon: Icons.auto_awesome_rounded,
+      icon: Icons.chat_bubble_outline_rounded,
+      selectedIcon: Icons.chat_bubble_rounded,
       label: 'Хей Айрън',
     ),
     IronNavItem(
