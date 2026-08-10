@@ -1,16 +1,16 @@
-name: Build 68 living core
+name: Build 69 Rap Studio fix
 
 on:
   push:
     branches:
-      - ui/build68-living-core
+      - fix/build69-rap-studio
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 concurrency:
-  group: build68-living-core-${{ github.event.pull_request.number || github.ref }}
+  group: build69-rap-studio-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout isolated UI branch
+      - name: Checkout build 69 branch
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -46,8 +46,11 @@ jobs:
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh
 
-      - name: Apply build 68 UI only
+      - name: Apply verified build 68 UI
         run: python3 scripts/apply_build68_living_core.py
+
+      - name: Apply build 69 Rap Studio fix
+        run: python3 scripts/apply_build69_rap_studio.py
 
       - name: Verify voice source is untouched
         shell: bash
@@ -56,17 +59,20 @@ jobs:
           git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/WakeActivationGuard.kt
           git diff --exit-code -- lib/services/automation_service.dart
 
-      - name: Verify patch scope
+      - name: Verify runtime patch scope
         shell: bash
         run: |
           CHANGED="$(git diff --name-only | sort)"
           printf '%s\n' "$CHANGED"
-          test "$CHANGED" = $'lib/pages/chat_page.dart\nlib/ui/common_widgets.dart\npubspec.yaml'
+          test "$CHANGED" = $'lib/pages/chat_page.dart\nlib/pages/rap_studio_page.dart\nlib/ui/common_widgets.dart\npubspec.yaml'
+
+      - name: Verify build number
+        run: grep -F 'version: 3.4.0+69' pubspec.yaml
 
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze build 68
+      - name: Analyze build 69
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test Flutter regressions
@@ -90,9 +96,9 @@ jobs:
             'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
             /tmp/iron-apk-certificate.txt
 
-      - name: Upload build 68 APK
+      - name: Upload build 69 APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build68-living-core
+          name: iron-music-420-ai-v3.4.0-build69-rap-studio-fix
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
