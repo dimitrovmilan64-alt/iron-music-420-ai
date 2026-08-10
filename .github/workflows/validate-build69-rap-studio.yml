@@ -1,0 +1,103 @@
+name: Validate build 69 Rap Studio
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build69:
+    if: github.head_ref == 'fix/build69-rap-studio'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v2
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare stable test signing key
+        shell: bash
+        run: |
+          base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
+          keytool -list \
+            -keystore android/app/iron-test-key.jks \
+            -storepass iron420test \
+            -alias iron-test
+
+      - name: Prepare offline Hey Iron engine
+        run: bash scripts/prepare_sherpa_kws.sh
+
+      - name: Apply verified build 68 UI
+        run: python3 scripts/apply_build68_living_core.py
+
+      - name: Prepare literal-safe build 69 patch
+        run: python3 scripts/prepare_build69_patch_runner.py
+
+      - name: Apply build 69 Rap Studio fix
+        shell: bash
+        run: |
+          python3 scripts/apply_build69_rap_studio.py
+          git checkout -- scripts/apply_build69_rap_studio.py
+
+      - name: Verify voice source is untouched
+        shell: bash
+        run: |
+          git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt
+          git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/WakeActivationGuard.kt
+          git diff --exit-code -- lib/services/automation_service.dart
+
+      - name: Verify runtime patch scope
+        shell: bash
+        run: |
+          CHANGED="$(git diff --name-only | sort)"
+          printf '%s\n' "$CHANGED"
+          test "$CHANGED" = $'lib/pages/chat_page.dart\nlib/pages/rap_studio_page.dart\nlib/ui/common_widgets.dart\npubspec.yaml'
+
+      - name: Verify build number
+        run: grep -F 'version: 3.4.0+69' pubspec.yaml
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Analyze build 69
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Test Flutter regressions
+        run: flutter test
+
+      - name: Build arm64 debug APK
+        run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Test native voice lifecycle
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Verify stable APK certificate
+        shell: bash
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
+            | tee /tmp/iron-apk-certificate.txt
+          grep -Fi \
+            'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
+            /tmp/iron-apk-certificate.txt
+
+      - name: Upload build 69 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: iron-music-420-ai-v3.4.0-build69-rap-studio-fix
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
