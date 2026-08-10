@@ -49,8 +49,14 @@ jobs:
       - name: Apply verified build 68 UI
         run: python3 scripts/apply_build68_living_core.py
 
+      - name: Prepare literal-safe build 69 patch
+        run: python3 scripts/prepare_build69_patch_runner.py
+
       - name: Apply build 69 Rap Studio fix
-        run: python3 scripts/apply_build69_rap_studio.py
+        shell: bash
+        run: |
+          python3 scripts/apply_build69_rap_studio.py
+          git checkout -- scripts/apply_build69_rap_studio.py
 
       - name: Verify voice source is untouched
         shell: bash
