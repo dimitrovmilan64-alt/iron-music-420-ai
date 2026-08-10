@@ -9,8 +9,8 @@ void main() {
     expect(rap, contains('String _tempoDescriptor()'));
     expect(rap, contains('String _structureDescriptor()'));
     expect(rap, contains('String _vocalDescriptor()'));
-    expect(rap, contains("'song concept: $concept'"));
-    expect(rap, contains("'lyrical imagery: $keywords'"));
+    expect(rap, contains(r"'song concept: $concept'"));
+    expect(rap, contains(r"'lyrical imagery: $keywords'"));
     expect(rap, contains('_refreshSunoFields({bool force = false})'));
     expect(rap, contains('_refreshSunoFields(force: true);'));
   });
@@ -28,8 +28,8 @@ void main() {
   test('build 69 AI tools visibly update lyrics and Suno style', () {
     final rap = File('lib/pages/rap_studio_page.dart').readAsStringSync();
 
-    expect(rap, contains("AI върна празен резултат. Опитай отново."));
-    expect(rap, contains("'$actionName — готово. Suno Style е обновен.'"));
+    expect(rap, contains('AI върна празен резултат. Опитай отново.'));
+    expect(rap, contains(r"'$actionName — готово. Suno Style е обновен.'"));
     expect(rap, contains('final beforeLyrics = _currentLyrics;'));
     expect(rap, contains('final changed = _currentLyrics != beforeLyrics;'));
   });
