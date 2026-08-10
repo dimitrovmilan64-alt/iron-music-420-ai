@@ -48,7 +48,7 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0 build 53
+      - name: Analyze v3.4.0 build 67 stable restore
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test all Flutter regressions
@@ -75,6 +75,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build53-hear-hey-iron
+          name: iron-music-420-ai-v3.4.0-build67-stable-restore
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
