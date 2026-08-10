@@ -45,10 +45,42 @@ jobs:
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh
 
+      - name: Apply build 68 UI for build 69 PR
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/build69-rap-studio'
+        run: python3 scripts/apply_build68_living_core.py
+
+      - name: Prepare literal-safe build 69 patch
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/build69-rap-studio'
+        run: python3 scripts/prepare_build69_patch_runner.py
+
+      - name: Apply build 69 Rap Studio fix
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/build69-rap-studio'
+        shell: bash
+        run: |
+          python3 scripts/apply_build69_rap_studio.py
+          git checkout -- scripts/apply_build69_rap_studio.py
+
+      - name: Verify build 69 voice source is untouched
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/build69-rap-studio'
+        shell: bash
+        run: |
+          git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt
+          git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/WakeActivationGuard.kt
+          git diff --exit-code -- lib/services/automation_service.dart
+
+      - name: Verify build 69 runtime patch scope
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/build69-rap-studio'
+        shell: bash
+        run: |
+          CHANGED="$(git diff --name-only | sort)"
+          printf '%s\n' "$CHANGED"
+          test "$CHANGED" = $'lib/pages/chat_page.dart\nlib/pages/rap_studio_page.dart\nlib/ui/common_widgets.dart\npubspec.yaml'
+          grep -F 'version: 3.4.0+69' pubspec.yaml
+
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0 build 67 stable restore
+      - name: Analyze app
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test all Flutter regressions
@@ -75,6 +107,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build67-stable-restore
+          name: iron-music-420-ai-validation-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
