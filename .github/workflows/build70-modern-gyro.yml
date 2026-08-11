@@ -1,15 +1,16 @@
-name: Android build
+name: Build 70 modern gyro UI
 
 on:
   push:
     branches:
-      - main
+      - ui/build70-modern-gyro
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
-  group: android-build-${{ github.event.pull_request.number || github.ref }}
+  group: build70-modern-gyro-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,7 +19,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout isolated modern UI branch
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -45,8 +46,8 @@ jobs:
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh
 
-      - name: Apply isolated build 68 UI
-        run: python3 scripts/apply_build68_living_core.py
+      - name: Apply modern gyro UI only
+        run: python3 scripts/apply_build70_modern_gyro.py
 
       - name: Verify voice source is untouched
         shell: bash
@@ -55,20 +56,21 @@ jobs:
           git diff --exit-code -- android/app/src/main/kotlin/com/example/ironmusic420ai/WakeActivationGuard.kt
           git diff --exit-code -- lib/services/automation_service.dart
 
-      - name: Verify UI-only patch scope
+      - name: Verify UI-only runtime scope
         shell: bash
         run: |
           CHANGED="$(git diff --name-only | sort)"
           printf '%s\n' "$CHANGED"
           test "$CHANGED" = $'lib/pages/chat_page.dart\nlib/ui/common_widgets.dart\npubspec.yaml'
+          grep -F 'version: 3.4.0+70' pubspec.yaml
 
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0 build 68 living core
+      - name: Analyze build 70
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
-      - name: Test all Flutter regressions
+      - name: Test Flutter regressions
         run: flutter test
 
       - name: Build arm64 debug APK
@@ -89,9 +91,9 @@ jobs:
             'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
             /tmp/iron-apk-certificate.txt
 
-      - name: Upload APK
+      - name: Upload build 70 APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build68-living-core
+          name: iron-music-420-ai-v3.4.0-build70-modern-gyro
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
