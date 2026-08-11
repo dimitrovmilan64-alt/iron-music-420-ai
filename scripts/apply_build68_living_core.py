@@ -163,7 +163,9 @@ class _CannabisCoreState extends State<CannabisCore> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: ironGreen.withOpacity(glow.clamp(0.0, 0.48)),
+                      color: ironGreen.withOpacity(
+                        glow.clamp(0.0, 0.48).toDouble(),
+                      ),
                       blurRadius: 32 + progress * 22 + motion * 12,
                       spreadRadius: 1 + progress * 3 + motion * 1.5,
                     ),
@@ -197,7 +199,8 @@ class _CannabisCoreState extends State<CannabisCore> {
                     exactLeaf(),
                     Opacity(
                       opacity: (0.10 + progress * 0.18 + motion * 0.16)
-                          .clamp(0.0, 0.42),
+                          .clamp(0.0, 0.42)
+                          .toDouble(),
                       child: ShaderMask(
                         blendMode: BlendMode.srcATop,
                         shaderCallback: (bounds) => LinearGradient(
