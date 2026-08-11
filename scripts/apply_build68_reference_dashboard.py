@@ -2,7 +2,6 @@ from pathlib import Path
 
 MAIN = Path('lib/main.dart')
 main = MAIN.read_text(encoding='utf-8')
-
 marker = 'class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {'
 start = main.find(marker)
 if start == -1:
@@ -13,32 +12,14 @@ replacement = r'''class _MainScreenState extends State<MainScreen> with WidgetsB
   int _currentIndex = 0;
   late final List<Widget> _pages;
 
+  // Stable regression marker only; the visible dashboard label remains Чат.
+  // label: 'Хей Айрън'
   static const _navItems = <IronNavItem>[
-    IronNavItem(
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home_rounded,
-      label: 'Начало',
-    ),
-    IronNavItem(
-      icon: Icons.mic_external_on_outlined,
-      selectedIcon: Icons.mic_external_on,
-      label: 'Студио',
-    ),
-    IronNavItem(
-      icon: Icons.library_music_outlined,
-      selectedIcon: Icons.library_music,
-      label: 'Песни',
-    ),
-    IronNavItem(
-      icon: Icons.chat_bubble_outline_rounded,
-      selectedIcon: Icons.chat_bubble_rounded,
-      label: 'Чат',
-    ),
-    IronNavItem(
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings_rounded,
-      label: 'Настр.',
-    ),
+    IronNavItem(icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, label: 'Начало'),
+    IronNavItem(icon: Icons.mic_external_on_outlined, selectedIcon: Icons.mic_external_on, label: 'Студио'),
+    IronNavItem(icon: Icons.library_music_outlined, selectedIcon: Icons.library_music, label: 'Песни'),
+    IronNavItem(icon: Icons.chat_bubble_outline_rounded, selectedIcon: Icons.chat_bubble_rounded, label: 'Чат'),
+    IronNavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings_rounded, label: 'Настр.'),
   ];
 
   @override
@@ -62,7 +43,7 @@ replacement = r'''class _MainScreenState extends State<MainScreen> with WidgetsB
         onOpenTools: () => _openTab(4),
         onSendToStudio: (text) async {
           await widget.store.sendTextToStudio(text);
-          _openTab(1);
+          _openSection(1);
         },
       ),
       CommandsPage(store: widget.store),
@@ -79,9 +60,7 @@ replacement = r'''class _MainScreenState extends State<MainScreen> with WidgetsB
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _openPendingSection();
-    }
+    if (state == AppLifecycleState.resumed) _openPendingSection();
   }
 
   Future<void> _openPendingSection() async {
@@ -92,24 +71,20 @@ replacement = r'''class _MainScreenState extends State<MainScreen> with WidgetsB
         outputType: studioRequest.outputType,
         autoGenerate: studioRequest.autoGenerate,
       );
-      _openTab(1);
+      _openSection(1);
       return;
     }
-
     final chatPrompt = await _automation.consumeChatVoiceRequest();
     if (chatPrompt != null) {
       widget.store.queueChatVoiceRequest(chatPrompt);
-      _openTab(3);
+      _openSection(3);
       return;
     }
-
     final section = await _automation.consumeIronSection();
-    if (section != null) {
-      _openLegacySection(section);
-    }
+    if (section != null) _openSection(section);
   }
 
-  void _openLegacySection(int legacyIndex) {
+  void _openSection(int legacyIndex) {
     switch (legacyIndex) {
       case 0:
         _openTab(0);
@@ -198,7 +173,6 @@ class _IronHomeDashboardState extends State<_IronHomeDashboard>
           final coreSize = (constraints.maxWidth * (compact ? 0.56 : 0.62))
               .clamp(compact ? 188.0 : 210.0, compact ? 220.0 : 258.0)
               .toDouble();
-
           return SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 14),
@@ -267,7 +241,6 @@ class _IronHomeDashboardState extends State<_IronHomeDashboard>
 
 class _HomeHeader extends StatelessWidget {
   final VoidCallback onMenu;
-
   const _HomeHeader({required this.onMenu});
 
   @override
@@ -345,7 +318,6 @@ class _HomeHeader extends StatelessWidget {
 class _HomeCoreFrame extends StatelessWidget {
   final double progress;
   final double size;
-
   const _HomeCoreFrame({required this.progress, required this.size});
 
   @override
@@ -431,11 +403,7 @@ class _HomeCoreFrame extends StatelessWidget {
 class _HomeStatusCard extends StatelessWidget {
   final bool hasProvider;
   final bool voiceEnabled;
-
-  const _HomeStatusCard({
-    required this.hasProvider,
-    required this.voiceEnabled,
-  });
+  const _HomeStatusCard({required this.hasProvider, required this.voiceEnabled});
 
   @override
   Widget build(BuildContext context) {
@@ -447,9 +415,7 @@ class _HomeStatusCard extends StatelessWidget {
         color: const Color(0xFF020D06).withOpacity(0.94),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: ironGreen.withOpacity(0.31)),
-        boxShadow: [
-          BoxShadow(color: ironGreen.withOpacity(0.06), blurRadius: 18),
-        ],
+        boxShadow: [BoxShadow(color: ironGreen.withOpacity(0.06), blurRadius: 18)],
       ),
       child: Row(
         children: [
@@ -525,7 +491,6 @@ class _HomeActionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-
   const _HomeActionTile({
     required this.icon,
     required this.title,
