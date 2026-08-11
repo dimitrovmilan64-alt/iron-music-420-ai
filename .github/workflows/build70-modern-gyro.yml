@@ -4,10 +4,13 @@ on:
   push:
     branches:
       - ui/build70-modern-gyro
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
-  group: build70-modern-gyro-${{ github.ref }}
+  group: build70-modern-gyro-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
