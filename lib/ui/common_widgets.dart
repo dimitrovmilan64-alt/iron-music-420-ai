@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 const ironGreen = Color(0xFF00FF66);
 const ironGreenSoft = Color(0xFF37FF88);
@@ -74,24 +76,47 @@ class IronBackground extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: RadialGradient(
-          center: Alignment(0.0, -0.78),
-          radius: 1.35,
+          center: Alignment(0.0, -1.08),
+          radius: 1.48,
           colors: [
-            Color(0xFF063319),
-            Color(0xFF011008),
-            ironDark,
+            Color(0xFF07351A),
+            Color(0xFF021109),
+            Color(0xFF000603),
             Colors.black,
           ],
-          stops: [0.0, 0.35, 0.72, 1.0],
+          stops: [0.0, 0.32, 0.70, 1.0],
         ),
       ),
       child: Stack(
         fit: StackFit.expand,
         children: [
           if (showHud)
-            const IgnorePointer(
-              child: CustomPaint(painter: _HudBackgroundPainter()),
+            IgnorePointer(
+              child: Opacity(
+                opacity: 0.72,
+                child: CustomPaint(painter: _HudBackgroundPainter()),
+              ),
             ),
+          IgnorePointer(
+            child: Align(
+              alignment: const Alignment(0, -0.72),
+              child: Container(
+                width: 330,
+                height: 330,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      ironGreen.withOpacity(0.055),
+                      ironGreenDeep.withOpacity(0.018),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.55, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
           SafeArea(child: child),
         ],
       ),
@@ -495,7 +520,7 @@ class NeonPill extends StatelessWidget {
   }
 }
 
-class CannabisCore extends StatelessWidget {
+class CannabisCore extends StatefulWidget {
   final double progress;
   final double size;
 
@@ -506,53 +531,215 @@ class CannabisCore extends StatelessWidget {
   });
 
   @override
+  State<CannabisCore> createState() => _CannabisCoreState();
+}
+
+class _CannabisCoreState extends State<CannabisCore> {
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
+  DateTime? _lastGyroscopeUpdate;
+  double _tiltX = 0.0;
+  double _tiltY = 0.0;
+  double _tiltZ = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _gyroscopeSubscription = gyroscopeEventStream(
+        samplingPeriod: const Duration(milliseconds: 32),
+      ).listen(
+        _handleGyroscope,
+        onError: (_) {},
+        cancelOnError: false,
+      );
+    } catch (_) {
+      _gyroscopeSubscription = null;
+    }
+  }
+
+  void _handleGyroscope(GyroscopeEvent event) {
+    if (!mounted) return;
+
+    final now = DateTime.now();
+    final previous = _lastGyroscopeUpdate;
+    _lastGyroscopeUpdate = now;
+    final dt = previous == null
+        ? 0.032
+        : (now.difference(previous).inMicroseconds / 1000000.0)
+            .clamp(0.008, 0.080)
+            .toDouble();
+
+    const dampingXY = 0.88;
+    const dampingZ = 0.84;
+    const gainXY = 0.74;
+    const gainZ = 0.34;
+
+    final nextX = ((_tiltX * dampingXY) - event.x * dt * gainXY)
+        .clamp(-0.165, 0.165)
+        .toDouble();
+    final nextY = ((_tiltY * dampingXY) + event.y * dt * gainXY)
+        .clamp(-0.165, 0.165)
+        .toDouble();
+    final nextZ = ((_tiltZ * dampingZ) + event.z * dt * gainZ)
+        .clamp(-0.080, 0.080)
+        .toDouble();
+
+    if ((nextX - _tiltX).abs() < 0.00035 &&
+        (nextY - _tiltY).abs() < 0.00035 &&
+        (nextZ - _tiltZ).abs() < 0.00035) {
+      return;
+    }
+
+    setState(() {
+      _tiltX = nextX;
+      _tiltY = nextY;
+      _tiltZ = nextZ;
+    });
+  }
+
+  @override
+  void dispose() {
+    _gyroscopeSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final pulse = 0.92 + progress * 0.08;
+    final progress = widget.progress;
+    final size = widget.size;
+    final breathe = 0.985 + progress * 0.022;
+    final motion = ((_tiltX.abs() + _tiltY.abs()) / 0.33)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final glow = 0.16 + progress * 0.18 + motion * 0.08;
+    final idleTiltX = (progress - 0.5) * 0.012;
+    final idleTiltY = (0.5 - progress) * 0.018;
+    final lightX = (_tiltY * 4.1).clamp(-0.75, 0.75).toDouble();
+    final lightY = (-_tiltX * 4.1).clamp(-0.75, 0.75).toDouble();
+    final depthOffset = Offset(
+      _tiltY * size * 0.075,
+      -_tiltX * size * 0.075,
+    );
+
+    Widget exactLeaf({double opacity = 1.0}) {
+      return Opacity(
+        opacity: opacity,
+        child: Image.asset(
+          'assets/images/hud_core_exact.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (context, error, stackTrace) => CustomPaint(
+            size: Size.square(size),
+            painter: _HudCorePainter(progress: progress),
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Transform.scale(
-            scale: pulse,
-            child: Container(
-              width: size * 0.88,
-              height: size * 0.88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: ironGreen.withOpacity(0.18 + progress * 0.13),
-                    blurRadius: 36 + progress * 18,
-                    spreadRadius: 4,
+          Transform.translate(
+            offset: depthOffset * 0.42,
+            child: Transform.scale(
+              scale: 0.94 + progress * 0.035 + motion * 0.012,
+              child: Container(
+                width: size * 0.82,
+                height: size * 0.82,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    center: Alignment(lightX * 0.34, lightY * 0.34),
+                    colors: [
+                      ironGreen.withOpacity(0.10 + progress * 0.08 + motion * 0.04),
+                      ironGreenDeep.withOpacity(0.055),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.58, 1.0],
                   ),
-                ],
+                  border: Border.all(
+                    color: ironGreen.withOpacity(0.15 + progress * 0.11),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ironGreen.withOpacity(
+                        glow.clamp(0.0, 0.48).toDouble(),
+                      ),
+                      blurRadius: 32 + progress * 22 + motion * 12,
+                      spreadRadius: 1 + progress * 3 + motion * 1.5,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.72),
+                      blurRadius: 24 + motion * 7,
+                      offset: Offset(
+                        -depthOffset.dx * 0.22,
+                        12 - depthOffset.dy * 0.22,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          Transform.rotate(
-            angle: (progress - 0.5) * math.pi * 0.012,
-            child: Image.asset(
-              'assets/images/hud_core_exact.png',
-              width: size,
-              height: size,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-              errorBuilder: (context, error, stackTrace) => CustomPaint(
-                size: Size.square(size),
-                painter: _HudCorePainter(progress: progress),
+          Transform.translate(
+            offset: depthOffset,
+            child: Transform.scale(
+              scale: breathe + motion * 0.010,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.0019)
+                  ..rotateX(_tiltX + idleTiltX)
+                  ..rotateY(_tiltY + idleTiltY)
+                  ..rotateZ(_tiltZ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    exactLeaf(),
+                    Opacity(
+                      opacity: (0.10 + progress * 0.18 + motion * 0.16)
+                          .clamp(0.0, 0.42)
+                          .toDouble(),
+                      child: ShaderMask(
+                        blendMode: BlendMode.srcATop,
+                        shaderCallback: (bounds) => LinearGradient(
+                          begin: Alignment(-0.95 + lightX, 0.95 + lightY),
+                          end: Alignment(0.85 + lightX, -0.95 + lightY),
+                          colors: const [
+                            Colors.transparent,
+                            Color(0xFFC9FFD9),
+                            Color(0xFF55FF94),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.04, 0.40, 0.56, 0.94],
+                        ).createShader(bounds),
+                        child: exactLeaf(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
           IgnorePointer(
-            child: Container(
-              width: size * 0.79,
-              height: size * 0.79,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.05 + progress * 0.04),
+            child: Transform.translate(
+              offset: depthOffset * -0.18,
+              child: Container(
+                width: size * 0.76,
+                height: size * 0.76,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withOpacity(
+                      0.035 + progress * 0.05 + motion * 0.025,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -578,80 +765,92 @@ class IronBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF010A05).withOpacity(0.98),
-        border: Border(
-          top: BorderSide(color: ironGreen.withOpacity(0.18)),
-        ),
+        color: const Color(0xFF020B06).withOpacity(0.985),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: ironGreen.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
-            color: ironGreen.withOpacity(0.08),
+            color: Colors.black.withOpacity(0.64),
+            blurRadius: 24,
+            offset: const Offset(0, -2),
+          ),
+          BoxShadow(
+            color: ironGreen.withOpacity(0.055),
             blurRadius: 22,
-            offset: const Offset(0, -4),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 70,
-          child: Row(
-            children: List.generate(items.length, (index) {
-              final item = items[index];
-              final selected = index == selectedIndex;
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onSelected(index),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOut,
-                        width: selected ? 50 : 38,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? ironGreen.withOpacity(0.14)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(18),
-                          border: selected
-                              ? Border.all(
-                                  color: ironGreen.withOpacity(0.22),
-                                )
-                              : null,
-                          boxShadow: selected
-                              ? [
-                                  BoxShadow(
-                                    color: ironGreen.withOpacity(0.12),
-                                    blurRadius: 12,
-                                  ),
-                                ]
-                              : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 70,
+            child: Row(
+              children: List.generate(items.length, (index) {
+                final item = items[index];
+                final selected = index == selectedIndex;
+                return Expanded(
+                  child: InkWell(
+                    onTap: () => onSelected(index),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          width: selected ? 58 : 44,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: selected
+                                ? LinearGradient(
+                                    colors: [
+                                      ironGreen.withOpacity(0.20),
+                                      ironGreenDeep.withOpacity(0.08),
+                                    ],
+                                  )
+                                : null,
+                            border: Border.all(
+                              color: selected
+                                  ? ironGreen.withOpacity(0.34)
+                                  : Colors.transparent,
+                            ),
+                            boxShadow: selected
+                                ? [
+                                    BoxShadow(
+                                      color: ironGreen.withOpacity(0.14),
+                                      blurRadius: 14,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Icon(
+                            selected ? item.selectedIcon : item.icon,
+                            color: selected ? ironGreenSoft : Colors.white38,
+                            size: selected ? 23 : 21,
+                          ),
                         ),
-                        child: Icon(
-                          selected ? item.selectedIcon : item.icon,
-                          color: selected ? ironGreen : Colors.white54,
-                          size: 22,
+                        const SizedBox(height: 3),
+                        Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: selected ? ironGreen : Colors.white38,
+                            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                            fontSize: 9.5,
+                            letterSpacing: selected ? 0.15 : 0,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: selected ? ironGreen : Colors.white60,
-                          fontWeight:
-                              selected ? FontWeight.w800 : FontWeight.w600,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
+            ),
           ),
         ),
       ),
@@ -737,22 +936,6 @@ class _HudBackgroundPainter extends CustomPainter {
     }
     canvas.drawPath(wave, hudPaint);
 
-    final watermarkPaint = Paint()
-      ..color = ironGreen.withOpacity(0.035)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.09, size.height * 0.58),
-      18,
-      watermarkPaint,
-    );
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.91, size.height * 0.79),
-      22,
-      watermarkPaint,
-    );
   }
 
   void _drawTinyLeaf(
