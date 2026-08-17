@@ -160,6 +160,38 @@ class AutomationService {
   Future<AutomationResult> openYoutubeAutoPlaySettings() =>
       execute('youtube_autoplay_settings');
 
+  Future<bool> isIronOrbActive() async {
+    try {
+      final state = await _channel.invokeMethod<String>('execute', {
+        'action': 'iron_orb_status',
+      });
+      return state == 'active';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> consumeIronOrbConversationRequest() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'consumeIronOrbConversationRequest',
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setIronOrbState(String state) async {
+    try {
+      await _channel.invokeMethod<bool>('setIronOrbState', {
+        'state': state,
+      });
+    } catch (_) {
+      // The conversation remains usable when the overlay is disabled.
+    }
+  }
+
   Future<int?> consumeIronSection() async {
     try {
       return await _channel.invokeMethod<int>('consumeIronSection');

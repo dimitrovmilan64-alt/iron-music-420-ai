@@ -25,7 +25,7 @@ void main() {
         File('lib/pages/rap_studio_page.dart').readAsStringSync();
     final studio = File('lib/pages/rap_studio_page_v2.dart').readAsStringSync();
 
-    expect(pubspec, contains('version: 3.4.0+73'));
+    expect(pubspec, contains('version: 3.4.0+74'));
     expect(pubspec, contains('sensors_plus: ^6.1.2'));
     expect(chat, contains('CannabisCore(progress: progress, size: size)'));
     expect(chat, contains("'IRON MUSIC'"));

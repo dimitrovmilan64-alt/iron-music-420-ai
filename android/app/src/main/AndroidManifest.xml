@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <uses-feature
@@ -39,6 +40,10 @@
             android:name=".IronVoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone"
+            android:stopWithTask="false" />
+        <service
+            android:name=".IronOrbService"
+            android:exported="false"
             android:stopWithTask="false" />
         <service
             android:name=".YoutubeAutoPlayAccessibilityService"

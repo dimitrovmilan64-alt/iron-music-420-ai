@@ -39,6 +39,7 @@ class MainActivity : FlutterActivity() {
     private var pendingStudioPrompt = ""
     private var pendingStudioOutputType = ""
     private var pendingStudioAutoGenerate = false
+    private var pendingOrbConversation = false
     private var automationChannel: MethodChannel? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cameraManager by lazy {
@@ -129,6 +130,16 @@ class MainActivity : FlutterActivity() {
                             pendingStudioOutputType = ""
                             pendingStudioAutoGenerate = false
                         }
+                    }
+                    "consumeIronOrbConversationRequest" -> {
+                        result.success(pendingOrbConversation)
+                        pendingOrbConversation = false
+                    }
+                    "setIronOrbState" -> {
+                        IronOrbService.updateVisualState(
+                            call.argument<String>("state").orEmpty(),
+                        )
+                        result.success(true)
                     }
                     "startChatSpeechRecognition" -> {
                         startChatSpeechRecognition(result)
@@ -629,6 +640,7 @@ class MainActivity : FlutterActivity() {
     override fun onPostResume() {
         super.onPostResume()
         restoreIronVoiceIfEnabled()
+        restoreIronOrbIfEnabled()
     }
 
     private fun restoreIronVoiceIfEnabled() {
@@ -704,6 +716,10 @@ class MainActivity : FlutterActivity() {
         val chatPrompt = intent?.getStringExtra("iron_chat_prompt").orEmpty().trim()
         if (chatPrompt.isNotEmpty()) {
             pendingChatPrompt = chatPrompt
+        }
+
+        if (intent?.getBooleanExtra("iron_orb_conversation", false) == true) {
+            pendingOrbConversation = true
         }
 
         val studioPrompt = intent?.getStringExtra("iron_studio_prompt").orEmpty().trim()
@@ -831,6 +847,22 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success("Iron е спрян.")
                 }
+                "iron_orb_status" -> {
+                    result.success(if (IronOrbService.isRunning) "active" else "inactive")
+                }
+                "iron_orb_on" -> startIronOrb(result)
+                "iron_orb_off" -> {
+                    getSharedPreferences(IronOrbService.PREFS, Context.MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(IronOrbService.KEY_ENABLED, false)
+                        .apply()
+                    stopService(
+                        Intent(this, IronOrbService::class.java).apply {
+                            this.action = IronOrbService.ACTION_STOP
+                        },
+                    )
+                    result.success("Живата сфера е изключена.")
+                }
                 "open_automate" -> openPackageOrUrl(
                     "com.llamalab.automate",
                     "market://details?id=com.llamalab.automate",
@@ -850,6 +882,52 @@ class MainActivity : FlutterActivity() {
                 error.localizedMessage ?: "Действието не е достъпно.",
                 null
             )
+        }
+    }
+
+    private fun startIronOrb(result: MethodChannel.Result) {
+        getSharedPreferences(IronOrbService.PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(IronOrbService.KEY_ENABLED, true)
+            .apply()
+
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
+            result.success(
+                "Разреши „Показване върху други приложения“, после се върни в Iron.",
+            )
+            return
+        }
+
+        startService(
+            Intent(this, IronOrbService::class.java).apply {
+                action = IronOrbService.ACTION_START
+            },
+        )
+        result.success("Живата сфера е активна върху всички приложения.")
+    }
+
+    private fun restoreIronOrbIfEnabled() {
+        val enabled = getSharedPreferences(
+            IronOrbService.PREFS,
+            Context.MODE_PRIVATE,
+        ).getBoolean(IronOrbService.KEY_ENABLED, false)
+        if (!enabled || IronOrbService.isRunning || !Settings.canDrawOverlays(this)) {
+            return
+        }
+        try {
+            startService(
+                Intent(this, IronOrbService::class.java).apply {
+                    action = IronOrbService.ACTION_START
+                },
+            )
+        } catch (_: Exception) {
+            // The visible toggle can retry after Android releases the settings screen.
         }
     }
 

@@ -45,7 +45,9 @@ class _ChatPageState extends State<ChatPage>
   bool _isLoading = false;
   bool _isListening = false;
   bool _ironActive = false;
+  bool _ironOrbActive = false;
   bool _voiceToggleBusy = false;
+  bool _orbToggleBusy = false;
   bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
   List<Map<String, String>> _bulgarianVoices = const [];
@@ -163,9 +165,15 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<void> _loadIronStatus() async {
-    final active = await _automation.isIronVoiceActive();
+    final results = await Future.wait<bool>([
+      _automation.isIronVoiceActive(),
+      _automation.isIronOrbActive(),
+    ]);
     if (!mounted) return;
-    setState(() => _ironActive = active);
+    setState(() {
+      _ironActive = results[0];
+      _ironOrbActive = results[1];
+    });
   }
 
   Future<void> _toggleIronMode() async {
@@ -178,6 +186,22 @@ class _ChatPageState extends State<ChatPage>
     setState(() {
       _voiceToggleBusy = false;
       if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
+  }
+
+  Future<void> _toggleIronOrb() async {
+    if (_orbToggleBusy) return;
+    setState(() => _orbToggleBusy = true);
+    final result = await _automation.execute(
+      _ironOrbActive ? 'iron_orb_off' : 'iron_orb_on',
+    );
+    if (!mounted) return;
+    final active = await _automation.isIronOrbActive();
+    if (!mounted) return;
+    setState(() {
+      _orbToggleBusy = false;
+      _ironOrbActive = active;
     });
     _showMessage(result.message);
   }
@@ -451,6 +475,7 @@ class _ChatPageState extends State<ChatPage>
 
   Future<void> _playSpeechWithWakePaused(String text) async {
     final resumeIronVoice = await _automation.pauseIronVoiceCapture();
+    await _automation.setIronOrbState('speaking');
     try {
       if (resumeIronVoice) {
         await Future<void>.delayed(const Duration(milliseconds: 180));
@@ -469,6 +494,7 @@ class _ChatPageState extends State<ChatPage>
       if (resumeIronVoice) {
         await _automation.resumeIronVoiceCapture();
       }
+      await _automation.setIronOrbState('idle');
     }
   }
 
@@ -498,11 +524,13 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted) return;
 
     setState(() => _isListening = true);
+    await _automation.setIronOrbState('listening');
     final result = await _automation.startNativeSpeechRecognition();
     if (!mounted) return;
 
     setState(() => _isListening = false);
     if (!result.success) {
+      await _automation.setIronOrbState('idle');
       if (result.message.trim().isNotEmpty) {
         _showMessage(result.message.trim());
       }
@@ -515,6 +543,7 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
+    await _automation.setIronOrbState('thinking');
     setState(() {
       _messageController.text = recognized;
       _messageController.selection = TextSelection.fromPosition(
@@ -668,6 +697,7 @@ class _ChatPageState extends State<ChatPage>
 
     final apiKey = widget.store.apiKey.trim();
     if (!widget.store.hasAnyAiProvider) {
+      await _automation.setIronOrbState('idle');
       await _openApiKeySheet();
       return;
     }
@@ -686,6 +716,7 @@ class _ChatPageState extends State<ChatPage>
     });
     await widget.store.replaceChatHistory(_messages);
     _scrollToBottom();
+    await _automation.setIronOrbState('thinking');
 
     try {
       final reply = await _gemini.generateChat(
@@ -713,6 +744,7 @@ class _ChatPageState extends State<ChatPage>
       if (!mounted) return;
       await _addLocalNotice('Неочаквана грешка при връзката с AI.');
     } finally {
+      await _automation.setIronOrbState('idle');
       if (mounted) {
         setState(() => _isLoading = false);
         _scrollToBottom();
@@ -1076,6 +1108,17 @@ class _ChatPageState extends State<ChatPage>
                       : 'Гласовите отговори са изключени',
                   active: widget.store.voiceRepliesEnabled,
                   onPressed: _toggleVoiceReplies,
+                ),
+                const SizedBox(width: 12),
+                _roundAction(
+                  icon: _ironOrbActive
+                      ? Icons.blur_circular_rounded
+                      : Icons.bubble_chart_outlined,
+                  tooltip: _ironOrbActive
+                      ? 'Изключи живата сфера'
+                      : 'Покажи живата сфера върху всички приложения',
+                  active: _ironOrbActive,
+                  onPressed: _orbToggleBusy ? null : _toggleIronOrb,
                 ),
                 const SizedBox(width: 12),
                 _roundAction(

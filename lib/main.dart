@@ -166,6 +166,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
   int _currentIndex = 0;
+  bool _orbConversationBusy = false;
   late final List<Widget> _pages;
 
   static const _navItems = <IronNavItem>[
@@ -222,6 +223,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openPendingSection() async {
+    final orbConversation =
+        await _automation.consumeIronOrbConversationRequest();
+    if (orbConversation) {
+      await _startOrbConversation();
+      return;
+    }
+
     final studioRequest = await _automation.consumeStudioVoiceRequest();
     if (studioRequest != null) {
       await widget.store.queueStudioVoiceRequest(
@@ -243,6 +251,28 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final section = await _automation.consumeIronSection();
     if (section != null) {
       _openSection(section);
+    }
+  }
+
+  Future<void> _startOrbConversation() async {
+    if (_orbConversationBusy || !mounted) return;
+    _orbConversationBusy = true;
+    _openSection(0);
+    await _automation.setIronOrbState('listening');
+    await Future<void>.delayed(const Duration(milliseconds: 260));
+
+    try {
+      final speech = await _automation.startNativeSpeechRecognition();
+      if (!mounted) return;
+      final text = speech.text.trim();
+      if (speech.success && text.isNotEmpty) {
+        await _automation.setIronOrbState('thinking');
+        widget.store.queueChatVoiceRequest(text);
+      } else {
+        await _automation.setIronOrbState('idle');
+      }
+    } finally {
+      _orbConversationBusy = false;
     }
   }
 
