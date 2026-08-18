@@ -3,6 +3,7 @@ package com.example.ironmusic420ai
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
@@ -11,6 +12,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.os.Build
@@ -276,6 +279,15 @@ private class IronOrbView(
         strokeCap = Paint.Cap.ROUND
     }
     private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val exactLeafPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+        isDither = true
+    }
+    private val exactCoreBitmap = runCatching {
+        context.assets.open("flutter_assets/assets/images/hud_core_exact.png").use {
+            BitmapFactory.decodeStream(it)
+        }
+    }.getOrNull()
     private var phase = 0f
     private var state = "idle"
     private var downX = 0f
@@ -360,7 +372,7 @@ private class IronOrbView(
 
         drawOuterGlow(canvas, cx, cy, radius, pulse, primary)
         drawGlassSphere(canvas, cx, innerY, radius, pulse, slowWave, primary)
-        drawDepthRings(canvas, cx, innerY, radius, pulse, primary)
+        drawFullOrbitLines(canvas, cx, innerY, radius, pulse, primary)
         drawParticles(canvas, cx, innerY, radius, pulse, primary)
         drawExactLeaf(canvas, cx, innerY, radius, pulse, slowWave)
         drawGlassHighlight(canvas, cx, innerY, radius, pulse)
@@ -427,32 +439,36 @@ private class IronOrbView(
         ringPaint.shader = null
     }
 
-    private fun drawDepthRings(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
+    private fun drawFullOrbitLines(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
         canvas.save()
-        canvas.scale(1f, 0.72f + pulse * 0.035f, cx, cy)
-        canvas.rotate(phase * 15f, cx, cy)
-        ringPaint.color = Color.argb(112, Color.red(primary), Color.green(primary), Color.blue(primary))
-        ringPaint.strokeWidth = 0.85f * density
-        canvas.drawCircle(cx, cy, radius * 0.84f, ringPaint)
-        canvas.drawArc(cx - radius * 0.91f, cy - radius * 0.91f, cx + radius * 0.91f, cy + radius * 0.91f, 15f, 108f, false, ringPaint)
+        canvas.rotate(sin(phase * 0.35f) * 2.8f, cx, cy)
+        ringPaint.strokeWidth = 0.78f * density
+        for (index in 0..2) {
+            val orbitRadius = radius * (0.62f + index * 0.13f)
+            val flatten = 0.47f + index * 0.105f + pulse * 0.012f
+            ringPaint.color = Color.argb(
+                88 + index * 18,
+                Color.red(primary),
+                Color.green(primary),
+                Color.blue(primary),
+            )
+            canvas.drawOval(
+                RectF(
+                    cx - orbitRadius,
+                    cy - orbitRadius * flatten,
+                    cx + orbitRadius,
+                    cy + orbitRadius * flatten,
+                ),
+                ringPaint,
+            )
+        }
         canvas.restore()
-
-        canvas.save()
-        canvas.scale(0.66f + pulse * 0.025f, 1f, cx, cy)
-        canvas.rotate(-phase * 10f, cx, cy)
-        ringPaint.color = Color.argb(78, 115, 255, 169)
-        canvas.drawCircle(cx, cy, radius * 0.88f, ringPaint)
-        canvas.restore()
-
-        ringPaint.color = Color.argb((105 + pulse * 80).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary))
-        ringPaint.strokeWidth = 2.25f * density
-        canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, phase * 57.2958f, 104f + pulse * 24f, false, ringPaint)
     }
 
     private fun drawParticles(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
         particlePaint.color = Color.argb((85 + pulse * 75).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary))
         for (index in 0 until 13) {
-            val angle = phase * (0.12f + index * 0.006f) + index * 2.39996f
+            val angle = phase * (0.86f + index * 0.018f) + index * 2.39996f
             val orbit = radius * (0.55f + (index % 4) * 0.085f)
             val px = cx + cos(angle) * orbit
             val py = cy + sin(angle) * orbit * 0.72f
@@ -480,6 +496,31 @@ private class IronOrbView(
     }
 
     private fun drawExactLeaf(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, slowWave: Float) {
+        val bitmap = exactCoreBitmap
+        if (bitmap != null) {
+            val source = Rect(
+                (bitmap.width * 0.205f).toInt(),
+                (bitmap.height * 0.185f).toInt(),
+                (bitmap.width * 0.805f).toInt(),
+                (bitmap.height * 0.865f).toInt(),
+            )
+            val leafWidth = radius * (1.48f + pulse * 0.018f)
+            val leafHeight = radius * (1.60f + pulse * 0.020f)
+            val destination = RectF(
+                cx - leafWidth / 2f,
+                cy - leafHeight * 0.57f,
+                cx + leafWidth / 2f,
+                cy + leafHeight * 0.43f,
+            )
+            exactLeafPaint.alpha = (238 + pulse * 17).toInt().coerceIn(0, 255)
+            canvas.save()
+            canvas.rotate(slowWave * 1.7f, cx, cy + radius * 0.30f)
+            canvas.scale(0.985f + slowWave * 0.012f, 1f, cx, cy)
+            canvas.drawBitmap(bitmap, source, destination, exactLeafPaint)
+            canvas.restore()
+            return
+        }
+
         // These are the same seven leaflet proportions used by
         // _CannabisLeafPainter in the main Iron sphere.
         val scale = radius * (1.20f + pulse * 0.020f)

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('build 75 exposes a draggable 3D leaf orb without replacing Iron chat', () {
+  test('build 76 keeps the exact leaf artwork and complete 360 degree orbits', () {
     final manifest =
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     final orb = File(
@@ -29,7 +29,10 @@ void main() {
     expect(orb, contains('serratedLeaflet'));
     expect(orb, contains('drawExactLeaf'));
     expect(orb, contains('drawGlassSphere'));
-    expect(orb, contains('drawDepthRings'));
+    expect(orb, contains('flutter_assets/assets/images/hud_core_exact.png'));
+    expect(orb, contains('drawFullOrbitLines'));
+    expect(orb, contains('canvas.drawOval'));
+    expect(orb, contains('0.86f + index * 0.018f'));
     expect(orb, contains('animateRunnable'));
     expect(orb, contains('iron_orb_conversation'));
     expect(orb, contains('setOnClickListener { openConversation() }'));
@@ -45,6 +48,6 @@ void main() {
     expect(chat, contains('Покажи живата сфера върху всички приложения'));
     expect(chat, contains("'thinking'"));
     expect(chat, contains("'speaking'"));
-    expect(pubspec, contains('version: 3.4.0+75'));
+    expect(pubspec, contains('version: 3.4.0+76'));
   });
 }
