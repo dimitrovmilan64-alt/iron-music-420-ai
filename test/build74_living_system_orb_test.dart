@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('build 74 exposes a living system orb without replacing Iron chat', () {
+  test('build 75 exposes a draggable 3D leaf orb without replacing Iron chat', () {
     final manifest =
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     final orb = File(
@@ -21,8 +21,16 @@ void main() {
     expect(manifest, contains('android.permission.SYSTEM_ALERT_WINDOW'));
     expect(manifest, contains('android:name=".IronOrbService"'));
     expect(orb, contains('TYPE_APPLICATION_OVERLAY'));
-    expect(orb, contains('chooseNewTarget'));
-    expect(orb, contains('moveRunnable'));
+    expect(orb, isNot(contains('chooseNewTarget')));
+    expect(orb, isNot(contains('java.util.Random')));
+    expect(orb, contains('MotionEvent.ACTION_MOVE'));
+    expect(orb, contains('moveOrb(deltaX, deltaY)'));
+    expect(orb, contains('saveOrbPosition()'));
+    expect(orb, contains('serratedLeaflet'));
+    expect(orb, contains('drawExactLeaf'));
+    expect(orb, contains('drawGlassSphere'));
+    expect(orb, contains('drawDepthRings'));
+    expect(orb, contains('animateRunnable'));
     expect(orb, contains('iron_orb_conversation'));
     expect(orb, contains('setOnClickListener { openConversation() }'));
 
@@ -37,6 +45,6 @@ void main() {
     expect(chat, contains('Покажи живата сфера върху всички приложения'));
     expect(chat, contains("'thinking'"));
     expect(chat, contains("'speaking'"));
-    expect(pubspec, contains('version: 3.4.0+74'));
+    expect(pubspec, contains('version: 3.4.0+75'));
   });
 }

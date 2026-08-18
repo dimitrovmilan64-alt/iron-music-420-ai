@@ -3,13 +3,16 @@ package com.example.ironmusic420ai
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.graphics.SweepGradient
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -19,11 +22,11 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import java.util.Random
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 
 class IronOrbService : Service() {
@@ -32,6 +35,8 @@ class IronOrbService : Service() {
         const val ACTION_STOP = "com.example.ironmusic420ai.STOP_IRON_ORB"
         const val PREFS = "iron_orb_preferences"
         const val KEY_ENABLED = "orb_enabled"
+        private const val KEY_X = "orb_x"
+        private const val KEY_Y = "orb_y"
 
         @Volatile
         var isRunning = false
@@ -46,65 +51,25 @@ class IronOrbService : Service() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private val random = Random()
     private lateinit var windowManager: WindowManager
     private var orbView: IronOrbView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
-    private var targetX = 0f
-    private var targetY = 0f
     private var visualState = "idle"
     private var lastTick = 0L
-    private var nextTargetAt = 0L
+    private var dragOriginX = 0
+    private var dragOriginY = 0
 
-    private val moveRunnable = object : Runnable {
+    private val animateRunnable = object : Runnable {
         override fun run() {
             val view = orbView ?: return
-            val params = layoutParams ?: return
             val now = android.os.SystemClock.elapsedRealtime()
-            val deltaSeconds = if (lastTick == 0L) 0.033f
-                else ((now - lastTick).coerceIn(12L, 80L) / 1000f)
-            lastTick = now
-
-            val bounds = screenBounds()
-            val maxX = (bounds.first - view.measuredWidth).coerceAtLeast(dp(1))
-            val minY = dp(34)
-            val maxY = (bounds.second - view.measuredHeight - dp(92)).coerceAtLeast(minY)
-
-            if (
-                now >= nextTargetAt ||
-                targetX !in 0f..maxX.toFloat() ||
-                targetY !in minY.toFloat()..maxY.toFloat()
-            ) {
-                chooseNewTarget(maxX, minY, maxY, now)
-            }
-
-            val dx = targetX - params.x
-            val dy = targetY - params.y
-            val distance = hypot(dx.toDouble(), dy.toDouble()).toFloat()
-            if (distance < dp(10)) {
-                chooseNewTarget(maxX, minY, maxY, now)
+            val deltaSeconds = if (lastTick == 0L) {
+                0.033f
             } else {
-                val speedDp = when (visualState) {
-                    "listening" -> 42f
-                    "thinking" -> 56f
-                    "speaking" -> 34f
-                    else -> 24f
-                }
-                val step = dpFloat(speedDp) * deltaSeconds
-                params.x = (params.x + dx / distance * min(step, distance))
-                    .toInt()
-                    .coerceIn(0, maxX)
-                params.y = (params.y + dy / distance * min(step, distance))
-                    .toInt()
-                    .coerceIn(minY, maxY)
-                try {
-                    windowManager.updateViewLayout(view, params)
-                } catch (_: Exception) {
-                    return
-                }
+                (now - lastTick).coerceIn(12L, 80L) / 1000f
             }
-
-            view.advance(deltaSeconds, visualState, atan2(dy, dx))
+            lastTick = now
+            view.advance(deltaSeconds, visualState)
             handler.postDelayed(this, 33L)
         }
     }
@@ -141,7 +106,7 @@ class IronOrbService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        handler.removeCallbacks(moveRunnable)
+        handler.removeCallbacks(animateRunnable)
         orbView?.let { view ->
             try {
                 windowManager.removeView(view)
@@ -158,13 +123,14 @@ class IronOrbService : Service() {
 
     private fun attachOrb() {
         if (orbView != null) return
-        val size = dp(96)
+        val size = dp(118)
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val params = WindowManager.LayoutParams(
             size,
             size,
@@ -175,33 +141,72 @@ class IronOrbService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = dp(24)
-            y = dp(180)
+            x = prefs.getInt(KEY_X, dp(24))
+            y = prefs.getInt(KEY_Y, dp(180))
         }
 
-        val view = IronOrbView(this).apply {
+        val view = IronOrbView(
+            context = this,
+            onDragStart = {
+                dragOriginX = params.x
+                dragOriginY = params.y
+            },
+            onDrag = { deltaX, deltaY -> moveOrb(deltaX, deltaY) },
+            onDragEnd = { saveOrbPosition() },
+        ).apply {
             contentDescription = "Живата сфера на Hey Iron"
             setOnClickListener { openConversation() }
         }
         windowManager.addView(view, params)
         orbView = view
         layoutParams = params
+        clampOrbToScreen()
         lastTick = 0L
-        nextTargetAt = 0L
-        handler.removeCallbacks(moveRunnable)
-        handler.post(moveRunnable)
+        handler.removeCallbacks(animateRunnable)
+        handler.post(animateRunnable)
     }
 
-    private fun chooseNewTarget(
-        maxX: Int,
-        minY: Int,
-        maxY: Int,
-        now: Long,
-    ) {
-        targetX = if (maxX <= 0) 0f else random.nextInt(maxX + 1).toFloat()
-        val verticalSpace = (maxY - minY).coerceAtLeast(1)
-        targetY = (minY + random.nextInt(verticalSpace + 1)).toFloat()
-        nextTargetAt = now + 3_800L + random.nextInt(4_200)
+    private fun moveOrb(deltaX: Float, deltaY: Float) {
+        val view = orbView ?: return
+        val params = layoutParams ?: return
+        val bounds = screenBounds()
+        val maxX = (bounds.first - view.width).coerceAtLeast(0)
+        val minY = dp(24)
+        val maxY = (bounds.second - view.height - dp(72)).coerceAtLeast(minY)
+        params.x = (dragOriginX + deltaX.toInt()).coerceIn(0, maxX)
+        params.y = (dragOriginY + deltaY.toInt()).coerceIn(minY, maxY)
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {
+            // Ignore a drag frame if Android is detaching the overlay.
+        }
+    }
+
+    private fun clampOrbToScreen() {
+        val view = orbView ?: return
+        val params = layoutParams ?: return
+        view.post {
+            val bounds = screenBounds()
+            val maxX = (bounds.first - view.width).coerceAtLeast(0)
+            val minY = dp(24)
+            val maxY = (bounds.second - view.height - dp(72)).coerceAtLeast(minY)
+            params.x = params.x.coerceIn(0, maxX)
+            params.y = params.y.coerceIn(minY, maxY)
+            try {
+                windowManager.updateViewLayout(view, params)
+            } catch (_: Exception) {
+                return@post
+            }
+        }
+    }
+
+    private fun saveOrbPosition() {
+        val params = layoutParams ?: return
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_X, params.x)
+            .putInt(KEY_Y, params.y)
+            .apply()
     }
 
     private fun applyVisualState(state: String) {
@@ -240,12 +245,17 @@ class IronOrbService : Service() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-    private fun dpFloat(value: Float): Float = value * resources.displayMetrics.density
 }
 
-private class IronOrbView(context: Context) : View(context) {
+private class IronOrbView(
+    context: Context,
+    private val onDragStart: () -> Unit,
+    private val onDrag: (Float, Float) -> Unit,
+    private val onDragEnd: () -> Unit,
+) : View(context) {
     private val density = resources.displayMetrics.density
     private val shellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -253,29 +263,41 @@ private class IronOrbView(context: Context) : View(context) {
     private val leafPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
+    private val leafGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        maskFilter = BlurMaskFilter(7f * density, BlurMaskFilter.Blur.NORMAL)
+    }
+    private val leafOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+    }
     private val veinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
+    private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var phase = 0f
-    private var direction = 0f
     private var state = "idle"
     private var downX = 0f
     private var downY = 0f
+    private var dragging = false
+
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
 
     fun setVisualState(value: String) {
         state = value
         invalidate()
     }
 
-    fun advance(deltaSeconds: Float, value: String, travelDirection: Float) {
+    fun advance(deltaSeconds: Float, value: String) {
         state = value
-        direction = travelDirection
         val pace = when (state) {
-            "listening" -> 2.5f
-            "thinking" -> 3.5f
-            "speaking" -> 4.2f
-            else -> 1.5f
+            "listening" -> 2.7f
+            "thinking" -> 3.6f
+            "speaking" -> 4.4f
+            else -> 1.45f
         }
         phase = (phase + deltaSeconds * pace) % 6.2831855f
         invalidate()
@@ -286,20 +308,30 @@ private class IronOrbView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.rawX
                 downY = event.rawY
-                animate().scaleX(0.92f).scaleY(0.92f).setDuration(90L).start()
+                dragging = false
+                onDragStart()
+                animate().scaleX(0.95f).scaleY(0.95f).setDuration(80L).start()
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val deltaX = event.rawX - downX
+                val deltaY = event.rawY - downY
+                if (!dragging && hypot(deltaX.toDouble(), deltaY.toDouble()) > 7f * density) {
+                    dragging = true
+                }
+                if (dragging) onDrag(deltaX, deltaY)
                 return true
             }
             MotionEvent.ACTION_UP -> {
                 animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
-                val moved = hypot(
-                    (event.rawX - downX).toDouble(),
-                    (event.rawY - downY).toDouble(),
-                )
-                if (moved < 18f * density) performClick()
+                if (dragging) onDragEnd() else performClick()
+                dragging = false
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
                 animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
+                if (dragging) onDragEnd()
+                dragging = false
                 return true
             }
         }
@@ -315,118 +347,221 @@ private class IronOrbView(context: Context) : View(context) {
         super.onDraw(canvas)
         val cx = width / 2f
         val cy = height / 2f
-        val radius = min(width, height) * 0.43f
+        val radius = min(width, height) * 0.405f
         val pulse = 0.5f + 0.5f * sin(phase)
+        val slowWave = sin(phase * 0.47f)
+        val innerY = cy + slowWave * 1.7f * density
         val primary = when (state) {
-            "listening" -> Color.rgb(65, 235, 255)
-            "thinking" -> Color.rgb(255, 196, 48)
-            "speaking" -> Color.rgb(96, 255, 142)
+            "listening" -> Color.rgb(55, 226, 255)
+            "thinking" -> Color.rgb(255, 190, 45)
+            "speaking" -> Color.rgb(82, 255, 137)
             else -> Color.rgb(0, 255, 112)
         }
 
-        shellPaint.shader = RadialGradient(
-            cx - cos(direction) * radius * 0.18f,
-            cy - sin(direction) * radius * 0.18f,
-            radius * 1.28f,
+        drawOuterGlow(canvas, cx, cy, radius, pulse, primary)
+        drawGlassSphere(canvas, cx, innerY, radius, pulse, slowWave, primary)
+        drawDepthRings(canvas, cx, innerY, radius, pulse, primary)
+        drawParticles(canvas, cx, innerY, radius, pulse, primary)
+        drawExactLeaf(canvas, cx, innerY, radius, pulse, slowWave)
+        drawGlassHighlight(canvas, cx, innerY, radius, pulse)
+        if (state == "speaking") {
+            drawSpeakingWaves(canvas, cx, innerY, radius, pulse, primary)
+        }
+    }
+
+    private fun drawOuterGlow(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
+        glowPaint.shader = RadialGradient(
+            cx, cy, radius * 1.38f,
             intArrayOf(
-                Color.argb(235, 5, 30, 16),
-                Color.argb(220, Color.red(primary) / 5, Color.green(primary) / 3, Color.blue(primary) / 5),
-                Color.argb(25, Color.red(primary), Color.green(primary), Color.blue(primary)),
+                Color.TRANSPARENT,
+                Color.argb((40 + pulse * 35).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary)),
                 Color.TRANSPARENT,
             ),
-            floatArrayOf(0f, 0.48f, 0.78f, 1f),
+            floatArrayOf(0.48f, 0.76f, 1f),
             Shader.TileMode.CLAMP,
         )
-        canvas.drawCircle(cx, cy, radius * (1f + pulse * 0.035f), shellPaint)
+        canvas.drawCircle(cx, cy, radius * 1.38f, glowPaint)
+        glowPaint.shader = null
+    }
+
+    private fun drawGlassSphere(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        pulse: Float,
+        slowWave: Float,
+        primary: Int,
+    ) {
+        shellPaint.shader = RadialGradient(
+            cx - radius * (0.34f + slowWave * 0.035f),
+            cy - radius * 0.38f,
+            radius * 1.42f,
+            intArrayOf(
+                Color.argb(238, 14, 65, 38),
+                Color.argb(236, 3, 30, 17),
+                Color.argb(222, 0, 14, 9),
+                Color.argb(65, Color.red(primary), Color.green(primary), Color.blue(primary)),
+                Color.TRANSPARENT,
+            ),
+            floatArrayOf(0f, 0.27f, 0.62f, 0.84f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx, cy, radius * (1f + pulse * 0.018f), shellPaint)
         shellPaint.shader = null
 
-        ringPaint.color = Color.argb((120 + pulse * 90).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary))
-        ringPaint.strokeWidth = 1.5f * density
-        canvas.drawCircle(cx, cy, radius * 0.88f, ringPaint)
-        ringPaint.strokeWidth = 2.4f * density
-        val sweep = when (state) {
-            "thinking" -> 210f
-            "speaking" -> 150f + pulse * 80f
-            else -> 115f
-        }
-        canvas.drawArc(
-            cx - radius,
-            cy - radius,
-            cx + radius,
-            cy + radius,
-            phase * 57.2958f,
-            sweep,
-            false,
-            ringPaint,
+        ringPaint.shader = SweepGradient(
+            cx,
+            cy,
+            intArrayOf(
+                Color.argb(35, 0, 255, 112),
+                Color.argb(245, 120, 255, 171),
+                Color.argb(70, 0, 255, 112),
+                Color.argb(215, 0, 180, 76),
+                Color.argb(35, 0, 255, 112),
+            ),
+            null,
         )
+        ringPaint.strokeWidth = 1.45f * density
+        canvas.drawCircle(cx, cy, radius * 0.99f, ringPaint)
+        ringPaint.shader = null
+    }
 
-        val leafScale = radius * (0.53f + pulse * 0.025f)
-        leafPaint.color = Color.argb(235, 33, 255, 117)
-        veinPaint.color = Color.argb(190, 190, 255, 214)
-        veinPaint.strokeWidth = 0.75f * density
-        val angles = floatArrayOf(-58f, -38f, -19f, 0f, 19f, 38f, 58f)
-        val lengths = floatArrayOf(0.58f, 0.78f, 0.92f, 1.08f, 0.92f, 0.78f, 0.58f)
+    private fun drawDepthRings(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
+        canvas.save()
+        canvas.scale(1f, 0.72f + pulse * 0.035f, cx, cy)
+        canvas.rotate(phase * 15f, cx, cy)
+        ringPaint.color = Color.argb(112, Color.red(primary), Color.green(primary), Color.blue(primary))
+        ringPaint.strokeWidth = 0.85f * density
+        canvas.drawCircle(cx, cy, radius * 0.84f, ringPaint)
+        canvas.drawArc(cx - radius * 0.91f, cy - radius * 0.91f, cx + radius * 0.91f, cy + radius * 0.91f, 15f, 108f, false, ringPaint)
+        canvas.restore()
+
+        canvas.save()
+        canvas.scale(0.66f + pulse * 0.025f, 1f, cx, cy)
+        canvas.rotate(-phase * 10f, cx, cy)
+        ringPaint.color = Color.argb(78, 115, 255, 169)
+        canvas.drawCircle(cx, cy, radius * 0.88f, ringPaint)
+        canvas.restore()
+
+        ringPaint.color = Color.argb((105 + pulse * 80).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary))
+        ringPaint.strokeWidth = 2.25f * density
+        canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, phase * 57.2958f, 104f + pulse * 24f, false, ringPaint)
+    }
+
+    private fun drawParticles(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
+        particlePaint.color = Color.argb((85 + pulse * 75).toInt(), Color.red(primary), Color.green(primary), Color.blue(primary))
+        for (index in 0 until 13) {
+            val angle = phase * (0.12f + index * 0.006f) + index * 2.39996f
+            val orbit = radius * (0.55f + (index % 4) * 0.085f)
+            val px = cx + cos(angle) * orbit
+            val py = cy + sin(angle) * orbit * 0.72f
+            canvas.drawCircle(px, py, (0.5f + index % 3 * 0.28f) * density, particlePaint)
+        }
+    }
+
+    private fun serratedLeaflet(length: Float, halfWidth: Float, teeth: Int): Path {
+        val path = Path().apply { moveTo(0f, 0f) }
+        val steps = teeth * 2 + 2
+        for (index in 1 until steps) {
+            val t = index.toFloat() / steps
+            val envelope = sin(Math.PI * t).pow(0.72).toFloat()
+            val serration = if (index % 2 == 0) 1f else 0.58f
+            path.lineTo(-halfWidth * envelope * serration, -length * t)
+        }
+        path.lineTo(0f, -length)
+        for (index in steps - 1 downTo 1) {
+            val t = index.toFloat() / steps
+            val envelope = sin(Math.PI * t).pow(0.72).toFloat()
+            val serration = if (index % 2 == 0) 1f else 0.58f
+            path.lineTo(halfWidth * envelope * serration, -length * t)
+        }
+        return path.apply { close() }
+    }
+
+    private fun drawExactLeaf(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, slowWave: Float) {
+        // These are the same seven leaflet proportions used by
+        // _CannabisLeafPainter in the main Iron sphere.
+        val scale = radius * (1.20f + pulse * 0.020f)
+        val baseY = cy + scale * 0.31f
+        val angles = floatArrayOf(-55.00f, -36.67f, -18.91f, 0f, 18.91f, 36.67f, 55.00f)
+        val lengths = floatArrayOf(0.39f, 0.56f, 0.72f, 0.86f, 0.72f, 0.56f, 0.39f)
+        val widths = floatArrayOf(0.050f, 0.068f, 0.082f, 0.090f, 0.082f, 0.068f, 0.050f)
+        val teeth = intArrayOf(3, 4, 5, 6, 5, 4, 3)
+
+        canvas.save()
+        canvas.rotate(slowWave * 2.1f, cx, baseY)
+        canvas.scale(0.97f + slowWave * 0.018f, 1f, cx, baseY)
         for (index in angles.indices) {
             canvas.save()
-            canvas.rotate(angles[index], cx, cy + leafScale * 0.34f)
-            val length = leafScale * lengths[index]
-            val halfWidth = leafScale * if (index == 3) 0.17f else 0.145f
-            val baseY = cy + leafScale * 0.34f
-            val path = Path().apply {
-                moveTo(cx, baseY)
-                cubicTo(
-                    cx - halfWidth,
-                    baseY - length * 0.24f,
-                    cx - halfWidth * 0.72f,
-                    baseY - length * 0.72f,
-                    cx,
-                    baseY - length,
-                )
-                cubicTo(
-                    cx + halfWidth * 0.72f,
-                    baseY - length * 0.72f,
-                    cx + halfWidth,
-                    baseY - length * 0.24f,
-                    cx,
-                    baseY,
-                )
-                close()
-            }
+            canvas.translate(cx, baseY)
+            canvas.rotate(angles[index])
+            val length = scale * lengths[index]
+            val halfWidth = scale * widths[index]
+            val path = serratedLeaflet(length, halfWidth, teeth[index])
+
+            leafGlowPaint.color = Color.argb((90 + pulse * 75).toInt(), 0, 255, 106)
+            canvas.drawPath(path, leafGlowPaint)
+            leafPaint.shader = LinearGradient(
+                -halfWidth,
+                0f,
+                halfWidth,
+                -length,
+                intArrayOf(
+                    Color.rgb(0, 77, 31),
+                    Color.rgb(0, 205, 82),
+                    Color.rgb(82, 255, 145),
+                    Color.rgb(9, 117, 48),
+                ),
+                floatArrayOf(0f, 0.38f, 0.69f, 1f),
+                Shader.TileMode.CLAMP,
+            )
             canvas.drawPath(path, leafPaint)
-            canvas.drawLine(cx, baseY, cx, baseY - length * 0.92f, veinPaint)
+            leafPaint.shader = null
+
+            leafOutlinePaint.color = Color.argb(238, 154, 255, 190)
+            leafOutlinePaint.strokeWidth = max(0.65f * density, scale * 0.010f)
+            canvas.drawPath(path, leafOutlinePaint)
+
+            veinPaint.color = Color.argb((155 + pulse * 80).toInt(), 196, 255, 217)
+            veinPaint.strokeWidth = max(0.48f * density, scale * 0.0054f)
+            canvas.drawLine(0f, 0f, 0f, -length * 0.96f, veinPaint)
+            for (tooth in 1..teeth[index]) {
+                val t = tooth.toFloat() / (teeth[index] + 1)
+                val envelope = sin(Math.PI * t).pow(0.72).toFloat()
+                val x = halfWidth * envelope * 0.78f
+                val y = -length * t
+                canvas.drawLine(0f, y + length * 0.03f, -x, y - length * 0.025f, veinPaint)
+                canvas.drawLine(0f, y + length * 0.03f, x, y - length * 0.025f, veinPaint)
+            }
             canvas.restore()
         }
 
-        veinPaint.strokeWidth = 1.4f * density
-        canvas.drawLine(
-            cx,
-            cy + leafScale * 0.15f,
-            cx,
-            cy + leafScale * 0.72f,
-            veinPaint,
-        )
+        veinPaint.color = Color.argb(235, 92, 255, 145)
+        veinPaint.strokeWidth = max(1.15f * density, scale * 0.014f)
+        canvas.drawLine(cx, baseY - scale * 0.03f, cx, baseY + scale * 0.27f, veinPaint)
+        canvas.restore()
+    }
 
-        if (state == "speaking") {
-            ringPaint.strokeWidth = 1.8f * density
-            for (index in 0..2) {
-                val waveRadius = radius * (0.48f + index * 0.16f + pulse * 0.035f)
-                ringPaint.color = Color.argb(
-                    135 - index * 30,
-                    Color.red(primary),
-                    Color.green(primary),
-                    Color.blue(primary),
-                )
-                canvas.drawArc(
-                    cx - waveRadius,
-                    cy - waveRadius,
-                    cx + waveRadius,
-                    cy + waveRadius,
-                    205f,
-                    130f,
-                    false,
-                    ringPaint,
-                )
-            }
+    private fun drawGlassHighlight(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float) {
+        shellPaint.shader = RadialGradient(
+            cx - radius * 0.38f,
+            cy - radius * 0.42f,
+            radius * 0.62f,
+            intArrayOf(Color.argb(100, 225, 255, 236), Color.argb(25, 80, 255, 153), Color.TRANSPARENT),
+            floatArrayOf(0f, 0.32f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx - radius * 0.23f, cy - radius * 0.26f, radius * (0.42f + pulse * 0.01f), shellPaint)
+        shellPaint.shader = null
+    }
+
+    private fun drawSpeakingWaves(canvas: Canvas, cx: Float, cy: Float, radius: Float, pulse: Float, primary: Int) {
+        ringPaint.strokeWidth = 1.65f * density
+        for (index in 0..2) {
+            val waveRadius = radius * (0.55f + index * 0.16f + pulse * 0.025f)
+            ringPaint.color = Color.argb(130 - index * 29, Color.red(primary), Color.green(primary), Color.blue(primary))
+            canvas.drawArc(cx - waveRadius, cy - waveRadius, cx + waveRadius, cy + waveRadius, 205f, 130f, false, ringPaint)
         }
     }
 }
