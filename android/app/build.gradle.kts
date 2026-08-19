@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.ironmusic420ai"
+        applicationId = "com.ironmusic420ai.clean75"
         minSdk = 24
         targetSdk = 36
         versionCode = flutter.versionCode
