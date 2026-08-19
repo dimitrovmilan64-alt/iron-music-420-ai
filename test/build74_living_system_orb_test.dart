@@ -37,6 +37,6 @@ void main() {
     expect(chat, contains('Покажи живата сфера върху всички приложения'));
     expect(chat, contains("'thinking'"));
     expect(chat, contains("'speaking'"));
-    expect(pubspec, contains('version: 3.4.0+74'));
+    expect(pubspec, contains('version: 3.4.0+75'));
   });
 }
