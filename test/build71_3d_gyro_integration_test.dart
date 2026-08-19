@@ -25,12 +25,12 @@ void main() {
         File('lib/pages/rap_studio_page.dart').readAsStringSync();
     final studio = File('lib/pages/rap_studio_page_v2.dart').readAsStringSync();
 
-    expect(pubspec, contains('version: 3.4.0+76'));
+    expect(pubspec, contains('version: 3.4.0+77'));
     expect(pubspec, contains('sensors_plus: ^6.1.2'));
     expect(chat, contains('CannabisCore(progress: progress, size: size)'));
-    expect(chat, contains("'IRON MUSIC'"));
+    expect(chat, contains("'IRON MUSIC 420 AI'"));
     expect(studioEntry, contains("export 'rap_studio_page_v2.dart'"));
     expect(studio, contains("'Направи припев'"));
-    expect(studio, contains("'Copy Suno пакет'"));
+    expect(studio, contains("'Копирай Suno'"));
   });
 }

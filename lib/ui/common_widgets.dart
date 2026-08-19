@@ -11,6 +11,8 @@ const ironDark = Color(0xFF010603);
 const ironPanel = Color(0xFF031108);
 const ironPanelRaised = Color(0xFF061A0D);
 const ironLine = Color(0xFF0A3A1C);
+const ironGraphite = Color(0xFF0A0E0C);
+const ironMist = Color(0xFF9CB4A5);
 
 String cleanMarkdownForDisplay(String text) {
   try {
@@ -76,15 +78,15 @@ class IronBackground extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: RadialGradient(
-          center: Alignment(0.0, -1.08),
-          radius: 1.48,
+          center: Alignment(0.0, -0.92),
+          radius: 1.62,
           colors: [
-            Color(0xFF07351A),
-            Color(0xFF021109),
+            Color(0xFF052413),
+            ironGraphite,
             Color(0xFF000603),
             Colors.black,
           ],
-          stops: [0.0, 0.32, 0.70, 1.0],
+          stops: [0.0, 0.28, 0.68, 1.0],
         ),
       ),
       child: Stack(
@@ -107,8 +109,8 @@ class IronBackground extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      ironGreen.withOpacity(0.055),
-                      ironGreenDeep.withOpacity(0.018),
+                      ironGreen.withOpacity(0.040),
+                      ironGreenDeep.withOpacity(0.012),
                       Colors.transparent,
                     ],
                     stops: const [0.0, 0.55, 1.0],
@@ -226,7 +228,7 @@ class IronCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(20);
+    final radius = borderRadius ?? BorderRadius.circular(16);
     return Container(
       width: double.infinity,
       margin: margin,
@@ -234,14 +236,14 @@ class IronCard extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: ironGreen.withOpacity(bright ? 0.16 : 0.07),
-            blurRadius: bright ? 28 : 18,
+            color: ironGreen.withOpacity(bright ? 0.12 : 0.045),
+            blurRadius: bright ? 22 : 14,
             spreadRadius: bright ? 1 : 0,
           ),
           const BoxShadow(
-            color: Colors.black54,
-            blurRadius: 16,
-            offset: Offset(0, 9),
+            color: Colors.black45,
+            blurRadius: 14,
+            offset: Offset(0, 7),
           ),
         ],
       ),
@@ -330,11 +332,11 @@ class IronInput extends StatelessWidget {
         fillColor: const Color(0xFF010A05).withOpacity(0.92),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: ironGreen.withOpacity(0.29)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: ironGreen, width: 1.6),
         ),
       ),
@@ -361,7 +363,7 @@ class IronButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final radius = BorderRadius.circular(compact ? 15 : 18);
+    final radius = BorderRadius.circular(compact ? 13 : 15);
     return SizedBox(
       height: compact ? 46 : 54,
       child: Material(
@@ -607,13 +609,13 @@ class _CannabisCoreState extends State<CannabisCore> {
   Widget build(BuildContext context) {
     final progress = widget.progress;
     final size = widget.size;
-    final breathe = 0.985 + progress * 0.022;
+    final breathe = 0.985 + progress * 0.030;
     final motion = ((_tiltX.abs() + _tiltY.abs()) / 0.33)
         .clamp(0.0, 1.0)
         .toDouble();
-    final glow = 0.16 + progress * 0.18 + motion * 0.08;
-    final idleTiltX = (progress - 0.5) * 0.012;
-    final idleTiltY = (0.5 - progress) * 0.018;
+    final glow = 0.14 + progress * 0.16 + motion * 0.10;
+    final idleTiltX = (progress - 0.5) * 0.016;
+    final idleTiltY = (0.5 - progress) * 0.022;
     final lightX = (_tiltY * 4.1).clamp(-0.75, 0.75).toDouble();
     final lightY = (-_tiltX * 4.1).clamp(-0.75, 0.75).toDouble();
     final depthOffset = Offset(
@@ -626,8 +628,8 @@ class _CannabisCoreState extends State<CannabisCore> {
         opacity: opacity,
         child: Image.asset(
           'assets/images/hud_core_exact.png',
-          width: size,
-          height: size,
+          width: size * 0.88,
+          height: size * 0.88,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.high,
           errorBuilder: (context, error, stackTrace) => CustomPaint(
@@ -645,44 +647,58 @@ class _CannabisCoreState extends State<CannabisCore> {
         alignment: Alignment.center,
         children: [
           Transform.translate(
-            offset: depthOffset * 0.42,
+            offset: depthOffset * 0.28,
             child: Transform.scale(
-              scale: 0.94 + progress * 0.035 + motion * 0.012,
+              scale: 0.94 + progress * 0.030 + motion * 0.014,
               child: Container(
-                width: size * 0.82,
-                height: size * 0.82,
+                width: size * 0.88,
+                height: size * 0.88,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    center: Alignment(lightX * 0.34, lightY * 0.34),
+                    center: Alignment(-0.34 + lightX * 0.30, -0.42 + lightY * 0.30),
                     colors: [
-                      ironGreen.withOpacity(0.10 + progress * 0.08 + motion * 0.04),
-                      ironGreenDeep.withOpacity(0.055),
-                      Colors.transparent,
+                      Colors.white.withOpacity(0.10 + progress * 0.04),
+                      ironGreen.withOpacity(0.13 + progress * 0.07 + motion * 0.04),
+                      const Color(0xFF021109).withOpacity(0.90),
+                      Colors.black.withOpacity(0.08),
                     ],
-                    stops: const [0.0, 0.58, 1.0],
+                    stops: const [0.0, 0.18, 0.62, 1.0],
                   ),
                   border: Border.all(
-                    color: ironGreen.withOpacity(0.15 + progress * 0.11),
+                    color: ironGreen.withOpacity(0.22 + progress * 0.10),
                     width: 1.2,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: ironGreen.withOpacity(
-                        glow.clamp(0.0, 0.48).toDouble(),
+                        glow.clamp(0.0, 0.42).toDouble(),
                       ),
-                      blurRadius: 32 + progress * 22 + motion * 12,
-                      spreadRadius: 1 + progress * 3 + motion * 1.5,
+                      blurRadius: 30 + progress * 18 + motion * 12,
+                      spreadRadius: 1 + progress * 2 + motion * 1.4,
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.72),
-                      blurRadius: 24 + motion * 7,
+                      color: Colors.black.withOpacity(0.78),
+                      blurRadius: 28 + motion * 8,
                       offset: Offset(
                         -depthOffset.dx * 0.22,
-                        12 - depthOffset.dy * 0.22,
+                        14 - depthOffset.dy * 0.22,
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+          IgnorePointer(
+            child: Transform.translate(
+              offset: depthOffset * -0.10,
+              child: CustomPaint(
+                size: Size.square(size * 0.94),
+                painter: _CoreOrbitPainter(
+                  progress: progress,
+                  motion: motion,
+                  lightX: lightX,
                 ),
               ),
             ),
@@ -701,10 +717,13 @@ class _CannabisCoreState extends State<CannabisCore> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    exactLeaf(),
                     Opacity(
-                      opacity: (0.10 + progress * 0.18 + motion * 0.16)
-                          .clamp(0.0, 0.42)
+                      opacity: 0.78,
+                      child: exactLeaf(),
+                    ),
+                    Opacity(
+                      opacity: (0.08 + progress * 0.16 + motion * 0.14)
+                          .clamp(0.0, 0.36)
                           .toDouble(),
                       child: ShaderMask(
                         blendMode: BlendMode.srcATop,
@@ -722,6 +741,17 @@ class _CannabisCoreState extends State<CannabisCore> {
                         child: exactLeaf(),
                       ),
                     ),
+                    IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.square(size * 0.56),
+                        painter: _LiveLeafVeinPainter(
+                          progress: progress,
+                          motion: motion,
+                          lightX: lightX,
+                          lightY: lightY,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -737,7 +767,7 @@ class _CannabisCoreState extends State<CannabisCore> {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: Colors.white.withOpacity(
-                      0.035 + progress * 0.05 + motion * 0.025,
+                      0.028 + progress * 0.040 + motion * 0.020,
                     ),
                   ),
                 ),
@@ -747,6 +777,144 @@ class _CannabisCoreState extends State<CannabisCore> {
         ],
       ),
     );
+  }
+}
+
+class _CoreOrbitPainter extends CustomPainter {
+  final double progress;
+  final double motion;
+  final double lightX;
+
+  const _CoreOrbitPainter({
+    required this.progress,
+    required this.motion,
+    required this.lightX,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.43;
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.0
+      ..color = ironGreen.withOpacity(0.12 + progress * 0.08);
+
+    canvas.drawCircle(center, radius * 0.86, basePaint);
+    canvas.drawCircle(
+      center,
+      radius * 1.03,
+      basePaint..color = ironMist.withOpacity(0.055 + motion * 0.05),
+    );
+
+    for (var i = 0; i < 3; i++) {
+      final sweep = math.pi * (0.34 + i * 0.08 + progress * 0.10);
+      final start = progress * math.pi * 2 + i * 1.82 + lightX * 0.35;
+      final rect = Rect.fromCircle(
+        center: center,
+        radius: radius * (0.72 + i * 0.15),
+      );
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = i == 1 ? 2.3 : 1.4
+        ..shader = SweepGradient(
+          colors: [
+            Colors.transparent,
+            ironGreen.withOpacity(0.18 + progress * 0.18),
+            ironGreenSoft.withOpacity(0.34 + motion * 0.16),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.40, 0.58, 1.0],
+          transform: GradientRotation(start),
+        ).createShader(rect);
+      canvas.drawArc(rect, start, sweep, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CoreOrbitPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.motion != motion ||
+        oldDelegate.lightX != lightX;
+  }
+}
+
+class _LiveLeafVeinPainter extends CustomPainter {
+  final double progress;
+  final double motion;
+  final double lightX;
+  final double lightY;
+
+  const _LiveLeafVeinPainter({
+    required this.progress,
+    required this.motion,
+    required this.lightX,
+    required this.lightY,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final pulse = 0.45 + 0.55 * math.sin(progress * math.pi * 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 1.1 + pulse * 0.7 + motion * 0.45
+      ..color = ironGreenSoft.withOpacity(0.26 + pulse * 0.28 + motion * 0.12)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
+
+    final highlight = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 0.65
+      ..color = Colors.white.withOpacity(0.12 + pulse * 0.10);
+
+    void drawLeaflet(double angle, double length, double spread) {
+      canvas.save();
+      canvas.translate(center.dx + lightX * 2.5, center.dy + lightY * 2.5);
+      canvas.rotate(angle);
+      final tip = Offset(0, -length);
+      canvas.drawLine(Offset.zero, tip, paint);
+      canvas.drawLine(Offset.zero, tip, highlight);
+
+      for (var i = 1; i <= 4; i++) {
+        final y = -length * (i / 5.4);
+        final side = spread * (1.0 - i * 0.11);
+        canvas.drawLine(Offset(0, y), Offset(-side, y - length * 0.105), paint);
+        canvas.drawLine(Offset(0, y), Offset(side, y - length * 0.105), paint);
+      }
+      canvas.restore();
+    }
+
+    drawLeaflet(0, size.height * 0.48, size.width * 0.060);
+    drawLeaflet(-0.48, size.height * 0.41, size.width * 0.054);
+    drawLeaflet(0.48, size.height * 0.41, size.width * 0.054);
+    drawLeaflet(-0.92, size.height * 0.34, size.width * 0.046);
+    drawLeaflet(0.92, size.height * 0.34, size.width * 0.046);
+    drawLeaflet(-1.34, size.height * 0.25, size.width * 0.036);
+    drawLeaflet(1.34, size.height * 0.25, size.width * 0.036);
+
+    final stemPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.1
+      ..color = ironGreenSoft.withOpacity(0.18 + pulse * 0.16);
+    canvas.drawLine(
+      center + Offset(lightX * 2.5, lightY * 2.5),
+      center + Offset(lightX * 2.5, size.height * 0.42 + lightY * 2.5),
+      stemPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveLeafVeinPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.motion != motion ||
+        oldDelegate.lightX != lightX ||
+        oldDelegate.lightY != lightY;
   }
 }
 
@@ -767,27 +935,27 @@ class IronBottomNavigation extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF020B06).withOpacity(0.985),
-        borderRadius: BorderRadius.circular(28),
+        color: const Color(0xFF020907).withOpacity(0.985),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: ironGreen.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.64),
-            blurRadius: 24,
+            color: Colors.black.withOpacity(0.56),
+            blurRadius: 18,
             offset: const Offset(0, -2),
           ),
           BoxShadow(
-            color: ironGreen.withOpacity(0.055),
-            blurRadius: 22,
+            color: ironGreen.withOpacity(0.035),
+            blurRadius: 18,
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(22),
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 70,
+            height: 64,
             child: Row(
               children: List.generate(items.length, (index) {
                 final item = items[index];
@@ -801,15 +969,15 @@ class IronBottomNavigation extends StatelessWidget {
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 220),
                           curve: Curves.easeOutCubic,
-                          width: selected ? 58 : 44,
-                          height: 36,
+                          width: selected ? 54 : 42,
+                          height: 33,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
+                            borderRadius: BorderRadius.circular(15),
                             gradient: selected
                                 ? LinearGradient(
                                     colors: [
-                                      ironGreen.withOpacity(0.20),
-                                      ironGreenDeep.withOpacity(0.08),
+                                      ironGreen.withOpacity(0.16),
+                                      ironGreenDeep.withOpacity(0.06),
                                     ],
                                   )
                                 : null,
@@ -821,8 +989,8 @@ class IronBottomNavigation extends StatelessWidget {
                             boxShadow: selected
                                 ? [
                                     BoxShadow(
-                                      color: ironGreen.withOpacity(0.14),
-                                      blurRadius: 14,
+                                      color: ironGreen.withOpacity(0.10),
+                                      blurRadius: 12,
                                     ),
                                   ]
                                 : null,
@@ -841,7 +1009,7 @@ class IronBottomNavigation extends StatelessWidget {
                           style: TextStyle(
                             color: selected ? ironGreen : Colors.white38,
                             fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                            fontSize: 9.5,
+                            fontSize: 9.2,
                             letterSpacing: selected ? 0.15 : 0,
                           ),
                         ),
@@ -902,7 +1070,7 @@ class _HudBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = ironGreen.withOpacity(0.022)
+      ..color = ironGreen.withOpacity(0.014)
       ..strokeWidth = 0.8;
     const step = 36.0;
     for (double x = 0; x < size.width; x += step) {
@@ -913,7 +1081,7 @@ class _HudBackgroundPainter extends CustomPainter {
     }
 
     final hudPaint = Paint()
-      ..color = ironGreen.withOpacity(0.055)
+      ..color = ironGreen.withOpacity(0.036)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawCircle(
