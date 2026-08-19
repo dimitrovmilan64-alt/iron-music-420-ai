@@ -1013,8 +1013,8 @@ class _ChatPageState extends State<ChatPage>
           customBorder: const CircleBorder(),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -1026,8 +1026,8 @@ class _ChatPageState extends State<ChatPage>
               boxShadow: active
                   ? [
                       BoxShadow(
-                        color: ironGreen.withOpacity(0.16),
-                        blurRadius: 16,
+                        color: ironGreen.withOpacity(0.12),
+                        blurRadius: 13,
                       ),
                     ]
                   : null,
@@ -1035,7 +1035,7 @@ class _ChatPageState extends State<ChatPage>
             child: Icon(
               icon,
               color: active ? ironGreen : Colors.white60,
-              size: 21,
+              size: 20,
             ),
           ),
         ),
@@ -1063,7 +1063,7 @@ class _ChatPageState extends State<ChatPage>
           children: [
             Semantics(
               button: true,
-              label: _isListening ? 'Спри слушането' : 'Говори с Iron',
+              label: _isListening ? 'Спри слушането' : 'Говори с Айрън',
               child: GestureDetector(
                 onTap: _isLoading ? null : _toggleListening,
                 child: AnimatedScale(
@@ -1078,13 +1078,35 @@ class _ChatPageState extends State<ChatPage>
               status,
               style: TextStyle(
                 color: _isListening ? ironGreenSoft : ironGreen,
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 2.2,
-                shadows: const [Shadow(color: ironGreen, blurRadius: 10)],
+                letterSpacing: 2.0,
+                shadows: const [Shadow(color: ironGreen, blurRadius: 8)],
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 7),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 7,
+              runSpacing: 6,
+              children: [
+                NeonPill(
+                  text: widget.store.hasAnyAiProvider ? 'AI готов' : 'AI ключ',
+                  icon: widget.store.hasAnyAiProvider
+                      ? Icons.verified_rounded
+                      : Icons.key_rounded,
+                  active: widget.store.hasAnyAiProvider,
+                ),
+                NeonPill(
+                  text: _ironActive ? 'Хей Айрън' : 'Ръчен режим',
+                  icon: _ironActive
+                      ? Icons.hearing_rounded
+                      : Icons.touch_app_rounded,
+                  active: _ironActive,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1140,66 +1162,52 @@ class _ChatPageState extends State<ChatPage>
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
     final compactHeight = media.size.height < 720;
-    final coreSize = compactHeight ? 146.0 : 184.0;
+    final coreSize = compactHeight ? 158.0 : 210.0;
 
     return IronBackground(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
+            padding: const EdgeInsets.fromLTRB(16, 10, 12, 0),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'IRON MUSIC',
+                      Text(
+                        'IRON MUSIC 420 AI',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
+                          color: ironMist.withOpacity(0.82),
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 3.0,
+                          letterSpacing: 2.2,
                         ),
                       ),
-                      const SizedBox(height: 1),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text(
-                            '420',
-                            style: TextStyle(
-                              color: ironGreenSoft,
-                              fontSize: 29,
-                              height: 0.96,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.2,
-                              shadows: [Shadow(color: ironGreen, blurRadius: 15)],
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'AI',
-                            style: TextStyle(
-                              color: ironGreen.withOpacity(0.92),
-                              fontSize: 24,
-                              height: 1.0,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Айрън',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: ironGreenSoft,
+                          fontSize: 30,
+                          height: 1.0,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          shadows: [Shadow(color: ironGreen, blurRadius: 12)],
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'ТВОЯТ AI РАП ПРОДЮЦЕНТ',
+                        'Чат, глас и рап студио в едно',
                         style: TextStyle(
-                          color: ironGreen.withOpacity(0.72),
-                          fontSize: 8.8,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.7,
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
                         ),
                       ),
                     ],
@@ -1260,97 +1268,6 @@ class _ChatPageState extends State<ChatPage>
                     child: _buildAssistantCore(coreSize),
                   ),
           ),
-          if (!keyboardOpen)
-            GestureDetector(
-              onTap: _openApiKeySheet,
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(14, 0, 14, 7),
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF07180D).withOpacity(0.97),
-                      const Color(0xFF020A05).withOpacity(0.98),
-                    ],
-                  ),
-                  border: Border.all(color: ironGreen.withOpacity(0.22)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: ironGreen.withOpacity(0.055),
-                      blurRadius: 18,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 31,
-                      height: 31,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: ironGreen.withOpacity(0.10),
-                        border: Border.all(color: ironGreen.withOpacity(0.34)),
-                      ),
-                      child: Icon(
-                        widget.store.hasAnyAiProvider
-                            ? Icons.verified_user_rounded
-                            : Icons.key_rounded,
-                        size: 17,
-                        color: ironGreen,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.store.hasAnyAiProvider
-                                ? 'AI СИСТЕМАТА Е ГОТОВА'
-                                : 'ДОБАВИ AI КЛЮЧ',
-                            style: const TextStyle(
-                              color: ironGreen,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.7,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _ironActive
-                                ? 'Hey Iron • Български глас • Онлайн'
-                                : 'Чат • Български глас',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: widget.store.hasAnyAiProvider
-                            ? ironGreenSoft
-                            : Colors.orangeAccent,
-                        boxShadow: widget.store.hasAnyAiProvider
-                            ? [
-                                BoxShadow(
-                                  color: ironGreen.withOpacity(0.5),
-                                  blurRadius: 8,
-                                ),
-                              ]
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -1381,7 +1298,7 @@ class _ChatPageState extends State<ChatPage>
                             ),
                           ),
                           SizedBox(width: 9),
-                          Text('Iron мисли...', style: TextStyle(color: ironGreen)),
+                          Text('Айрън мисли...', style: TextStyle(color: ironGreen)),
                         ],
                       ),
                     ),
@@ -1434,7 +1351,7 @@ class _ChatPageState extends State<ChatPage>
                     decoration: InputDecoration.collapsed(
                       hintText: _isListening
                           ? 'Слушам на български...'
-                          : 'Говори или напиши на Iron...',
+                          : 'Говори или напиши на Айрън...',
                       hintStyle: const TextStyle(color: Colors.white38),
                     ),
                     onSubmitted: (_) {
