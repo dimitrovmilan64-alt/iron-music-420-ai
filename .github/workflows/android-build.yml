@@ -55,8 +55,8 @@ jobs:
       - name: Test all Flutter regressions
         run: flutter test
 
-      - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
+      - name: Build arm64 release APK
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Test native voice lifecycle
         working-directory: android
@@ -67,7 +67,7 @@ jobs:
         run: |
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
             | tee /tmp/iron-apk-certificate.txt
           grep -Fi \
             'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
@@ -77,5 +77,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: iron-music-420-ai-v3.4.0-build75-ui-depth-refresh
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
