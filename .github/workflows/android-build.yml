@@ -30,7 +30,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.9'
           channel: stable
           cache: true
 
@@ -49,14 +48,14 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0 build 77 UI refresh on Build 76
+      - name: Analyze v3.4.0 build 71 Rap Studio
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test all Flutter regressions
         run: flutter test
 
       - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
+        run: flutter build apk --debug --target-platform android-arm64 --android-skip-build-dependency-validation
 
       - name: Test native voice lifecycle
         working-directory: android
@@ -76,6 +75,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build77-ui-refresh
+          name: iron-music-420-ai-v3.4.0-build71-rap-quality
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error

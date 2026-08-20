@@ -34,7 +34,7 @@ void main() {
     ).readAsStringSync();
 
     expect(chat, contains('_toggleIronMode()'));
-    expect(chat, contains("'ХЕЙ АЙРЪН АКТИВЕН'"));
+    expect(chat, contains("'ХЕЙ АЙРЪН'"));
     expect(commands, isNot(contains('АКТИВИРАЙ IRON')));
     expect(commands, isNot(contains('ОТВОРИ AI РАЗГОВОРА')));
     expect(activity, isNot(contains('syncAiProviderSettings')));
