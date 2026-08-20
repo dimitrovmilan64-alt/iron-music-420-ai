@@ -45,7 +45,9 @@ class _ChatPageState extends State<ChatPage>
   bool _isLoading = false;
   bool _isListening = false;
   bool _ironActive = false;
+  bool _ironOrbActive = false;
   bool _voiceToggleBusy = false;
+  bool _orbToggleBusy = false;
   bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
   List<Map<String, String>> _bulgarianVoices = const [];
@@ -163,9 +165,15 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<void> _loadIronStatus() async {
-    final active = await _automation.isIronVoiceActive();
+    final results = await Future.wait<bool>([
+      _automation.isIronVoiceActive(),
+      _automation.isIronOrbActive(),
+    ]);
     if (!mounted) return;
-    setState(() => _ironActive = active);
+    setState(() {
+      _ironActive = results[0];
+      _ironOrbActive = results[1];
+    });
   }
 
   Future<void> _toggleIronMode() async {
@@ -178,6 +186,22 @@ class _ChatPageState extends State<ChatPage>
     setState(() {
       _voiceToggleBusy = false;
       if (result.success) _ironActive = !_ironActive;
+    });
+    _showMessage(result.message);
+  }
+
+  Future<void> _toggleIronOrb() async {
+    if (_orbToggleBusy) return;
+    setState(() => _orbToggleBusy = true);
+    final result = await _automation.execute(
+      _ironOrbActive ? 'iron_orb_off' : 'iron_orb_on',
+    );
+    if (!mounted) return;
+    final active = await _automation.isIronOrbActive();
+    if (!mounted) return;
+    setState(() {
+      _orbToggleBusy = false;
+      _ironOrbActive = active;
     });
     _showMessage(result.message);
   }
@@ -451,6 +475,7 @@ class _ChatPageState extends State<ChatPage>
 
   Future<void> _playSpeechWithWakePaused(String text) async {
     final resumeIronVoice = await _automation.pauseIronVoiceCapture();
+    await _automation.setIronOrbState('speaking');
     try {
       if (resumeIronVoice) {
         await Future<void>.delayed(const Duration(milliseconds: 180));
@@ -469,6 +494,7 @@ class _ChatPageState extends State<ChatPage>
       if (resumeIronVoice) {
         await _automation.resumeIronVoiceCapture();
       }
+      await _automation.setIronOrbState('idle');
     }
   }
 
@@ -498,11 +524,13 @@ class _ChatPageState extends State<ChatPage>
     if (!mounted) return;
 
     setState(() => _isListening = true);
+    await _automation.setIronOrbState('listening');
     final result = await _automation.startNativeSpeechRecognition();
     if (!mounted) return;
 
     setState(() => _isListening = false);
     if (!result.success) {
+      await _automation.setIronOrbState('idle');
       if (result.message.trim().isNotEmpty) {
         _showMessage(result.message.trim());
       }
@@ -515,6 +543,7 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
+    await _automation.setIronOrbState('thinking');
     setState(() {
       _messageController.text = recognized;
       _messageController.selection = TextSelection.fromPosition(
@@ -668,6 +697,7 @@ class _ChatPageState extends State<ChatPage>
 
     final apiKey = widget.store.apiKey.trim();
     if (!widget.store.hasAnyAiProvider) {
+      await _automation.setIronOrbState('idle');
       await _openApiKeySheet();
       return;
     }
@@ -686,6 +716,7 @@ class _ChatPageState extends State<ChatPage>
     });
     await widget.store.replaceChatHistory(_messages);
     _scrollToBottom();
+    await _automation.setIronOrbState('thinking');
 
     try {
       final reply = await _gemini.generateChat(
@@ -713,6 +744,7 @@ class _ChatPageState extends State<ChatPage>
       if (!mounted) return;
       await _addLocalNotice('Неочаквана грешка при връзката с AI.');
     } finally {
+      await _automation.setIronOrbState('idle');
       if (mounted) {
         setState(() => _isLoading = false);
         _scrollToBottom();
@@ -981,8 +1013,8 @@ class _ChatPageState extends State<ChatPage>
           customBorder: const CircleBorder(),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -994,8 +1026,8 @@ class _ChatPageState extends State<ChatPage>
               boxShadow: active
                   ? [
                       BoxShadow(
-                        color: ironGreen.withOpacity(0.16),
-                        blurRadius: 16,
+                        color: ironGreen.withOpacity(0.12),
+                        blurRadius: 13,
                       ),
                     ]
                   : null,
@@ -1003,7 +1035,7 @@ class _ChatPageState extends State<ChatPage>
             child: Icon(
               icon,
               color: active ? ironGreen : Colors.white60,
-              size: 21,
+              size: 20,
             ),
           ),
         ),
@@ -1031,7 +1063,7 @@ class _ChatPageState extends State<ChatPage>
           children: [
             Semantics(
               button: true,
-              label: _isListening ? 'Спри слушането' : 'Говори с Iron',
+              label: _isListening ? 'Спри слушането' : 'Говори с Айрън',
               child: GestureDetector(
                 onTap: _isLoading ? null : _toggleListening,
                 child: AnimatedScale(
@@ -1046,13 +1078,35 @@ class _ChatPageState extends State<ChatPage>
               status,
               style: TextStyle(
                 color: _isListening ? ironGreenSoft : ironGreen,
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 2.2,
-                shadows: const [Shadow(color: ironGreen, blurRadius: 10)],
+                letterSpacing: 2.0,
+                shadows: const [Shadow(color: ironGreen, blurRadius: 8)],
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 7),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 7,
+              runSpacing: 6,
+              children: [
+                NeonPill(
+                  text: widget.store.hasAnyAiProvider ? 'AI готов' : 'AI ключ',
+                  icon: widget.store.hasAnyAiProvider
+                      ? Icons.verified_rounded
+                      : Icons.key_rounded,
+                  active: widget.store.hasAnyAiProvider,
+                ),
+                NeonPill(
+                  text: _ironActive ? 'Хей Айрън' : 'Ръчен режим',
+                  icon: _ironActive
+                      ? Icons.hearing_rounded
+                      : Icons.touch_app_rounded,
+                  active: _ironActive,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1079,6 +1133,17 @@ class _ChatPageState extends State<ChatPage>
                 ),
                 const SizedBox(width: 12),
                 _roundAction(
+                  icon: _ironOrbActive
+                      ? Icons.blur_circular_rounded
+                      : Icons.bubble_chart_outlined,
+                  tooltip: _ironOrbActive
+                      ? 'Изключи живата сфера'
+                      : 'Покажи живата сфера върху всички приложения',
+                  active: _ironOrbActive,
+                  onPressed: _orbToggleBusy ? null : _toggleIronOrb,
+                ),
+                const SizedBox(width: 12),
+                _roundAction(
                   icon: Icons.key_rounded,
                   tooltip: 'AI доставчици',
                   active: widget.store.hasAnyAiProvider,
@@ -1097,79 +1162,93 @@ class _ChatPageState extends State<ChatPage>
     final media = MediaQuery.of(context);
     final keyboardOpen = media.viewInsets.bottom > 0;
     final compactHeight = media.size.height < 720;
-    final coreSize = compactHeight ? 126.0 : 156.0;
+    final coreSize = compactHeight ? 158.0 : 210.0;
 
     return IronBackground(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 8, 0),
+            padding: const EdgeInsets.fromLTRB(16, 10, 12, 0),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'ХЕЙ АЙРЪН',
+                      Text(
+                        'IRON MUSIC 420 AI',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.1,
+                          color: ironMist.withOpacity(0.82),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2.2,
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _ironActive
-                            ? 'Активен • глас и чат на едно място'
-                            : 'Глас и чат на едно място',
+                      const Text(
+                        'Айрън',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: ironGreen,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                          color: ironGreenSoft,
+                          fontSize: 30,
+                          height: 1.0,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          shadows: [Shadow(color: ironGreen, blurRadius: 12)],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Чат, глас и рап студио в едно',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
                         ),
                       ),
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  tooltip: 'Настройки',
-                  icon: const Icon(Icons.more_horiz_rounded, color: ironGreen),
-                  onSelected: (value) {
-                    if (value == 'api') {
-                      _openApiKeySheet();
-                    } else if (value == 'voice') {
-                      _openVoiceSettings();
-                    } else if (value == 'history') {
-                      _clearHistory();
-                    } else if (value == 'tools') {
-                      widget.onOpenTools?.call();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'api',
-                      child: Text('AI доставчици'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'voice',
-                      child: Text('Настройки на гласа'),
-                    ),
-                    if (widget.onOpenTools != null)
-                      const PopupMenuItem(
-                        value: 'tools',
-                        child: Text('Инструменти'),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF06140B).withOpacity(0.92),
+                    border: Border.all(color: ironGreen.withOpacity(0.20)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ironGreen.withOpacity(0.06),
+                        blurRadius: 14,
                       ),
-                    const PopupMenuItem(
-                      value: 'history',
-                      child: Text('Изчисти историята'),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Настройки',
+                    icon: const Icon(Icons.tune_rounded, color: ironGreen, size: 21),
+                    onSelected: (value) {
+                      if (value == 'api') {
+                        _openApiKeySheet();
+                      } else if (value == 'voice') {
+                        _openVoiceSettings();
+                      } else if (value == 'history') {
+                        _clearHistory();
+                      } else if (value == 'tools') {
+                        widget.onOpenTools?.call();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'api', child: Text('AI доставчици')),
+                      const PopupMenuItem(value: 'voice', child: Text('Настройки на гласа')),
+                      if (widget.onOpenTools != null)
+                        const PopupMenuItem(value: 'tools', child: Text('Инструменти')),
+                      const PopupMenuItem(value: 'history', child: Text('Изчисти историята')),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1181,10 +1260,10 @@ class _ChatPageState extends State<ChatPage>
                 ? const SizedBox(height: 4)
                 : Padding(
                     padding: EdgeInsets.fromLTRB(
-                      12,
-                      compactHeight ? 4 : 8,
-                      12,
-                      8,
+                      10,
+                      compactHeight ? 2 : 5,
+                      10,
+                      4,
                     ),
                     child: _buildAssistantCore(coreSize),
                   ),
@@ -1193,30 +1272,33 @@ class _ChatPageState extends State<ChatPage>
             child: ListView.builder(
               controller: _scrollController,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+              padding: const EdgeInsets.fromLTRB(14, 3, 14, 7),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
-                  return const Align(
+                  return Align(
                     alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(8, 6, 8, 14),
-                      child: Row(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(0, 5, 0, 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: const Color(0xFF06140B).withOpacity(0.90),
+                        border: Border.all(color: ironGreen.withOpacity(0.14)),
+                      ),
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           SizedBox(
-                            width: 17,
-                            height: 17,
+                            width: 15,
+                            height: 15,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 1.8,
                               color: ironGreen,
                             ),
                           ),
                           SizedBox(width: 9),
-                          Text(
-                            'Iron мисли...',
-                            style: TextStyle(color: ironGreen),
-                          ),
+                          Text('Айрън мисли...', style: TextStyle(color: ironGreen)),
                         ],
                       ),
                     ),
@@ -1233,15 +1315,25 @@ class _ChatPageState extends State<ChatPage>
             ),
           ),
           Container(
-            margin: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            margin: const EdgeInsets.fromLTRB(11, 4, 11, 9),
+            padding: const EdgeInsets.fromLTRB(14, 7, 6, 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF010A05).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: ironGreen.withOpacity(0.30)),
+              borderRadius: BorderRadius.circular(25),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF07180D).withOpacity(0.98),
+                  const Color(0xFF010804).withOpacity(0.99),
+                ],
+              ),
+              border: Border.all(color: ironGreen.withOpacity(0.25)),
               boxShadow: [
                 BoxShadow(
-                  color: ironGreen.withOpacity(0.08),
+                  color: Colors.black.withOpacity(0.50),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+                BoxShadow(
+                  color: ironGreen.withOpacity(0.06),
                   blurRadius: 18,
                 ),
               ],
@@ -1255,11 +1347,11 @@ class _ChatPageState extends State<ChatPage>
                     minLines: 1,
                     maxLines: 4,
                     textCapitalization: TextCapitalization.sentences,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.white, height: 1.3),
                     decoration: InputDecoration.collapsed(
                       hintText: _isListening
                           ? 'Слушам на български...'
-                          : 'Говори или напиши на Iron...',
+                          : 'Говори или напиши на Айрън...',
                       hintStyle: const TextStyle(color: Colors.white38),
                     ),
                     onSubmitted: (_) {
@@ -1271,14 +1363,32 @@ class _ChatPageState extends State<ChatPage>
                   tooltip: 'Микрофон',
                   onPressed: _isLoading ? null : _toggleListening,
                   icon: Icon(
-                    _isListening ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                    color: _isListening ? Colors.redAccent : ironGreen,
+                    _isListening ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                    color: _isListening ? Colors.redAccent : ironGreenSoft,
                   ),
                 ),
-                IconButton.filled(
-                  tooltip: 'Изпрати',
-                  onPressed: _isLoading ? null : _sendMessage,
-                  icon: const Icon(Icons.arrow_upward_rounded),
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [ironGreenSoft, ironGreen],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ironGreen.withOpacity(0.24),
+                        blurRadius: 14,
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    tooltip: 'Изпрати',
+                    onPressed: _isLoading ? null : _sendMessage,
+                    icon: const Icon(Icons.arrow_upward_rounded, color: Colors.black),
+                  ),
                 ),
               ],
             ),
@@ -1301,43 +1411,58 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alignment =
-        message.isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final color = message.isUser
-        ? ironGreen.withOpacity(0.18)
-        : message.isLocalNotice
-            ? Colors.orange.withOpacity(0.12)
-            : const Color(0xFF04150A);
-    final borderColor = message.isUser
-        ? ironGreen
-        : message.isLocalNotice
-            ? Colors.orangeAccent.withOpacity(0.7)
-            : Colors.white12;
+    final alignment = message.isUser ? Alignment.centerRight : Alignment.centerLeft;
+    final borderColor = message.isLocalNotice
+        ? Colors.orangeAccent.withOpacity(0.42)
+        : message.isUser
+            ? ironGreen.withOpacity(0.38)
+            : Colors.white.withOpacity(0.075);
 
     return Align(
       alignment: alignment,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 9),
+        padding: const EdgeInsets.fromLTRB(13, 10, 12, 11),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.84,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.88,
         ),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(message.isUser ? 18 : 5),
-            bottomRight: Radius.circular(message.isUser ? 5 : 18),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: message.isUser
+                ? [
+                    ironGreen.withOpacity(0.15),
+                    const Color(0xFF04120A).withOpacity(0.97),
+                  ]
+                : message.isLocalNotice
+                    ? [
+                        Colors.orange.withOpacity(0.10),
+                        const Color(0xFF120D03).withOpacity(0.94),
+                      ]
+                    : [
+                        const Color(0xFF07150C).withOpacity(0.94),
+                        const Color(0xFF020805).withOpacity(0.97),
+                      ],
           ),
-          border: Border.all(color: borderColor.withOpacity(0.8)),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(19),
+            topRight: const Radius.circular(19),
+            bottomLeft: Radius.circular(message.isUser ? 19 : 6),
+            bottomRight: Radius.circular(message.isUser ? 6 : 19),
+          ),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
-              color:
-                  (message.isUser ? ironGreen : Colors.black).withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
+              color: Colors.black.withOpacity(0.22),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
+            if (message.isUser)
+              BoxShadow(
+                color: ironGreen.withOpacity(0.045),
+                blurRadius: 16,
+              ),
           ],
         ),
         child: Column(
@@ -1345,29 +1470,40 @@ class _ChatBubble extends StatelessWidget {
           children: [
             Row(
               children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: message.isUser
+                        ? ironGreenSoft
+                        : message.isLocalNotice
+                            ? Colors.orangeAccent
+                            : ironGreen,
+                  ),
+                ),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    message.sender,
+                    message.sender.toUpperCase(),
                     style: TextStyle(
-                      color: message.isUser ? ironGreen : Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      color: message.isUser ? ironGreenSoft : Colors.white54,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 9.5,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ),
                 if (onSendToStudio != null) ...[
-                  Tooltip(
-                    message: 'В Рап студио',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: onSendToStudio,
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.mic_external_on_rounded,
-                          size: 16,
-                          color: ironGreen,
-                        ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: onSendToStudio,
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.mic_external_on_rounded,
+                        size: 16,
+                        color: ironGreen,
                       ),
                     ),
                   ),
@@ -1376,27 +1512,28 @@ class _ChatBubble extends StatelessWidget {
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: message.text),
-                    );
+                    await Clipboard.setData(ClipboardData(text: message.text));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Съобщението е копирано.')),
+                        const SnackBar(content: Text('Съобщението е копирано.')),
                       );
                     }
                   },
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(Icons.copy, size: 15, color: Colors.white54),
+                    child: Icon(Icons.copy_rounded, size: 14, color: Colors.white38),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 6),
             SelectableText(
               cleanMarkdownForDisplay(message.text),
-              style: const TextStyle(color: Colors.white, height: 1.4),
+              style: const TextStyle(
+                color: Colors.white,
+                height: 1.42,
+                fontSize: 14,
+              ),
             ),
           ],
         ),

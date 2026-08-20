@@ -66,7 +66,7 @@ void main() {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
     expect(script, contains('HEY_IRON_LEX'));
     expect(script, contains('HEY_IRON_BG'));
-    expect(script, contains('6.5, 0.03'));
+    expect(script, contains('7.0, 0.02'));
     expect(script, isNot(contains('HEY_AARON')));
     expect(script, isNot(contains('NO_H')));
   });
