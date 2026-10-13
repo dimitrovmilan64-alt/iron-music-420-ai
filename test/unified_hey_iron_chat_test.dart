@@ -45,4 +45,17 @@ void main() {
       isFalse,
     );
   });
+
+  test('duplicate native prompts cannot flood the unified chat queue', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt',
+    ).readAsStringSync();
+    final store = File('lib/services/local_store.dart').readAsStringSync();
+
+    expect(service, contains('VoicePromptGuard.Decision.BARE_WAKE_PHRASE'));
+    expect(service, contains('VoicePromptGuard.Decision.DUPLICATE'));
+    expect(service, contains('command_ignored reason=bare_wake_phrase'));
+    expect(service, contains('command_ignored reason=duplicate_chat_prompt'));
+    expect(store, contains('alreadyPending'));
+  });
 }

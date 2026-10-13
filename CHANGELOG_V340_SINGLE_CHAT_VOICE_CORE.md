@@ -70,3 +70,12 @@
 - Renames the main AI tab and chat header to „Хей Айрън“.
 - Tightens the full-phrase acoustic threshold and voiced-frame gate to reduce occasional ambient false wakes.
 - Removes the unused legacy home page, native duplicate AI router, provider-sync bridge and duplicate command handler.
+
+## Build 52 strict Hey Iron activation
+
+- Keeps only the complete two-word „Хей Айрън“ wake phrase and makes its acoustic match less permissive.
+- Uses one keyword-search path and requires consecutive voiced frames instead of carrying old noise forward.
+- Adds a short wake cooldown so one sound cannot immediately start another listening cycle.
+- Rejects bare „Iron/Айрън“ and the assistant's own „Слушам“ as chat prompts.
+- Collapses repeated greeting and duplicate voice prompts before they can flood the unified chat.
+- Adds executable native regression tests for wake gating, cooldowns and prompt filtering.

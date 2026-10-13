@@ -39,27 +39,34 @@ void main() {
     expect(parser, contains('"turn on"'));
   });
 
-  test('native Studio request reaches the existing Rap Studio generator', () {
+  test('native Studio request reaches the active Rap Studio generator', () {
     final activity = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/MainActivity.kt',
     ).readAsStringSync();
     final automation =
         File('lib/services/automation_service.dart').readAsStringSync();
     final store = File('lib/services/local_store.dart').readAsStringSync();
-    final studio = File('lib/pages/rap_studio_page.dart').readAsStringSync();
+    final studioEntry =
+        File('lib/pages/rap_studio_page.dart').readAsStringSync();
+    final studio =
+        File('lib/pages/rap_studio_page_v2.dart').readAsStringSync();
 
     expect(activity, contains('consumeStudioVoiceRequest'));
     expect(automation, contains('consumeStudioVoiceRequest'));
     expect(store, contains('queueStudioVoiceRequest'));
-    expect(studio, contains('_applyPendingStudioVoiceRequest'));
-    expect(studio, contains('_generateWithAi()'));
+    expect(studioEntry, contains("export 'rap_studio_page_v2.dart'"));
+    expect(studio, contains('_applyPendingVoiceRequest'));
+    expect(studio, contains('_generateSong()'));
+    expect(studio, contains('_createHook()'));
+    expect(studio, contains('_createVerse()'));
+    expect(studio, contains('pendingStudioAutoGenerate'));
   });
 
   test('offline wake list contains only calibrated full Hey Iron phrases', () {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
     expect(script, contains('HEY_IRON_LEX'));
     expect(script, contains('HEY_IRON_BG'));
-    expect(script, contains('7.0, 0.02'));
+    expect(script, contains('6.5, 0.03'));
     expect(script, isNot(contains('HEY_AARON')));
     expect(script, isNot(contains('NO_H')));
   });
