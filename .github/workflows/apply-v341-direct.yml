@@ -1,0 +1,51 @@
+name: Apply v3.4.1 direct update
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-v341-direct
+  cancel-in-progress: true
+
+env:
+  WORK_BRANCH: agent/v3-4-1-unified-assistant-direct
+  ARCHIVE_SHA256: 26543a6a95961fb0b31a3b8e54611303d65552a44d446389bb6a75042b11f87c
+
+jobs:
+  apply-direct-update:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fetch direct update branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$WORK_BRANCH"
+          git checkout -B "$WORK_BRANCH" FETCH_HEAD
+
+      - name: Verify and apply v3.4.1 source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find .v341-direct -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 12
+          sha256sum .v341-direct/part-* | tee /tmp/v341-part-checksums.txt
+          cat .v341-direct/part-* \
+            | tr -cd 'A-Za-z0-9+/=' \
+            | base64 --decode > /tmp/v341-direct-update.tar.xz
+          echo "$ARCHIVE_SHA256  /tmp/v341-direct-update.tar.xz" | sha256sum --check --strict
+          tar -tJf /tmp/v341-direct-update.tar.xz
+          tar -xJf /tmp/v341-direct-update.tar.xz -C .
+          rm -rf .v341-direct
+          rm -f .github/workflows/apply-v341-direct.yml
+          git add --all
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Iron Music 420 AI v3.4.1: unified assistant core'
+          git push origin HEAD:"$WORK_BRANCH"
