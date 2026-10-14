@@ -88,25 +88,26 @@ for raw in lexicon_path.read_text(encoding="utf-8").splitlines():
 candidates: list[tuple[str, list[str], float, float]] = []
 
 # The full two-word phrase is intentionally kept as the only trigger. The
-# per-keyword values below restore the Realme-tested Bulgarian pronunciation
-# sensitivity while the full two-word phrase, voiced-signal guard and cooldown
-# continue to block one-word and immediate repeat activations.
+# per-keyword values below keep the Bulgarian pronunciation reachable while
+# remaining less permissive than build 51. The service keeps recent voice
+# evidence across the model's required trailing blank, so a valid phrase is not
+# discarded just because recognition is finalized after the speaker stops.
 for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
     for iron_index, iron in enumerate(lexicon.get("IRON", []), start=1):
         candidates.append(
-            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 7.0, 0.02)
+            (f"HEY_IRON_LEX_{hey_index}_{iron_index}", hey + iron, 6.5, 0.03)
         )
 
 # Bulgarian-accented full-phrase variants of „Хей Айрън“.
 candidates.extend(
     [
-        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 7.0, 0.02),
-        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 7.0, 0.02),
+        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 6.5, 0.03),
+        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 6.5, 0.03),
     ]
 )
 

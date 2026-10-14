@@ -34,10 +34,7 @@ void main() {
     expect(store, contains('_studioRevision++'));
     expect(chat, contains('onSendToStudio'));
     expect(chat, contains('_requestsStudioTransfer'));
-    expect(
-      chat,
-      contains("_showMessage('Текстът е прехвърлен в Рап студио.')"),
-    );
+    expect(chat, contains("message: 'В Рап студио'"));
     expect(main, contains('widget.store.sendTextToStudio(text)'));
     expect(main, contains('_openSection(1)'));
   });

@@ -8,7 +8,7 @@ void main() {
     final chat = File('lib/pages/chat_page.dart').readAsStringSync();
 
     expect(main, contains("label: 'Хей Айрън'"));
-    expect(chat, contains("'ХЕЙ АЙРЪН АКТИВЕН'"));
+    expect(chat, contains("'ХЕЙ АЙРЪН'"));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
   });
 
@@ -50,7 +50,7 @@ void main() {
     expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
-    expect(keywordScript, contains('7.0, 0.02'));
+    expect(keywordScript, contains('6.5, 0.03'));
     expect(keywordScript, isNot(contains('("IRON_')));
     expect(keywordScript, isNot(contains('LEX_NO_H')));
   });

@@ -9,14 +9,6 @@
 - Adds common “Hey Aaron” pronunciation variants to the offline wake-word model.
 - Preserves the silent notification channel, native chat speech, Groq fallback and stable signing.
 
-## Build 77 UI depth refresh on Build 76
-
-- Reworks the Iron core into a darker layered orb with cleaner orbit lines and animated leaf-vein highlights.
-- Simplifies the chat header, enlarges the central core and moves AI/Hey Iron state into compact status pills.
-- Removes the duplicate AI status card from the chat so the conversation has more space.
-- Reorders Rap Studio around the main lyrics field first, with project details, Suno package and style controls collapsed until needed.
-- Keeps the Build 76 exact-leaf system-wide Iron orb, wake-word service, Android command parser, package identity, signing flow and provider logic unchanged.
-
 ## Build 45 voice lifecycle fix
 
 - Waits for the wake-word recorder to release the microphone before chat dictation.
