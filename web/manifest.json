@@ -1,11 +1,11 @@
 {
-    "name": "bloc_counter",
-    "short_name": "bloc_counter",
+    "name": "Iron Music 420 AI",
+    "short_name": "IronMusic",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Iron Music 420 AI - Bulgarian rap assistant with Gemini, voice and Rap Studio.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
