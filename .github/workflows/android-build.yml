@@ -55,6 +55,7 @@ jobs:
       - name: Force Gradle 8.14.0 URL
         shell: bash
         run: |
+          mkdir -p android/gradle/wrapper
           cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
@@ -62,6 +63,8 @@ jobs:
           zipStorePath=wrapper/dists
           distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-all.zip
           EOF
+          echo "=== Forced properties ==="
+          cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Get packages
         run: flutter pub get
@@ -72,8 +75,23 @@ jobs:
       - name: Test
         run: flutter test || true
 
-      - name: Build release APK
-        run: flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
+      - name: Force Gradle URL again and build
+        shell: bash
+        run: |
+          # Force one last time right before Flutter/Gradle touches it
+          mkdir -p android/gradle/wrapper
+          cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-all.zip
+          EOF
+          echo "=== Properties before build ==="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+          # Remove any stale wrapper jar so it regenerates from correct properties if needed
+          rm -f android/gradle/wrapper/gradle-wrapper.jar || true
+          flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
