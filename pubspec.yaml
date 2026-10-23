@@ -15,10 +15,6 @@ dependencies:
   shared_preferences: ^2.3.5
   share_plus: ^10.1.4
 
-dependency_overrides:
-  # Current Flutter versions require the newer Matrix4 API.
-  vector_math: 2.4.2
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
