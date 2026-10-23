@@ -33,7 +33,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.24.5'
+          flutter-version: '3.27.0'
           cache: true
 
       - name: Cache pub
@@ -53,7 +53,7 @@ jobs:
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh || true
 
-      - name: Force Gradle 8.7 URL
+      - name: Force Gradle 8.10 URL
         shell: bash
         run: |
           mkdir -p android/gradle/wrapper
@@ -62,10 +62,10 @@ jobs:
           distributionPath=wrapper/dists
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.10-bin.zip
           EOF
           curl -fsSL -o android/gradle/wrapper/gradle-wrapper.jar \
-            https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar || true
+            https://raw.githubusercontent.com/gradle/gradle/v8.10.0/gradle/wrapper/gradle-wrapper.jar || true
           ls -la android/gradle/wrapper/
           cat android/gradle/wrapper/gradle-wrapper.properties
 
@@ -87,7 +87,7 @@ jobs:
           distributionPath=wrapper/dists
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.10-bin.zip
           EOF
           cat android/gradle/wrapper/gradle-wrapper.properties
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
