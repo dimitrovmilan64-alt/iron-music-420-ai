@@ -33,6 +33,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.24.5'
           cache: true
 
       - name: Cache pub
@@ -89,7 +90,6 @@ jobs:
           EOF
           echo "=== Properties before build ==="
           cat android/gradle/wrapper/gradle-wrapper.properties
-          # Remove any stale wrapper jar so it regenerates from correct properties if needed
           rm -f android/gradle/wrapper/gradle-wrapper.jar || true
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
 
