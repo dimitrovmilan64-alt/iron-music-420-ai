@@ -53,7 +53,7 @@ jobs:
       - name: Prepare offline Hey Iron engine
         run: bash scripts/prepare_sherpa_kws.sh || true
 
-      - name: Force Gradle 8.14.0 URL
+      - name: Force Gradle 8.14.0 URL and download wrapper jar
         shell: bash
         run: |
           mkdir -p android/gradle/wrapper
@@ -64,7 +64,13 @@ jobs:
           zipStorePath=wrapper/dists
           distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-all.zip
           EOF
-          echo "=== Forced properties ==="
+          # Download a known-good gradle-wrapper.jar that respects the properties file
+          curl -fsSL -o android/gradle/wrapper/gradle-wrapper.jar \
+            https://raw.githubusercontent.com/gradle/gradle/v8.14.0/gradle/wrapper/gradle-wrapper.jar || \
+          curl -fsSL -o android/gradle/wrapper/gradle-wrapper.jar \
+            https://github.com/gradle/gradle/raw/v8.14.0/gradle/wrapper/gradle-wrapper.jar
+          ls -la android/gradle/wrapper/
+          echo "=== Properties ==="
           cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Get packages
@@ -76,10 +82,10 @@ jobs:
       - name: Test
         run: flutter test || true
 
-      - name: Force Gradle URL again and build
+      - name: Build release APK
         shell: bash
         run: |
-          # Force one last time right before Flutter/Gradle touches it
+          # Ensure jar and properties are still correct right before build
           mkdir -p android/gradle/wrapper
           cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -88,9 +94,11 @@ jobs:
           zipStorePath=wrapper/dists
           distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-all.zip
           EOF
-          echo "=== Properties before build ==="
-          cat android/gradle/wrapper/gradle-wrapper.properties
-          rm -f android/gradle/wrapper/gradle-wrapper.jar || true
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -fsSL -o android/gradle/wrapper/gradle-wrapper.jar \
+              https://raw.githubusercontent.com/gradle/gradle/v8.14.0/gradle/wrapper/gradle-wrapper.jar || true
+          fi
+          ls -la android/gradle/wrapper/
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
 
       - name: Upload APK artifact
