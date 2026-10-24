@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: write
 
@@ -51,7 +51,21 @@ jobs:
           fi
 
       - name: Prepare offline Hey Iron engine
-        run: bash scripts/prepare_sherpa_kws.sh || true
+        run: bash scripts/prepare_sherpa_kws.sh
+
+      - name: Verify offline models exist
+        shell: bash
+        run: |
+          MODEL="android/app/src/main/assets/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
+          AAR="android/app/libs/sherpa-onnx-1.13.4.aar"
+          test -s "$AAR" || { echo "Missing sherpa-onnx AAR"; exit 1; }
+          for f in encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx \
+                   decoder-epoch-13-avg-2-chunk-16-left-64.onnx \
+                   joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx \
+                   tokens.txt keywords.txt; do
+            test -s "$MODEL/$f" || { echo "Missing model file: $f"; exit 1; }
+          done
+          echo "Offline Hey Iron models verified."
 
       - name: Force Gradle 8.10 URL
         shell: bash
