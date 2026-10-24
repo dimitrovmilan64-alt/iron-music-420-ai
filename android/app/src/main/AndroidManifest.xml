@@ -35,11 +35,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- IronVoiceService temporarily disabled to prevent system freeze on launch -->
+        <!--
         <service
             android:name=".IronVoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:stopWithTask="false" />
+        -->
         <service
             android:name=".YoutubeAutoPlayAccessibilityService"
             android:exported="true"
