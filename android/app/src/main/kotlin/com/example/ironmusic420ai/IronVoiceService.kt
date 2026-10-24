@@ -388,6 +388,15 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         wakeEngineLoading = true
         updateNotification("Iron зарежда офлайн модела за „Hey Iron“…")
 
+        // Safety timeout: if the model does not finish loading in 15s, stop quietly.
+        handler.postDelayed({
+            if (wakeEngineLoading && serviceActive) {
+                Log.w(LOG_TAG, "wake_engine_timeout")
+                updateNotification("Офлайн моделът се забави — гласът е изключен")
+                stopSelf()
+            }
+        }, 15_000L)
+
         Thread(
             {
                 var engine: KeywordSpotter? = null
