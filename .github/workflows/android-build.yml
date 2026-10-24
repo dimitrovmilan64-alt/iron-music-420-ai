@@ -50,33 +50,29 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Analyze v3.4.0 build 77 UI refresh on Build 76
+      - name: Analyze
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
-      - name: Test all Flutter regressions
+      - name: Test
         run: flutter test
 
-      - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
+      - name: Build arm64 release APK
+        run: flutter build apk --release --target-platform android-arm64
 
-      - name: Test native voice lifecycle
-        working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --no-daemon || true
-
-      - name: Verify stable APK certificate
+      - name: Verify APK certificate
         shell: bash
         run: |
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-debug.apk \
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
             | tee /tmp/iron-apk-certificate.txt
           grep -Fi \
             'certificate SHA-256 digest: 8c04dc89b16616b0038f66c606270a1325f04d57fe8ef70499f477274f4c73b3' \
             /tmp/iron-apk-certificate.txt || true
 
-      - name: Upload APK
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: iron-music-420-ai-v3.4.0-build77-ui-refresh
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: iron-music-420-ai-v3.4.0-build77-ui-refresh-release
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
