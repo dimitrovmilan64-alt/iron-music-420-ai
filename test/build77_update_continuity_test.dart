@@ -18,11 +18,11 @@ void main() {
     expect(gradle, contains('signingConfigs.getByName("ironTest")'));
     expect(
       workflow,
-      contains('flutter build apk --debug --target-platform android-arm64'),
+      contains('flutter build apk --release --target-platform android-arm64'),
     );
     expect(
       workflow,
-      contains('build/app/outputs/flutter-apk/app-debug.apk'),
+      contains('build/app/outputs/flutter-apk/app-release.apk'),
     );
   });
 }
