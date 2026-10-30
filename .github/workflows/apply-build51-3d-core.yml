@@ -1,0 +1,44 @@
+name: Apply Build51 3D Core
+
+on:
+  push:
+    branches:
+      - agent/build51-3d-core-preview
+    paths:
+      - scripts/apply_3d_cannabis_core.py
+      - .github/workflows/apply-build51-3d-core.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-core:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout build51 preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/build51-3d-core-preview
+          fetch-depth: 0
+
+      - name: Apply 3D cannabis core
+        run: python3 scripts/apply_3d_cannabis_core.py
+
+      - name: Commit preview UI
+        shell: bash
+        run: |
+          if git diff --quiet -- lib/ui/common_widgets.dart; then
+            echo "No UI change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/ui/common_widgets.dart
+          git diff --cached --check
+          git commit -m "Add 3D core to build51 Hey Iron app"
+          git push origin HEAD:agent/build51-3d-core-preview
+
+# trigger: build51-correct-base
