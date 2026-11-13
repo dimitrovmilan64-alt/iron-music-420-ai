@@ -21,6 +21,13 @@ if [[ ! -s "${AAR_DEST}" ]]; then
   mv "${AAR_DEST}.download" "${AAR_DEST}"
 fi
 
+SERVICE_FILE="${ROOT_DIR}/android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt"
+if [[ -f "${SERVICE_FILE}" ]] && ! grep -q 'const val SERVICE_ENABLED = true' "${SERVICE_FILE}"; then
+  echo "Hey Iron is disabled (SERVICE_ENABLED=false); skipping keyword model download to keep the APK small."
+  echo "The sherpa-onnx AAR is kept for compilation only; native libs are stripped from the APK."
+  exit 0
+fi
+
 required_model_files=(
   "encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx"
   "decoder-epoch-13-avg-2-chunk-16-left-64.onnx"

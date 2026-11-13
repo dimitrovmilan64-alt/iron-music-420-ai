@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/automation_models.dart';
@@ -11,6 +12,7 @@ import 'ai_provider_config.dart';
 class LocalStore extends ChangeNotifier {
   static const _apiKeyKey = 'gemini_api_key';
   static const _backupApiKeyKey = 'backup_api_key';
+  static const _apiKeyPromptDismissedKey = 'api_key_prompt_dismissed_v35';
   static const _backupBaseUrlKey = 'backup_base_url';
   static const _backupModelKey = 'backup_model';
   static const _voiceRepliesKey = 'voice_replies_enabled';
@@ -28,8 +30,13 @@ class LocalStore extends ChangeNotifier {
   static const _automationHistoryKey = 'automation_history_v251';
 
   late SharedPreferences _preferences;
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
   String _apiKey = '';
   String _backupApiKey = '';
+  bool _apiKeyPromptDismissed = false;
   String _backupBaseUrl = AiProviderConfig.defaultBackupBaseUrl;
   String _backupModel = AiProviderConfig.defaultBackupModel;
   bool _voiceRepliesEnabled = true;
@@ -53,8 +60,16 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> initialize() async {
     _preferences = await SharedPreferences.getInstance();
-    _apiKey = _preferences.getString(_apiKeyKey) ?? '';
-    _backupApiKey = _preferences.getString(_backupApiKeyKey) ?? '';
+    _apiKeyPromptDismissed =
+        _preferences.getBool(_apiKeyPromptDismissedKey) ?? false;
+    _apiKey = await _readSecret(
+      secureKey: _apiKeyKey,
+      legacyPrefsKey: _apiKeyKey,
+    );
+    _backupApiKey = await _readSecret(
+      secureKey: _backupApiKeyKey,
+      legacyPrefsKey: _backupApiKeyKey,
+    );
     _backupBaseUrl = AiProviderConfig.normalizeBaseUrl(
       _preferences.getString(_backupBaseUrlKey) ??
           AiProviderConfig.defaultBackupBaseUrl,
@@ -164,6 +179,9 @@ class LocalStore extends ChangeNotifier {
   String get apiKey => _apiKey;
   bool get hasApiKey => _apiKey.trim().isNotEmpty;
   String get backupApiKey => _backupApiKey;
+  bool get apiKeyPromptDismissed => _apiKeyPromptDismissed;
+  bool get shouldPromptForApiKey =>
+      !hasAnyAiProvider && !_apiKeyPromptDismissed;
   String get backupBaseUrl => _backupBaseUrl;
   String get backupModel => _backupModel;
   bool get hasBackupProvider => _backupApiKey.trim().isNotEmpty;
@@ -200,11 +218,13 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> setApiKey(String value) async {
     _apiKey = value.trim();
-    if (_apiKey.isEmpty) {
-      await _preferences.remove(_apiKeyKey);
-    } else {
-      await _preferences.setString(_apiKeyKey, _apiKey);
-    }
+    await _writeSecret(_apiKeyKey, _apiKey);
+    notifyListeners();
+  }
+
+  Future<void> dismissApiKeyPrompt() async {
+    _apiKeyPromptDismissed = true;
+    await _preferences.setBool(_apiKeyPromptDismissedKey, true);
     notifyListeners();
   }
 
@@ -220,10 +240,7 @@ class LocalStore extends ChangeNotifier {
         : model.trim();
 
     await Future.wait([
-      if (_backupApiKey.isEmpty)
-        _preferences.remove(_backupApiKeyKey)
-      else
-        _preferences.setString(_backupApiKeyKey, _backupApiKey),
+      _writeSecret(_backupApiKeyKey, _backupApiKey),
       _preferences.setString(_backupBaseUrlKey, _backupBaseUrl),
       _preferences.setString(_backupModelKey, _backupModel),
     ]);
@@ -505,5 +522,44 @@ class LocalStore extends ChangeNotifier {
       _automationHistory.map((item) => item.toJson()).toList(),
     );
     await _preferences.setString(_automationHistoryKey, encoded);
+  }
+
+  Future<String> _readSecret({
+    required String secureKey,
+    required String legacyPrefsKey,
+  }) async {
+    try {
+      final stored = await _secureStorage.read(key: secureKey);
+      if (stored != null && stored.isNotEmpty) {
+        if (_preferences.containsKey(legacyPrefsKey)) {
+          await _preferences.remove(legacyPrefsKey);
+        }
+        return stored;
+      }
+    } catch (_) {
+      // Fall back to a one-time migration from plaintext preferences.
+    }
+
+    final legacy = _preferences.getString(legacyPrefsKey) ?? '';
+    if (legacy.isEmpty) return '';
+
+    await _writeSecret(secureKey, legacy);
+    await _preferences.remove(legacyPrefsKey);
+    return legacy;
+  }
+
+  Future<void> _writeSecret(String key, String value) async {
+    try {
+      if (value.isEmpty) {
+        await _secureStorage.delete(key: key);
+      } else {
+        await _secureStorage.write(key: key, value: value);
+      }
+    } catch (_) {
+      // Keys still live in memory for this session if secure storage fails.
+    }
+    if (_preferences.containsKey(key)) {
+      await _preferences.remove(key);
+    }
   }
 }
