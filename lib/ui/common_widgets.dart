@@ -538,7 +538,7 @@ class CannabisCore extends StatelessWidget {
               width: size,
               height: size,
               fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
+              filterQuality: FilterQuality.medium,
               errorBuilder: (context, error, stackTrace) => CustomPaint(
                 size: Size.square(size),
                 painter: _HudCorePainter(progress: progress),
