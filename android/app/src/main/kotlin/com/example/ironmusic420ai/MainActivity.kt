@@ -1,6 +1,7 @@
 package com.example.ironmusic420ai
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -631,12 +632,36 @@ class MainActivity : FlutterActivity() {
         restoreIronVoiceIfEnabled()
     }
 
+    private fun isIronVoiceServiceAvailable(): Boolean {
+        if (!IronVoiceService.SERVICE_ENABLED) return false
+        return try {
+            packageManager.getServiceInfo(
+                ComponentName(this, IronVoiceService::class.java),
+                0,
+            )
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        }
+    }
+
+    private fun rejectIronVoiceIfUnavailable(result: MethodChannel.Result): Boolean {
+        if (isIronVoiceServiceAvailable()) return false
+        result.error(
+            "IRON_VOICE_DISABLED",
+            "„Hey Iron“ е временно изключен",
+            null,
+        )
+        return true
+    }
+
     private fun restoreIronVoiceIfEnabled() {
+        if (!isIronVoiceServiceAvailable()) return
         if (IronVoiceService.isRunning) return
         val enabled = getSharedPreferences(
             IronVoiceService.VOICE_PREFS,
             Context.MODE_PRIVATE,
-        ).getBoolean(IronVoiceService.KEY_VOICE_ENABLED, true)
+        ).getBoolean(IronVoiceService.KEY_VOICE_ENABLED, false)
         if (!enabled) return
         if (
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
@@ -824,11 +849,13 @@ class MainActivity : FlutterActivity() {
                         .edit()
                         .putBoolean(IronVoiceService.KEY_VOICE_ENABLED, false)
                         .apply()
-                    stopService(
-                        Intent(this, IronVoiceService::class.java).apply {
-                            this.action = IronVoiceService.ACTION_STOP
-                        }
-                    )
+                    if (isIronVoiceServiceAvailable()) {
+                        stopService(
+                            Intent(this, IronVoiceService::class.java).apply {
+                                this.action = IronVoiceService.ACTION_STOP
+                            }
+                        )
+                    }
                     result.success("Iron е спрян.")
                 }
                 "open_automate" -> openPackageOrUrl(
@@ -863,6 +890,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startIronVoice(result: MethodChannel.Result) {
+        if (rejectIronVoiceIfUnavailable(result)) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             result.error(
                 "SPEECH_RECOGNIZER_UNAVAILABLE",
@@ -899,17 +927,26 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun launchIronVoiceService(result: MethodChannel.Result) {
-        getSharedPreferences(IronVoiceService.VOICE_PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(IronVoiceService.KEY_VOICE_ENABLED, true)
-            .apply()
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, IronVoiceService::class.java).apply {
-                action = IronVoiceService.ACTION_START
-            }
-        )
-        result.success("Iron е активен офлайн. Кажи „Hey Iron“.")
+        if (rejectIronVoiceIfUnavailable(result)) return
+        try {
+            getSharedPreferences(IronVoiceService.VOICE_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(IronVoiceService.KEY_VOICE_ENABLED, true)
+                .apply()
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, IronVoiceService::class.java).apply {
+                    action = IronVoiceService.ACTION_START
+                }
+            )
+            result.success("Iron е активен офлайн. Кажи „Hey Iron“.")
+        } catch (error: Exception) {
+            result.error(
+                "IRON_VOICE_ERROR",
+                error.localizedMessage ?: "Iron не можа да стартира.",
+                null,
+            )
+        }
     }
 
     private fun sendAutomationCommand(

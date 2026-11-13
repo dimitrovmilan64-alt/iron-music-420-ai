@@ -45,9 +45,16 @@ jobs:
 
       - name: Prepare signing key
         shell: bash
+        env:
+          IRON_KEYSTORE_B64: ${{ secrets.IRON_KEYSTORE_B64 }}
         run: |
-          if [ -f android/app/iron-test-key.jks.b64 ]; then
-            base64 --decode android/app/iron-test-key.jks.b64 > android/app/iron-test-key.jks
+          if [ -n "${IRON_KEYSTORE_B64:-}" ]; then
+            mkdir -p android/app
+            printf '%s' "$IRON_KEYSTORE_B64" | base64 --decode > android/app/iron-release.jks
+            echo "IRON_KEYSTORE_PATH=${GITHUB_WORKSPACE}/android/app/iron-release.jks" >> "$GITHUB_ENV"
+            echo "Release keystore decoded from IRON_KEYSTORE_B64."
+          else
+            echo "IRON_KEYSTORE_B64 secret is not set; the release APK will use debug signing."
           fi
 
       - name: Prepare offline Hey Iron engine
@@ -87,13 +94,18 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos || true
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
-        run: flutter test || true
+        run: flutter test
 
       - name: Build release APK
         shell: bash
+        env:
+          IRON_KEYSTORE_PATH: ${{ env.IRON_KEYSTORE_PATH }}
+          IRON_KEYSTORE_PASSWORD: ${{ secrets.IRON_KEYSTORE_PASSWORD }}
+          IRON_KEY_ALIAS: ${{ secrets.IRON_KEY_ALIAS }}
+          IRON_KEY_PASSWORD: ${{ secrets.IRON_KEY_PASSWORD }}
         run: |
           # Force again right before build
           cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'

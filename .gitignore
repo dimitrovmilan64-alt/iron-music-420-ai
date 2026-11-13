@@ -55,7 +55,9 @@ unlinked_spec.ds
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/key.properties
+key.properties
 *.jks
+*.jks.b64
 
 # Downloaded sherpa-onnx runtime and wake-word model
 android/app/libs/sherpa-onnx-*.aar

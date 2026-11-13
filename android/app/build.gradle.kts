@@ -1,8 +1,38 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun signingValue(envName: String, propertyName: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = signingValue("IRON_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = signingValue("IRON_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingValue("IRON_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingValue("IRON_KEY_PASSWORD", "keyPassword")
+val releaseStoreFile = releaseStorePath?.let { path ->
+    val asWritten = file(path)
+    when {
+        asWritten.exists() -> asWritten
+        else -> rootProject.file(path)
+    }
+}
+val hasReleaseSigning =
+    releaseStoreFile != null &&
+        releaseStoreFile.exists() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.example.ironmusic420ai"
@@ -19,11 +49,13 @@ android {
     }
 
     signingConfigs {
-        create("ironTest") {
-            storeFile = file("iron-test-key.jks")
-            storePassword = "iron420test"
-            keyAlias = "iron-test"
-            keyPassword = "iron420test"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -41,10 +73,14 @@ android {
 
     buildTypes {
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("ironTest")
+            // Uses the default Android debug keystore.
         }
         getByName("release") {
-            signingConfig = signingConfigs.getByName("ironTest")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
