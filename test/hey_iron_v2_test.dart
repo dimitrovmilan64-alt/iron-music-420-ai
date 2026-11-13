@@ -19,6 +19,9 @@ void main() {
     final flags = File('lib/services/iron_voice_flags.dart').readAsStringSync();
     final controller = File('lib/services/hey_iron_controller.dart').readAsStringSync();
     final watchdog = File('lib/services/hey_iron_watchdog.dart').readAsStringSync();
+    final bridge = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/HeyIronBridge.kt',
+    ).readAsStringSync();
 
     expect(old, contains('const val SERVICE_ENABLED = false'));
     expect(flags, contains('const bool ironVoiceServiceEnabled = false'));
@@ -37,5 +40,11 @@ void main() {
     expect(controller, contains('downloadModel'));
     expect(watchdog, contains('maxFailures = 3'));
     expect(File('assets/hey_iron/keywords.txt').readAsStringSync(), contains('HEY_IRON_BG'));
+    expect(bridge, contains('fun resolvedArchiveFile'));
+    expect(bridge, contains('canonicalFile'));
+    expect(bridge, contains('parts.any { it == ".." }'));
+    expect(bridge, contains('normalized.startsWith("/")'));
+    expect(bridge, contains('throw SecurityException'));
+    expect(bridge, isNot(contains('val name = File(entry.name).name')));
   });
 }
