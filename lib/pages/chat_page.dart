@@ -171,14 +171,26 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _toggleIronMode() async {
     if (_voiceToggleBusy) return;
     setState(() => _voiceToggleBusy = true);
+    final turningOn = !_ironActive;
     final result = await _automation.execute(
-      _ironActive ? 'iron_voice_off' : 'iron_voice_on',
+      turningOn ? 'iron_voice_on' : 'iron_voice_off',
     );
     if (!mounted) return;
     setState(() {
       _voiceToggleBusy = false;
-      if (result.success) _ironActive = !_ironActive;
+      if (result.success) {
+        _ironActive = turningOn;
+      } else if (turningOn) {
+        _ironActive = false;
+      }
     });
+    if (!result.success && turningOn) {
+      final message = result.message.trim().isEmpty
+          ? '„Hey Iron“ е временно изключен'
+          : result.message.trim();
+      _showMessage(message);
+      return;
+    }
     _showMessage(result.message);
   }
 

@@ -49,6 +49,10 @@ class IronVoiceService : Service(), RecognitionListener, TextToSpeech.OnInitList
         const val ACTION_RESUME_WAKE = "com.example.ironmusic420ai.RESUME_IRON_WAKE"
         const val VOICE_PREFS = "iron_voice_preferences"
         const val KEY_VOICE_ENABLED = "voice_enabled"
+        // Temporarily false: the <service> is commented out of AndroidManifest.xml
+        // because it froze the system on launch. Set to true and uncomment the
+        // manifest entry when re-enabling Hey Iron.
+        const val SERVICE_ENABLED = false
 
         @Volatile
         var isRunning = false
