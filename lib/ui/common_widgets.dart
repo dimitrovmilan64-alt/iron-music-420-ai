@@ -190,42 +190,25 @@ class IronCard extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
-          if (bright)
-            BoxShadow(
-              color: ironGreen.withValues(alpha: 0.08),
-              blurRadius: 10,
-            ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: radius,
+      child: Material(
+        color: bright ? const Color(0xFF102016) : ironSurfaceHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: ironBorderSide(accent: true, strong: bright),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: CustomPaint(
           foregroundPainter: _PanelAccentPainter(
             color: bright ? ironGreenSoft : ironGreen,
           ),
-          child: Container(
+          child: Padding(
             padding: padding,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  bright
-                      ? const Color(0xFF0A2814).withOpacity(0.98)
-                      : ironPanelRaised.withOpacity(0.96),
-                  ironPanel.withOpacity(0.97),
-                  const Color(0xFF010A05).withOpacity(0.98),
-                ],
-              ),
-              border: Border.all(
-                color: ironGreen.withOpacity(bright ? 0.62 : 0.34),
-              ),
-            ),
             child: child,
           ),
         ),
@@ -448,11 +431,12 @@ class NeonPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: active
-            ? ironGreen.withOpacity(0.15)
-            : Colors.black.withOpacity(0.28),
+            ? ironGreen.withValues(alpha: 0.14)
+            : ironSurface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: ironGreen.withOpacity(active ? 0.7 : 0.28),
+          width: 1,
+          color: ironGreen.withValues(alpha: active ? 0.75 : 0.38),
         ),
       ),
       child: Row(

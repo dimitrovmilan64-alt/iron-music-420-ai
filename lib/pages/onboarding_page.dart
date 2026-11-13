@@ -94,6 +94,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             decoration: BoxDecoration(
                               color: ironGreen.withValues(alpha: 0.12),
                               shape: BoxShape.circle,
+                              border: Border.all(color: ironOutline, width: 1),
                             ),
                             child: Icon(page.icon, color: ironGreen, size: 40),
                           ),
@@ -127,8 +128,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     decoration: BoxDecoration(
                       color: selected
                           ? ironGreen
-                          : Colors.white.withValues(alpha: 0.18),
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        width: 1,
+                        color: selected ? ironGreen : ironOutlineMuted,
+                      ),
                     ),
                   );
                 }),

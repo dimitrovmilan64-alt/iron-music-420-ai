@@ -207,7 +207,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0B0F0C),
+          border: Border(
+            top: BorderSide(color: ironOutline, width: 1),
+          ),
+        ),
+        child: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: _selectTab,
         destinations: const [
@@ -232,6 +239,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             label: 'Настройки',
           ),
         ],
+      ),
       ),
     );
   }

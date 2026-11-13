@@ -4,10 +4,53 @@ const ironGreen = Color(0xFF00FF66);
 const ironGreenSoft = Color(0xFF4DFF8A);
 const ironGreenDeep = Color(0xFF00A852);
 const ironDark = Color(0xFF070A08);
-const ironSurface = Color(0xFF101612);
-const ironSurfaceHigh = Color(0xFF171E19);
-const ironLine = Color(0xFF1C3A28);
+const ironSurface = Color(0xFF0E1511);
+const ironSurfaceHigh = Color(0xFF161E19);
+const ironLine = Color(0xFF2A4A36);
 const ironMuted = Color(0xFF9AA59D);
+const ironGraphite = Color(0xFF161A1C);
+const ironUserFill = Color(0xFF0F2A1A);
+const ironOutline = Color(0x5900FF66);
+const ironOutlineStrong = Color(0x9900FF66);
+const ironOutlineMuted = Color(0x33FFFFFF);
+
+BorderSide ironBorderSide({bool accent = false, bool strong = false}) {
+  final color = strong
+      ? ironOutlineStrong
+      : accent
+          ? ironOutline
+          : ironOutlineMuted;
+  return BorderSide(color: color, width: 1);
+}
+
+Border ironBorder({bool accent = false, bool strong = false}) {
+  return Border.fromBorderSide(ironBorderSide(accent: accent, strong: strong));
+}
+
+List<BoxShadow> ironFocusGlow(bool focused) {
+  if (!focused) return const <BoxShadow>[];
+  return const [
+    BoxShadow(
+      color: Color(0x3300FF66),
+      blurRadius: 12,
+      spreadRadius: 0,
+    ),
+  ];
+}
+
+BoxDecoration ironPanelDecoration({
+  BorderRadius? radius,
+  bool raised = false,
+  bool accent = false,
+  bool focused = false,
+}) {
+  return BoxDecoration(
+    color: raised ? ironSurfaceHigh : ironSurface,
+    borderRadius: radius ?? BorderRadius.circular(IronRadii.md),
+    border: ironBorder(accent: accent || focused, strong: focused),
+    boxShadow: ironFocusGlow(focused),
+  );
+}
 
 class IronSpacing {
   static const double xs = 6;
@@ -111,13 +154,18 @@ ThemeData ironTheme() {
       elevation: 0,
       titleTextStyle: textTheme.titleLarge,
     ),
-    dividerColor: Colors.white.withValues(alpha: 0.08),
+    dividerColor: ironLine,
+    dividerTheme: const DividerThemeData(
+      color: ironLine,
+      thickness: 1,
+      space: 24,
+    ),
     popupMenuTheme: PopupMenuThemeData(
       color: ironSurfaceHigh,
       textStyle: textTheme.bodyMedium,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IronRadii.md),
-        side: BorderSide(color: ironGreen.withValues(alpha: 0.18)),
+        side: const BorderSide(color: ironOutline, width: 1),
       ),
     ),
     dialogTheme: DialogThemeData(
@@ -126,6 +174,7 @@ ThemeData ironTheme() {
       contentTextStyle: textTheme.bodyMedium?.copyWith(color: ironMuted),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(IronRadii.lg),
+        side: const BorderSide(color: ironOutline, width: 1),
       ),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
@@ -180,18 +229,32 @@ ThemeData ironTheme() {
       hintStyle: textTheme.bodyMedium?.copyWith(color: Colors.white38),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(17),
-        borderSide: BorderSide(color: ironGreen.withValues(alpha: 0.22)),
+        borderSide: const BorderSide(color: ironOutline, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(color: ironGreen, width: 1.5),
+        borderSide: const BorderSide(color: ironOutlineStrong, width: 1),
       ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: ironSurface,
+      selectedColor: ironGreen.withValues(alpha: 0.16),
+      side: const BorderSide(color: ironOutline, width: 1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(IronRadii.pill),
+      ),
+      labelStyle: textTheme.labelMedium?.copyWith(color: Colors.white),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: const Color(0xFF0B0F0C),
       elevation: 0,
       height: 72,
-      indicatorColor: ironGreen.withValues(alpha: 0.16),
+      indicatorColor: ironGreen.withValues(alpha: 0.12),
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: ironOutlineStrong, width: 1),
+      ),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(color: selected ? ironGreen : ironMuted, size: 24);

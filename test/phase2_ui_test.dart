@@ -46,7 +46,7 @@ Future<void> _saveShot(WidgetTester tester, String name) async {
     );
     final image = await boundary.toImage(pixelRatio: 2.6);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final preferred = Directory('/workspace/iron-shots');
+    final preferred = Directory('/workspace/iron-shots/v2');
     late final Directory dir;
     try {
       preferred.createSync(recursive: true);

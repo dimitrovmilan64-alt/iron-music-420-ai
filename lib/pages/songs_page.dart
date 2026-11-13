@@ -536,7 +536,7 @@ class _SongProjectCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.22),
                 borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: ironGreen.withOpacity(0.12)),
+                border: const Border.fromBorderSide(BorderSide(color: ironOutline, width: 1)),
               ),
               child: Text(
                 preview,

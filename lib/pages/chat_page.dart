@@ -36,6 +36,7 @@ class _ChatPageState extends State<ChatPage>
       'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.';
 
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _composerFocus = FocusNode();
   late final TextEditingController _apiKeyController;
   late final TextEditingController _backupApiKeyController;
   late final TextEditingController _backupBaseUrlController;
@@ -63,6 +64,9 @@ class _ChatPageState extends State<ChatPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _composerFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     widget.store.addListener(_handleStoreChange);
     _coreController = AnimationController(
       vsync: this,
@@ -119,6 +123,7 @@ class _ChatPageState extends State<ChatPage>
     _automation.setNativeSpeechPartialListener(null);
     _automation.cancelNativeSpeechRecognition();
     _gemini.dispose();
+    _composerFocus.dispose();
     _messageController.dispose();
     _apiKeyController.dispose();
     _backupApiKeyController.dispose();
@@ -1047,19 +1052,14 @@ class _ChatPageState extends State<ChatPage>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
-                  ? ironGreen.withOpacity(0.16)
-                  : Colors.black.withOpacity(0.28),
+                  ? ironGreen.withValues(alpha: 0.14)
+                  : ironSurfaceHigh,
               border: Border.all(
-                color: ironGreen.withOpacity(active ? 0.68 : 0.25),
+                width: 1,
+                color: active
+                    ? ironOutlineStrong
+                    : ironOutlineMuted,
               ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: ironGreen.withOpacity(0.16),
-                        blurRadius: 16,
-                      ),
-                    ]
-                  : null,
             ),
             child: Icon(
               icon,
@@ -1281,7 +1281,13 @@ class _ChatPageState extends State<ChatPage>
               decoration: BoxDecoration(
                 color: ironSurfaceHigh,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: ironGreen.withValues(alpha: 0.22)),
+                border: Border.all(
+                  width: 1,
+                  color: _composerFocus.hasFocus
+                      ? ironOutlineStrong
+                      : ironOutline,
+                ),
+                boxShadow: ironFocusGlow(_composerFocus.hasFocus),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
@@ -1290,6 +1296,7 @@ class _ChatPageState extends State<ChatPage>
                   children: [
                     Expanded(
                       child: TextField(
+                        focusNode: _composerFocus,
                         controller: _messageController,
                         minLines: 1,
                         maxLines: 4,
@@ -1422,11 +1429,18 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final alignment =
         message.isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final color = message.isUser
-        ? ironGreen.withValues(alpha: 0.16)
-        : message.isLocalNotice
-            ? const Color(0x33FFB74D)
-            : ironSurfaceHigh;
+    final Color fill;
+    final Color outline;
+    if (message.isUser) {
+      fill = ironUserFill;
+      outline = ironOutlineStrong;
+    } else if (message.isLocalNotice) {
+      fill = ironGraphite;
+      outline = ironOutline;
+    } else {
+      fill = ironGraphite;
+      outline = const Color(0x6600FF66);
+    }
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(18),
       topRight: const Radius.circular(18),
@@ -1443,8 +1457,9 @@ class _ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.sizeOf(context).width * 0.82,
         ),
         decoration: BoxDecoration(
-          color: color,
+          color: fill,
           borderRadius: radius,
+          border: Border.all(color: outline, width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
