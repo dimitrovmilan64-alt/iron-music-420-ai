@@ -6,6 +6,7 @@ import 'pages/rap_studio_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/songs_page.dart';
 import 'services/automation_service.dart';
+import 'services/hey_iron_controller.dart';
 import 'services/local_store.dart';
 import 'theme/iron_theme.dart';
 import 'ui/common_widgets.dart';
@@ -50,13 +51,16 @@ Future<void> main() async {
 
   final store = LocalStore();
   await store.initialize();
-  runApp(IronMusic420App(store: store));
+  final heyIron = HeyIronController();
+  await heyIron.initialize();
+  runApp(IronMusic420App(store: store, heyIron: heyIron));
 }
 
 class IronMusic420App extends StatelessWidget {
   final LocalStore store;
+  final HeyIronController? heyIron;
 
-  const IronMusic420App({super.key, required this.store});
+  const IronMusic420App({super.key, required this.store, this.heyIron});
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +81,7 @@ class IronMusic420App extends StatelessWidget {
             );
           },
           home: store.onboardingComplete
-              ? MainScreen(store: store)
+              ? MainScreen(store: store, heyIron: heyIron)
               : OnboardingPage(store: store),
         );
       },
@@ -87,8 +91,9 @@ class IronMusic420App extends StatelessWidget {
 
 class MainScreen extends StatefulWidget {
   final LocalStore store;
+  final HeyIronController? heyIron;
 
-  const MainScreen({super.key, required this.store});
+  const MainScreen({super.key, required this.store, this.heyIron});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -105,6 +110,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _automation.setPendingRequestListener(_openPendingSection);
+    widget.heyIron?.addListener(_onHeyIron);
     _rebuildPages();
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
   }
@@ -112,6 +118,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.heyIron?.removeListener(_onHeyIron);
     _automation.setPendingRequestListener(null);
     super.dispose();
   }
@@ -120,6 +127,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _openPendingSection();
+      widget.heyIron?.handleAppResumed();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      if (state == AppLifecycleState.paused) {
+        widget.heyIron?.handleAppPaused();
+      }
+    }
+  }
+
+  DateTime? _handledWakeAt;
+
+  void _onHeyIron() {
+    final wake = widget.heyIron?.lastWakeAt;
+    if (wake != null && wake != _handledWakeAt) {
+      _handledWakeAt = wake;
+      if (_currentIndex != 0) _selectTab(0);
     }
   }
 
@@ -186,6 +210,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ChatPage(
         store: widget.store,
         isActive: _currentIndex == 0,
+        heyIron: widget.heyIron,
         onOpenTools: () => _openSection(4),
         onOpenSettings: () => _selectTab(3),
         onSendToStudio: (text) async {
@@ -197,6 +222,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
       SettingsPage(
         store: widget.store,
+        heyIron: widget.heyIron,
         onOpenChat: () => _selectTab(0),
       ),
     ];

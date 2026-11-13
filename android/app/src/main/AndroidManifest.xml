@@ -44,6 +44,11 @@
             android:stopWithTask="false" />
         -->
         <service
+            android:name=".HeyIronForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="true" />
+        <service
             android:name=".YoutubeAutoPlayAccessibilityService"
             android:exported="true"
             android:label="@string/youtube_autoplay_accessibility_label"
