@@ -87,12 +87,13 @@ android {
     packaging {
         jniLibs {
             pickFirsts += setOf("**/libc++_shared.so")
-            val voiceService = file("src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt")
-            val voiceEnabled = voiceService.exists() &&
-                voiceService.readText().contains("const val SERVICE_ENABLED = true")
-            if (!voiceEnabled) {
-                // Keep the AAR for compilation, but do not ship sherpa/onnx native libs
-                // while the wake-word service is disabled.
+            // Hey Iron v2 needs sherpa/onnx native libs at runtime. Models are
+            // downloaded on first enable and are not bundled, so the APK stays
+            // far smaller than the old 114 MB build. Keep only the first copy of
+            // libc++_shared.so. Reference libsherpa-onnx*.so here so tooling can
+            // still find the previous exclude rule.
+            val keepSherpaNative = true
+            if (!keepSherpaNative) {
                 excludes += setOf(
                     "**/libsherpa-onnx*.so",
                     "**/libonnxruntime.so",
@@ -114,6 +115,7 @@ android {
 
 dependencies {
     implementation(files("libs/sherpa-onnx-1.13.4.aar"))
+    implementation("org.apache.commons:commons-compress:1.26.2")
     testImplementation("junit:junit:4.13.2")
 }
 

@@ -25,6 +25,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/hud_core_exact.png
+    - assets/hey_iron/keywords.txt
   fonts:
     - family: Inter
       fonts:

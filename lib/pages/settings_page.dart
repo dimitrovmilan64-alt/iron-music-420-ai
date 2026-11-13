@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/ai_provider_config.dart';
+import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
@@ -8,11 +9,13 @@ import 'commands_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final LocalStore store;
+  final HeyIronController? heyIron;
   final VoidCallback? onOpenChat;
 
   const SettingsPage({
     super.key,
     required this.store,
+    this.heyIron,
     this.onOpenChat,
   });
 
@@ -173,12 +176,83 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: (value) => store.setVoiceRepliesEnabled(value),
                 ),
                 const Divider(color: Colors.white12),
-                Text(
-                  ironVoiceServiceEnabled
-                      ? 'Фоновото „Хей Айрън“ може да се включи от чата.'
-                      : ironVoiceDisabledMessage,
-                  style: const TextStyle(color: Colors.white70, height: 1.35),
-                ),
+                if (widget.heyIron != null)
+                  AnimatedBuilder(
+                    animation: widget.heyIron!,
+                    builder: (context, _) {
+                      final hey = widget.heyIron!;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Хей Айрън',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${hey.statusLabel}. При първо включване се изтегля офлайн модел от около ${HeyIronController.formatSize(HeyIronController.modelBytes)}. Слушането е само докато приложението е отворено.',
+                              style: const TextStyle(color: Colors.white60, height: 1.35),
+                            ),
+                            value: hey.enabled,
+                            activeColor: ironGreen,
+                            onChanged: hey.phase == HeyIronPhase.downloading
+                                ? null
+                                : (value) => hey.setEnabled(value),
+                          ),
+                          if (hey.phase == HeyIronPhase.downloading)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: LinearProgressIndicator(
+                                value: hey.downloadProgress == 0
+                                    ? null
+                                    : hey.downloadProgress,
+                                color: ironGreen,
+                                backgroundColor: ironLine,
+                              ),
+                            ),
+                          Text(
+                            hey.message,
+                            style: const TextStyle(color: Colors.white70, height: 1.35),
+                          ),
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Слушай и на заден план',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: const Text(
+                              'Експериментално. Може да натовари слаби телефони. Изключено е по подразбиране.',
+                              style: TextStyle(color: Colors.white60, height: 1.35),
+                            ),
+                            value: hey.backgroundExperimental,
+                            activeColor: ironGreen,
+                            onChanged: hey.enabled
+                                ? (value) => hey.setBackgroundExperimental(value)
+                                : null,
+                          ),
+                          if (hey.phase == HeyIronPhase.blocked)
+                            TextButton(
+                              onPressed: hey.resetWatchdog,
+                              child: const Text('Нулирай защитата и пробвай пак'),
+                            ),
+                        ],
+                      );
+                    },
+                  )
+                else
+                  Text(
+                    ironVoiceServiceEnabled
+                        ? 'Фоновото „Хей Айрън“ може да се включи от чата.'
+                        : ironVoiceDisabledMessage,
+                    style: const TextStyle(color: Colors.white70, height: 1.35),
+                  ),
                 if (widget.onOpenChat != null) ...[
                   const SizedBox(height: 8),
                   Align(
