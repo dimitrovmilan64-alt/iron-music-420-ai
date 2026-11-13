@@ -6,6 +6,7 @@ import '../models/chat_message.dart';
 import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
+import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
@@ -13,6 +14,7 @@ import '../ui/common_widgets.dart';
 class ChatPage extends StatefulWidget {
   final LocalStore store;
   final bool isActive;
+  final HeyIronController? heyIron;
   final VoidCallback? onOpenTools;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(String text)? onSendToStudio;
@@ -21,6 +23,7 @@ class ChatPage extends StatefulWidget {
     super.key,
     required this.store,
     this.isActive = true,
+    this.heyIron,
     this.onOpenTools,
     this.onOpenSettings,
     this.onSendToStudio,
@@ -49,6 +52,7 @@ class _ChatPageState extends State<ChatPage>
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
+  DateTime? _handledWakeAt;
   bool _isListening = false;
   bool _ironActive = false;
   bool _voiceToggleBusy = false;
@@ -108,6 +112,12 @@ class _ChatPageState extends State<ChatPage>
         );
       });
     });
+    widget.heyIron?.onWakeWord = () {
+      if (!mounted) return;
+      if (_currentListeningLocked()) return;
+      _toggleListening();
+    };
+    widget.heyIron?.addListener(_onHeyIronChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadIronStatus();
       _consumePendingChatVoiceRequest();
@@ -129,9 +139,24 @@ class _ChatPageState extends State<ChatPage>
     _backupApiKeyController.dispose();
     _backupBaseUrlController.dispose();
     _backupModelController.dispose();
+    widget.heyIron?.removeListener(_onHeyIronChanged);
+    if (widget.heyIron?.onWakeWord != null) {
+      widget.heyIron!.onWakeWord = null;
+    }
     _scrollController.dispose();
     super.dispose();
   }
+
+  void _onHeyIronChanged() {
+    final wake = widget.heyIron?.lastWakeAt;
+    if (wake != null && wake != _handledWakeAt && !_currentListeningLocked()) {
+      _handledWakeAt = wake;
+      _toggleListening();
+    }
+    if (mounted) setState(() {});
+  }
+
+  bool _currentListeningLocked() => _isListening || _isLoading;
 
   @override
   void didUpdateWidget(ChatPage oldWidget) {
@@ -558,6 +583,8 @@ class _ChatPageState extends State<ChatPage>
     await _flutterTts.stop();
     FocusManager.instance.primaryFocus?.unfocus();
     if (!mounted) return;
+    await widget.heyIron?.stopListening(clean: false);
+    if (!mounted) return;
 
     setState(() => _isListening = true);
     _syncCoreAnimation();
@@ -566,6 +593,9 @@ class _ChatPageState extends State<ChatPage>
 
     setState(() => _isListening = false);
     _syncCoreAnimation();
+    if (widget.heyIron?.enabled == true) {
+      await widget.heyIron!.startListening();
+    }
     if (!result.success) {
       if (result.message.trim().isNotEmpty) {
         _showMessage(result.message.trim());
@@ -1074,13 +1104,16 @@ class _ChatPageState extends State<ChatPage>
 
 
   Widget _buildStatusHeader() {
+    final hey = widget.heyIron;
     final status = _isListening
         ? 'Слушам…'
         : _isLoading
             ? 'Iron мисли…'
-            : ironVoiceServiceEnabled && _ironActive
-                ? 'Хей Айрън е активен'
-                : 'Готов за разговор';
+            : hey != null && hey.enabled
+                ? hey.statusLabel
+                : ironVoiceServiceEnabled && _ironActive
+                    ? 'Хей Айрън е активен'
+                    : 'Готов за разговор';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 6, 4),
       child: Row(
@@ -1126,18 +1159,28 @@ class _ChatPageState extends State<ChatPage>
             ),
           ),
           _roundAction(
-            icon: _ironActive
+            icon: (widget.heyIron?.enabled ?? _ironActive)
                 ? Icons.hearing_rounded
                 : Icons.hearing_disabled_rounded,
-            tooltip: !ironVoiceServiceEnabled
-                ? '„Hey Iron“ е временно изключен'
-                : _ironActive
+            tooltip: widget.heyIron != null
+                ? (widget.heyIron!.enabled
                     ? 'Изключи „Хей Айрън“'
-                    : 'Включи „Хей Айрън“',
-            active: _ironActive,
-            onPressed: (!ironVoiceServiceEnabled || !_voiceToggleBusy)
-                ? _toggleIronMode
-                : null,
+                    : 'Включи „Хей Айрън“')
+                : !ironVoiceServiceEnabled
+                    ? '„Hey Iron“ е временно изключен'
+                    : _ironActive
+                        ? 'Изключи „Хей Айрън“'
+                        : 'Включи „Хей Айрън“',
+            active: widget.heyIron?.enabled ?? _ironActive,
+            onPressed: widget.heyIron != null
+                ? () {
+                    final hey = widget.heyIron!;
+                    if (hey.phase == HeyIronPhase.downloading) return;
+                    hey.setEnabled(!hey.enabled);
+                  }
+                : (!ironVoiceServiceEnabled || !_voiceToggleBusy)
+                    ? _toggleIronMode
+                    : null,
           ),
           const SizedBox(width: 6),
           _roundAction(
