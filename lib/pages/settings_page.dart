@@ -5,6 +5,7 @@ import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
+import '../widgets/voice_settings_panel.dart';
 import 'commands_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -259,14 +260,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     alignment: Alignment.centerLeft,
                     child: TextButton(
                       onPressed: widget.onOpenChat,
-                      child: const Text('Отвори чата за настройки на гласа'),
+                      child: const Text('Отвори чата'),
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          VoiceSettingsPanel(store: store),
+          const SizedBox(height: 16),
           const Text(
             'Инструменти',
             style: TextStyle(
