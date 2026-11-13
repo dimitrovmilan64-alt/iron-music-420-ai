@@ -33,6 +33,36 @@ class HeyIronBridge(
             HH EY1 AY1 R AO0 N :6.5 #0.03 @HEY_IRON_BG_O
             HH EY1 AY1 R OW0 N :6.5 #0.03 @HEY_IRON_BG_OW
         """.trimIndent()
+
+        /**
+         * Resolves an archive entry into [dest], flattening to the basename so the
+         * model files land where [HeyIronEngine] expects them. Rejects absolute
+         * paths, `..` segments, and anything that would canonicalize outside [dest].
+         */
+        internal fun resolvedArchiveFile(dest: File, entryName: String): File? {
+            val targetDir = dest.canonicalFile
+            val normalized = entryName.replace('\', '/')
+            if (normalized.isEmpty() ||
+                normalized.startsWith("/") ||
+                Regex("^[A-Za-z]:").containsMatchIn(normalized)
+            ) {
+                return null
+            }
+            val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
+            if (parts.isEmpty() || parts.any { it == ".." }) {
+                return null
+            }
+            val prefix = targetDir.path + File.separator
+            val candidate = File(targetDir, parts.joinToString(File.separator)).canonicalFile
+            if (candidate.path != targetDir.path && !candidate.path.startsWith(prefix)) {
+                return null
+            }
+            val flattened = File(targetDir, parts.last()).canonicalFile
+            if (!flattened.path.startsWith(prefix)) {
+                return null
+            }
+            return flattened
+        }
     }
 
     private var methodChannel: MethodChannel? = null
@@ -193,12 +223,10 @@ class HeyIronBridge(
                         var entry = tar.nextEntry
                         while (entry != null) {
                             if (!entry.isDirectory) {
-                                val name = File(entry.name).name
-                                if (name.isNotEmpty()) {
-                                    val outFile = File(dest, name)
-                                    FileOutputStream(outFile).use { output ->
-                                        tar.copyTo(output)
-                                    }
+                                val outFile = resolvedArchiveFile(dest, entry.name)
+                                    ?: throw SecurityException("Rejected archive path: ${entry.name}")
+                                FileOutputStream(outFile).use { output ->
+                                    tar.copyTo(output)
                                 }
                             }
                             entry = tar.nextEntry
