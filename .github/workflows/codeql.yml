@@ -13,9 +13,9 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui" ]
+    branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui", "feat/voice-quality" ]
   pull_request:
-    branches: [ "main", "feat/phase1-stability" ]
+    branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui" ]
   schedule:
     - cron: '29 0 * * 3'
 
