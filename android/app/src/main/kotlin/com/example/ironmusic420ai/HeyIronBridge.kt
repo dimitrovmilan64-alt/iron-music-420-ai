@@ -41,7 +41,7 @@ class HeyIronBridge(
          */
         internal fun resolvedArchiveFile(dest: File, entryName: String): File? {
             val targetDir = dest.canonicalFile
-            val normalized = entryName.replace('\', '/')
+            val normalized = entryName.replace("\\", "/")
             if (normalized.isEmpty() ||
                 normalized.startsWith("/") ||
                 Regex("^[A-Za-z]:").containsMatchIn(normalized)
