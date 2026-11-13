@@ -27,7 +27,7 @@ jobs:
     #   - https://gh.io/supported-runners-and-hardware-resources
     #   - https://gh.io/using-larger-runners (GitHub.com only)
     # Consider using larger runners or machines with greater resources for possible analysis time improvements.
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       # required for all workflows
       security-events: write
@@ -45,10 +45,11 @@ jobs:
         include:
         - language: actions
           build-mode: none
+        # Kotlin is compiled through Flutter's Gradle build, so it needs a
+        # manual build (autobuild cannot find the Flutter SDK). There is no
+        # iOS/Swift code in this repository, so Swift is not analyzed.
         - language: java-kotlin
-          build-mode: autobuild
-        - language: swift
-          build-mode: autobuild
+          build-mode: manual
         # CodeQL supports the following values keywords for 'language': 'actions', 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'rust', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -66,6 +67,21 @@ jobs:
     # or others). This is typically only required for manual builds.
     # - name: Setup runtime (example)
     #   uses: actions/setup-example@v1
+
+    - name: Set up Java 17
+      if: matrix.build-mode == 'manual'
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Set up Flutter
+      if: matrix.build-mode == 'manual'
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version: '3.27.0'
+        cache: true
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -90,12 +106,11 @@ jobs:
       if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        echo 'If you are using a "manual" build mode for one or more of the' \
-          'languages you are analyzing, replace this with the commands to build' \
-          'your code, for example:'
-        echo '  make bootstrap'
-        echo '  make release'
-        exit 1
+        bash scripts/prepare_sherpa_kws.sh
+        # CodeQL must observe the Kotlin compiler, so run Gradle without a daemon.
+        echo "org.gradle.daemon=false" >> android/gradle.properties
+        flutter pub get
+        flutter build apk --debug --target-platform android-arm64 --android-skip-build-dependency-validation
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
