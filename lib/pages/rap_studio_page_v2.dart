@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/song_project.dart';
 import '../services/gemini_service.dart';
+import '../services/lyric_craft.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
 import '../utils/lyric_sections.dart';
@@ -60,7 +61,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
     'Спокойно и дълбоко',
   ];
 
-  List<TextEditingController> get _watchedControllers => <TextEditingController>[
+  List<TextEditingController> get _watchedControllers =>
+      <TextEditingController>[
         _titleController,
         _themeController,
         _draftController,
@@ -78,7 +80,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
     _themeController = TextEditingController(text: song?.theme ?? '');
     _draftController = TextEditingController(text: widget.store.rapDraft);
     _resultController = TextEditingController(text: widget.store.rapResult);
-    _musicPromptController = TextEditingController(text: song?.musicPrompt ?? '');
+    _musicPromptController =
+        TextEditingController(text: song?.musicPrompt ?? '');
     _excludeController = TextEditingController(text: song?.excludePrompt ?? '');
     _loadedRevision = widget.store.studioRevision;
 
@@ -126,9 +129,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
       _style = song != null && _styles.contains(song.style)
           ? song.style
           : _styles.first;
-      _mood = song != null && _moods.contains(song.mood)
-          ? song.mood
-          : _moods.first;
+      _mood =
+          song != null && _moods.contains(song.mood) ? song.mood : _moods.first;
       _bpm = song?.bpm.clamp(70, 190).toInt() ?? 140;
       _saveStatus = 'Запазено локално';
     });
@@ -141,7 +143,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
     final prompt = widget.store.pendingStudioPrompt.trim();
     if (prompt.isEmpty) return;
 
-    final outputType = widget.store.pendingStudioOutputType.trim().toLowerCase();
+    final outputType =
+        widget.store.pendingStudioOutputType.trim().toLowerCase();
     final autoGenerate = widget.store.pendingStudioAutoGenerate;
     widget.store.clearPendingStudioVoiceRequest();
 
@@ -370,8 +373,9 @@ class _RapStudioPageState extends State<RapStudioPage> {
                   text: 'Запази',
                   icon: Icons.save_outlined,
                   compact: true,
-                  onPressed:
-                      _isLoading || _currentLyrics.isEmpty ? null : _saveProject,
+                  onPressed: _isLoading || _currentLyrics.isEmpty
+                      ? null
+                      : _saveProject,
                 ),
               ),
             ],
@@ -406,7 +410,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
                   visualDensity: VisualDensity.compact,
                   side: const BorderSide(color: ironHairline),
                   backgroundColor: ironSurface,
-                  labelStyle: const TextStyle(fontSize: 12, color: Colors.white),
+                  labelStyle:
+                      const TextStyle(fontSize: 12, color: Colors.white),
                 ),
             ],
           ),
@@ -414,7 +419,8 @@ class _RapStudioPageState extends State<RapStudioPage> {
           ...[
             for (var i = 0; i < sections.length; i++)
               Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                data: Theme.of(context)
+                    .copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
                   initiallyExpanded: i == 0,
                   tilePadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -430,9 +436,7 @@ class _RapStudioPageState extends State<RapStudioPage> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: SelectableText(
-                        sections[i].body.isEmpty
-                            ? '—'
-                            : sections[i].body,
+                        sections[i].body.isEmpty ? '—' : sections[i].body,
                         style: const TextStyle(
                           color: Colors.white,
                           height: 1.45,
@@ -529,32 +533,31 @@ class _RapStudioPageState extends State<RapStudioPage> {
     }
 
     text = lines.join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
-    if (text.isNotEmpty && !RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(text)) {
+    if (text.isNotEmpty &&
+        !RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(text)) {
       text = '[Куплет 1]\n$text';
     }
     return text;
   }
 
   String _songInstruction() {
-    final seed = _contextSeed;
-    return '''
-Напиши завършена оригинална българска рап песен.
-Структура: [Интро], [Куплет 1], [Припев], [Куплет 2], [Бридж], [Финален припев], [Аутро].
-Стил: $_style.
-Настроение: $_mood.
-Темпо: $_bpm BPM.
-Вокал: нисък плътен естествен мъжки глас.
-Използвай конкретни образи и детайли от материала, естествен разговорен български, ясен flow и запомнящ се припев.
-Изгради римни поредици с вътрешни, многосрични, асонансни и неточни рими. Всеки ред трябва да движи историята или да носи удар.
-Без общи фрази, пълнеж, готови мотивационни лозунги, насилени окончания и изтъркани двойки като „мрак–прах“, „бетон–закон“, „болка–борба“, „върха–страха“ и „нощта–самота“.
-Не измисляй факти за живота на автора. Не копирай известна песен или конкретен изпълнител.
-Не поставяй музикални и вокални режисьорски указания в кръгли скоби. Върни само текста за пеене с квадратни секционни етикети.
-
-Заглавие: ${_titleController.text.trim().isEmpty ? 'измисли подходящо' : _titleController.text.trim()}
-Тема: ${_themeController.text.trim().isEmpty ? 'изведи темата от подадения текст' : _themeController.text.trim()}
-Материал от потребителя:
-${seed.isEmpty ? 'Няма готов текст. Създай песента от зададената тема и настройки.' : seed}
-''';
+    final language = LyricCraft.detectLanguage(
+      theme: _themeController.text,
+      material: _contextSeed,
+      title: _titleController.text,
+    );
+    return LyricCraft.buildSongInstruction(
+      language: language,
+      style: _style,
+      mood: _mood,
+      bpm: _bpm,
+      title: _titleController.text,
+      theme: _themeController.text,
+      material: _contextSeed,
+      storyAngle: LyricCraft.pickStoryAngle(language),
+      rhymeScheme: LyricCraft.pickRhymeScheme(),
+      recentSongs: LyricCraft.recentSongsSummary(widget.store.songProjects),
+    );
   }
 
   Future<void> _runAi({
@@ -577,6 +580,11 @@ ${seed.isEmpty ? 'Няма готов текст. Създай песента о
       final response = await _gemini.generateRap(
         apiKey: widget.store.apiKey.trim(),
         instruction: instruction,
+        language: LyricCraft.detectLanguage(
+          theme: _themeController.text,
+          material: instruction,
+          title: _titleController.text,
+        ),
       );
       if (!mounted) return;
       final cleaned = _cleanForSuno(response);
@@ -586,9 +594,8 @@ ${seed.isEmpty ? 'Няма готов текст. Създай песента о
       }
 
       final before = _currentLyrics;
-      final value = append && before.isNotEmpty
-          ? '$before\n\n$cleaned'.trim()
-          : cleaned;
+      final value =
+          append && before.isNotEmpty ? '$before\n\n$cleaned'.trim() : cleaned;
       _setResult(value);
       _fillSunoFieldsFromGeneration();
       await _persist();
@@ -637,10 +644,13 @@ ${seed.isEmpty ? 'Няма готов текст. Създай песента о
     await _runAi(
       action: 'Подобрявам текста',
       instruction: '''
-Преработи професионално следния български рап текст.
+Преработи професионално следния рап текст.
 Запази историята, фактите, смисъла, речника и личния тон. Не измисляй нова биография.
-Подобри flow-а чрез римни поредици, вътрешни, многосрични, асонансни и неточни рими. Римата да следва смисъла, без неестествен словоред.
-Запази силните редове. Замени клишетата, празните редове, повторените идеи, общите фрази и слабите окончания с конкретни образи и действия.
+Това е проход за качество на римите и сюжета.
+Маркирай всяка двойка крайни рими и пренапиши всяка, която не се римува по ударена гласна и окончание, е граматическа рима, повтаря същата дума или е шаблонна двойка.
+Всеки куплет трябва да добавя ново събитие или образ; не повтаряй предишния куплет с други думи.
+Направи припева по-силна, по-лесна за пеене кука. Изравни броя срички в римните двойки.
+Запази силните редове. Замени клишетата, празните редове, повторените идеи и слабите окончания с конкретни образи и действия.
 Не добавяй обяснения. Не използвай кръгли скоби с указания.
 Стил: $_style. Настроение: $_mood. Темпо: $_bpm BPM.
 
@@ -960,247 +970,250 @@ $exclude''';
         children: [
           Expanded(
             child: ListView(
-        key: const ValueKey('studio-scroll'),
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: [
-          PageTitle(
-            eyebrow: 'СТУДИО',
-            title: 'Рап студио',
-            subtitle: 'Пишеш текста тук. Инструментите отдолу го обработват.',
-            trailing: IconButton(
-              tooltip: 'Нов проект',
-              onPressed: _isLoading ? null : _newProject,
-              icon: const Icon(Icons.note_add_outlined, color: ironGreen),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _providerStatus(),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _saveStatus,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          IronInput(
-            controller: _titleController,
-            label: 'Заглавие',
-            hint: 'По желание',
-            icon: Icons.title,
-          ),
-          const SizedBox(height: 12),
-          IronInput(
-            controller: _themeController,
-            label: 'Тема / посока',
-            hint: 'Например: от дъното до върха, улица, загуба, победа',
-            icon: Icons.lightbulb_outline,
-            minLines: 2,
-            maxLines: 3,
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Моят текст',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Постави готов текст, няколко реда или само идея. Нищо не се губи — полето се пази локално.',
-            style: TextStyle(color: ironMuted, height: 1.35),
-          ),
-          const SizedBox(height: 12),
-          IronInput(
-            controller: _draftController,
-            label: 'Текст / чернова',
-            hint: 'Пиши тук…',
-            icon: Icons.edit_note,
-            minLines: 8,
-            maxLines: 16,
-          ),
-          const SizedBox(height: 14),
-          IronButton(
-            text: _isLoading ? _activeAction : 'Създай цяла песен',
-            icon: Icons.auto_awesome,
-            onPressed: _isLoading ? null : _generateSong,
-          ),
-          const SizedBox(height: 14),
-          IronCard(
-            margin: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              key: const ValueKey('studio-scroll'),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
-                const Text(
-                  'БЪРЗИ ИНСТРУМЕНТИ',
-                  style: TextStyle(
-                    color: ironGreen,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
+                PageTitle(
+                  eyebrow: 'СТУДИО',
+                  title: 'Рап студио',
+                  subtitle:
+                      'Пишеш текста тук. Инструментите отдолу го обработват.',
+                  trailing: IconButton(
+                    tooltip: 'Нов проект',
+                    onPressed: _isLoading ? null : _newProject,
+                    icon: const Icon(Icons.note_add_outlined, color: ironGreen),
                   ),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _quickAction(
-                      label: 'Подобри текста',
-                      icon: Icons.auto_fix_high,
-                      onPressed: _improveText,
-                    ),
-                    _quickAction(
-                      label: 'Направи припев',
-                      icon: Icons.repeat,
-                      onPressed: _createHook,
-                    ),
-                    _quickAction(
-                      label: 'Направи куплет',
-                      icon: Icons.library_music_outlined,
-                      onPressed: _createVerse,
-                    ),
-                    _quickAction(
-                      label: 'Формат за Suno',
-                      icon: Icons.cleaning_services_outlined,
-                      onPressed: _formatForSuno,
-                    ),
-                    _quickAction(
-                      label: 'Стил на музиката',
-                      icon: Icons.tune,
-                      onPressed: _generateStylePrompt,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (_isLoading) ...[
-            const SizedBox(height: 14),
-            const LinearProgressIndicator(color: ironGreen),
-            const SizedBox(height: 8),
-            Text(
-              _activeAction.isEmpty ? 'Iron пише…' : _activeAction,
-              style: const TextStyle(color: ironGreen, fontWeight: FontWeight.w600),
-            ),
-          ],
-          const SizedBox(height: 16),
-          _lyricResultSection(hasResult: hasResult),
-          const SizedBox(height: 16),
-          const Text(
-            'Пакет за Suno',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Текстът, стилът и изключенията са отделени, за да ги поставиш директно в Suno.',
-            style: TextStyle(color: ironMuted, height: 1.35),
-          ),
-          const SizedBox(height: 12),
-          _sunoLabeledField(
-            controller: _musicPromptController,
-            label: 'Стил на музиката',
-            subtitle: 'Style of Music',
-            hint: 'Попълва се автоматично след генериране',
-            icon: Icons.graphic_eq,
-            minLines: 3,
-            maxLines: 6,
-          ),
-          const SizedBox(height: 12),
-          _sunoLabeledField(
-            controller: _excludeController,
-            label: 'Изключи',
-            subtitle: 'Exclude',
-            hint: 'Нежелани елементи',
-            icon: Icons.block,
-            minLines: 2,
-            maxLines: 4,
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _musicPromptController.text.trim().isEmpty
-                  ? null
-                  : _copyPrompt,
-              icon: const Icon(Icons.copy, size: 18),
-              label: const Text('Копирай стила'),
-            ),
-          ),
-          const SizedBox(height: 14),
-          IronCard(
-            margin: EdgeInsets.zero,
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              leading: const Icon(Icons.tune, color: ironGreen),
-              title: const Text(
-                'Стил и темпо',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text('$_style • $_bpm BPM • $_mood'),
-              childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              children: [
-                _dropdown(
-                  label: 'Стил',
-                  value: _style,
-                  items: _styles,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _style = value);
-                    _scheduleSave();
-                  },
-                ),
-                const SizedBox(height: 12),
-                _dropdown(
-                  label: 'Настроение',
-                  value: _mood,
-                  items: _moods,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _mood = value);
-                    _scheduleSave();
-                  },
-                ),
-                const SizedBox(height: 14),
                 Row(
                   children: [
-                    const Icon(Icons.speed, color: ironGreen),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$_bpm BPM',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    _providerStatus(),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _saveStatus,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
-                Slider(
-                  value: _bpm.toDouble(),
-                  min: 70,
-                  max: 190,
-                  divisions: 24,
-                  label: '$_bpm BPM',
-                  onChanged: _isLoading
-                      ? null
-                      : (value) {
-                          setState(() => _bpm = value.round());
+                const SizedBox(height: 14),
+                IronInput(
+                  controller: _titleController,
+                  label: 'Заглавие',
+                  hint: 'По желание',
+                  icon: Icons.title,
+                ),
+                const SizedBox(height: 12),
+                IronInput(
+                  controller: _themeController,
+                  label: 'Тема / посока',
+                  hint: 'Например: от дъното до върха, улица, загуба, победа',
+                  icon: Icons.lightbulb_outline,
+                  minLines: 2,
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Моят текст',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Постави готов текст, няколко реда или само идея. Нищо не се губи — полето се пази локално.',
+                  style: TextStyle(color: ironMuted, height: 1.35),
+                ),
+                const SizedBox(height: 12),
+                IronInput(
+                  controller: _draftController,
+                  label: 'Текст / чернова',
+                  hint: 'Пиши тук…',
+                  icon: Icons.edit_note,
+                  minLines: 8,
+                  maxLines: 16,
+                ),
+                const SizedBox(height: 14),
+                IronButton(
+                  text: _isLoading ? _activeAction : 'Създай цяла песен',
+                  icon: Icons.auto_awesome,
+                  onPressed: _isLoading ? null : _generateSong,
+                ),
+                const SizedBox(height: 14),
+                IronCard(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'БЪРЗИ ИНСТРУМЕНТИ',
+                        style: TextStyle(
+                          color: ironGreen,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _quickAction(
+                            label: 'Подобри текста',
+                            icon: Icons.auto_fix_high,
+                            onPressed: _improveText,
+                          ),
+                          _quickAction(
+                            label: 'Направи припев',
+                            icon: Icons.repeat,
+                            onPressed: _createHook,
+                          ),
+                          _quickAction(
+                            label: 'Направи куплет',
+                            icon: Icons.library_music_outlined,
+                            onPressed: _createVerse,
+                          ),
+                          _quickAction(
+                            label: 'Формат за Suno',
+                            icon: Icons.cleaning_services_outlined,
+                            onPressed: _formatForSuno,
+                          ),
+                          _quickAction(
+                            label: 'Стил на музиката',
+                            icon: Icons.tune,
+                            onPressed: _generateStylePrompt,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isLoading) ...[
+                  const SizedBox(height: 14),
+                  const LinearProgressIndicator(color: ironGreen),
+                  const SizedBox(height: 8),
+                  Text(
+                    _activeAction.isEmpty ? 'Iron пише…' : _activeAction,
+                    style: const TextStyle(
+                        color: ironGreen, fontWeight: FontWeight.w600),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _lyricResultSection(hasResult: hasResult),
+                const SizedBox(height: 16),
+                const Text(
+                  'Пакет за Suno',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Текстът, стилът и изключенията са отделени, за да ги поставиш директно в Suno.',
+                  style: TextStyle(color: ironMuted, height: 1.35),
+                ),
+                const SizedBox(height: 12),
+                _sunoLabeledField(
+                  controller: _musicPromptController,
+                  label: 'Стил на музиката',
+                  subtitle: 'Style of Music',
+                  hint: 'Попълва се автоматично след генериране',
+                  icon: Icons.graphic_eq,
+                  minLines: 3,
+                  maxLines: 6,
+                ),
+                const SizedBox(height: 12),
+                _sunoLabeledField(
+                  controller: _excludeController,
+                  label: 'Изключи',
+                  subtitle: 'Exclude',
+                  hint: 'Нежелани елементи',
+                  icon: Icons.block,
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _musicPromptController.text.trim().isEmpty
+                        ? null
+                        : _copyPrompt,
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Копирай стила'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                IronCard(
+                  margin: EdgeInsets.zero,
+                  padding: EdgeInsets.zero,
+                  child: ExpansionTile(
+                    leading: const Icon(Icons.tune, color: ironGreen),
+                    title: const Text(
+                      'Стил и темпо',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text('$_style • $_bpm BPM • $_mood'),
+                    childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                    children: [
+                      _dropdown(
+                        label: 'Стил',
+                        value: _style,
+                        items: _styles,
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _style = value);
                           _scheduleSave();
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      _dropdown(
+                        label: 'Настроение',
+                        value: _mood,
+                        items: _moods,
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _mood = value);
+                          _scheduleSave();
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          const Icon(Icons.speed, color: ironGreen),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$_bpm BPM',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: _bpm.toDouble(),
+                        min: 70,
+                        max: 190,
+                        divisions: 24,
+                        label: '$_bpm BPM',
+                        onChanged: _isLoading
+                            ? null
+                            : (value) {
+                                setState(() => _bpm = value.round());
+                                _scheduleSave();
+                              },
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 24),
               ],
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
             ),
           ),
           _stickyStudioBar(hasResult: hasResult),

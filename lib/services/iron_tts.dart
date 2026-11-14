@@ -30,7 +30,11 @@ class IronVoiceOption {
   });
 
   String get badge {
-    if (provider == IronTtsProvider.gemini) return 'Gemini · BG';
+    if (provider == IronTtsProvider.gemini) {
+      return locale.toLowerCase().replaceAll('_', '-').startsWith('en')
+          ? 'Gemini · EN'
+          : 'Gemini · BG';
+    }
     if (provider == IronTtsProvider.groq) return 'Groq · само EN';
     if (score >= 10) return 'Подобрен';
     return 'Системен';
@@ -39,6 +43,18 @@ class IronVoiceOption {
   String get title {
     if (trait.isEmpty) return name;
     return '$name · $trait';
+  }
+
+  IronVoiceOption copyWith({String? locale, String? trait}) {
+    return IronVoiceOption(
+      id: id,
+      name: name,
+      locale: locale ?? this.locale,
+      provider: provider,
+      trait: trait ?? this.trait,
+      supportsBulgarian: supportsBulgarian,
+      score: score,
+    );
   }
 }
 
@@ -60,9 +76,11 @@ class IronTts {
   static const groqMaxChars = 180;
   static const deviceMaxChars = 220;
 
+  static const defaultGeminiVoice = 'Sulafat';
+
   static const geminiModels = <String>[
-    'gemini-3.8-flash-lite-tts',
     'gemini-3.8-flash-tts',
+    'gemini-3.8-flash-lite-tts',
     'gemini-2.5-flash-tts',
     'gemini-2.5-pro-tts',
   ];
@@ -71,48 +89,28 @@ class IronTts {
   static const groqEndpoint = 'https://api.groq.com/openai/v1/audio/speech';
   static const geminiBase = 'https://generativelanguage.googleapis.com/v1beta';
 
-  /// Official Gemini 3.8 prebuilt studio voices (multilingual, including Bulgarian).
+  /// Curated Gemini voices for Bulgarian (primary). Short list, labeled in Bulgarian.
   static const geminiPrebuiltVoices = <(String, String)>[
-    ('Kore', 'Firm'),
-    ('Aoede', 'Breezy'),
-    ('Sulafat', 'Warm'),
-    ('Achird', 'Friendly'),
-    ('Puck', 'Upbeat'),
-    ('Zephyr', 'Bright'),
-    ('Charon', 'Informative'),
-    ('Fenrir', 'Excitable'),
-    ('Leda', 'Youthful'),
-    ('Orus', 'Firm'),
-    ('Callirrhoe', 'Easy-going'),
-    ('Autonoe', 'Bright'),
-    ('Enceladus', 'Breathy'),
-    ('Iapetus', 'Clear'),
-    ('Umbriel', 'Easy-going'),
-    ('Algieba', 'Smooth'),
-    ('Despina', 'Smooth'),
-    ('Erinome', 'Clear'),
-    ('Algenib', 'Gravelly'),
-    ('Rasalgethi', 'Informative'),
-    ('Laomedeia', 'Upbeat'),
-    ('Achernar', 'Soft'),
-    ('Alnilam', 'Firm'),
-    ('Schedar', 'Even'),
-    ('Gacrux', 'Mature'),
-    ('Pulcherrima', 'Forward'),
-    ('Zubenelgenubi', 'Casual'),
-    ('Vindemiatrix', 'Gentle'),
-    ('Sadachbia', 'Lively'),
-    ('Sadaltager', 'Knowledgeable'),
+    ('Sulafat', 'топъл, женски'),
+    ('Kore', 'твърд и ясен, женски'),
+    ('Charon', 'спокоен разказвач, мъжки'),
+    ('Aoede', 'лек и жив, женски'),
+    ('Puck', 'енергичен, мъжки'),
+    ('Enceladus', 'мек, дъхав, мъжки'),
+  ];
+
+  /// A couple of the same Gemini voices offered with an English locale.
+  static const geminiEnglishVoices = <(String, String)>[
+    ('Kore', 'ясен, женски'),
+    ('Charon', 'спокоен, мъжки'),
   ];
 
   /// Official Groq Orpheus English voices. Groq TTS is English/Arabic only.
   static const groqEnglishVoices = <(String, String, String)>[
-    ('autumn', 'Autumn', 'Female'),
-    ('diana', 'Diana', 'Female'),
-    ('hannah', 'Hannah', 'Female'),
-    ('austin', 'Austin', 'Male'),
-    ('daniel', 'Daniel', 'Male'),
-    ('troy', 'Troy', 'Male'),
+    ('autumn', 'Autumn', 'женски'),
+    ('diana', 'Diana', 'женски'),
+    ('austin', 'Austin', 'мъжки'),
+    ('daniel', 'Daniel', 'мъжки'),
   ];
 
   final FlutterTts _device = FlutterTts();
@@ -125,6 +123,15 @@ class IronTts {
 
   static bool looksBulgarian(String text) {
     return RegExp(r'[\u0400-\u04FF]').hasMatch(text);
+  }
+
+  static bool looksEnglish(String text) {
+    return RegExp(r'[A-Za-z]').hasMatch(text) && !looksBulgarian(text);
+  }
+
+  static bool isAllowedDeviceLocale(String locale) {
+    final normalized = locale.toLowerCase().replaceAll('_', '-');
+    return normalized.startsWith('bg') || normalized.startsWith('en');
   }
 
   static int deviceVoiceScore(Map<String, String> voice) {
@@ -155,7 +162,7 @@ class IronTts {
       score += 8;
     }
     for (final word in const ['embedded', 'local', 'compact', 'lite']) {
-      if (name.contains(word)) score -= 4;
+      if (name.contains(word)) score -= 20;
     }
     return score;
   }
@@ -220,12 +227,15 @@ class IronTts {
   }
 
   static IronVoiceOption? parseStored(String name, String locale) {
-    if (name.startsWith('gemini:')) {
-      final voice = name.substring(7);
+    if (name.startsWith('gemini:') || name.startsWith('gemini-en:')) {
+      final voice = name.contains(':') ? name.split(':').last : name;
+      final resolvedLocale = locale.trim().isEmpty
+          ? (name.startsWith('gemini-en:') ? 'en-US' : 'bg-BG')
+          : locale;
       return IronVoiceOption(
         id: name,
         name: voice,
-        locale: 'bg-BG',
+        locale: resolvedLocale,
         provider: IronTtsProvider.gemini,
         supportsBulgarian: true,
         score: 80,
@@ -271,6 +281,19 @@ class IronTts {
           ),
         ),
       );
+      options.addAll(
+        geminiEnglishVoices.map(
+          (voice) => IronVoiceOption(
+            id: 'gemini-en:${voice.$1}',
+            name: voice.$1,
+            locale: 'en-US',
+            provider: IronTtsProvider.gemini,
+            trait: voice.$2,
+            supportsBulgarian: true,
+            score: 70,
+          ),
+        ),
+      );
     }
     if (hasGroq) {
       options.addAll(
@@ -290,14 +313,97 @@ class IronTts {
     return options;
   }
 
+  static IronVoiceOption? _firstGemini(
+    List<IronVoiceOption> voices, {
+    required String locale,
+    bool hasGemini = false,
+  }) {
+    final match = voices.where(
+      (voice) =>
+          voice.provider == IronTtsProvider.gemini &&
+          voice.locale.toLowerCase().replaceAll('_', '-').startsWith(
+                locale.toLowerCase().startsWith('en') ? 'en' : 'bg',
+              ),
+    );
+    if (match.isNotEmpty) return match.first.copyWith(locale: locale);
+    final anyGemini =
+        voices.where((voice) => voice.provider == IronTtsProvider.gemini);
+    if (anyGemini.isNotEmpty) return anyGemini.first.copyWith(locale: locale);
+    if (!hasGemini) return null;
+    return IronVoiceOption(
+      id: 'gemini:$defaultGeminiVoice',
+      name: defaultGeminiVoice,
+      locale: locale,
+      provider: IronTtsProvider.gemini,
+      trait: 'топъл, женски',
+      supportsBulgarian: true,
+      score: 80,
+    );
+  }
+
+  static IronVoiceOption? _bestDeviceVoice(
+    List<IronVoiceOption> voices, {
+    required bool bulgarian,
+  }) {
+    final filtered = voices.where((voice) {
+      if (voice.provider != IronTtsProvider.device) return false;
+      if (bulgarian) return voice.supportsBulgarian;
+      return voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en');
+    }).toList();
+    if (filtered.isNotEmpty) return filtered.first;
+    final anyDevice =
+        voices.where((voice) => voice.provider == IronTtsProvider.device);
+    return anyDevice.isEmpty ? null : anyDevice.first;
+  }
+
+  /// Picks the actual voice used at playback: Bulgarian by default,
+  /// English only when the text is Latin/English.
+  static IronVoiceOption resolvePlaybackVoice({
+    required IronVoiceOption selected,
+    required String text,
+    required List<IronVoiceOption> voices,
+    required bool hasGemini,
+  }) {
+    final bulgarian = looksBulgarian(text);
+    final english = looksEnglish(text);
+
+    if (bulgarian || !english) {
+      if (selected.provider == IronTtsProvider.gemini) {
+        return selected.copyWith(locale: 'bg-BG');
+      }
+      if (selected.provider == IronTtsProvider.groq) {
+        return _firstGemini(voices, locale: 'bg-BG', hasGemini: hasGemini) ??
+            _bestDeviceVoice(voices, bulgarian: true) ??
+            const IronVoiceOption(
+              id: 'device:system|bg-BG',
+              name: '',
+              locale: 'bg-BG',
+              provider: IronTtsProvider.device,
+              supportsBulgarian: true,
+            );
+      }
+      return selected;
+    }
+
+    if (selected.provider == IronTtsProvider.groq) return selected;
+    if (selected.provider == IronTtsProvider.gemini) {
+      return selected.copyWith(locale: 'en-US');
+    }
+    return _bestDeviceVoice(voices, bulgarian: false) ?? selected;
+  }
+
   static IronTtsProvider playbackProvider({
     required IronVoiceOption selected,
     required String text,
+    List<IronVoiceOption> voices = const [],
+    bool hasGemini = false,
   }) {
-    if (selected.provider == IronTtsProvider.groq && looksBulgarian(text)) {
-      return IronTtsProvider.device;
-    }
-    return selected.provider;
+    return resolvePlaybackVoice(
+      selected: selected,
+      text: text,
+      voices: voices,
+      hasGemini: hasGemini,
+    ).provider;
   }
 
   static String cacheKey({
@@ -310,7 +416,7 @@ class IronTts {
   }
 
   Future<List<IronVoiceOption>> listVoices(LocalStore store) async {
-    final options = <IronVoiceOption>[];
+    final device = <IronVoiceOption>[];
     try {
       final raw = await _device.getVoices;
       if (raw is List) {
@@ -319,6 +425,7 @@ class IronTts {
           final locale = item['locale']?.toString() ?? '';
           final name = item['name']?.toString() ?? '';
           if (name.isEmpty) continue;
+          if (!isAllowedDeviceLocale(locale)) continue;
           final map = <String, String>{
             'name': name,
             'locale': locale,
@@ -327,7 +434,7 @@ class IronTts {
                 (item['network_required'] ?? item['networkRequired'] ?? '')
                     .toString(),
           };
-          options.add(
+          device.add(
             IronVoiceOption(
               id: 'device:$name|$locale',
               name: name,
@@ -344,6 +451,21 @@ class IronTts {
       // System TTS list is optional; chat still works without it.
     }
 
+    device.sort((a, b) => b.score.compareTo(a.score));
+    final limited = <IronVoiceOption>[
+      ...device.where((voice) => voice.supportsBulgarian).take(2),
+      ...device
+          .where((voice) =>
+              !voice.supportsBulgarian &&
+              voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en'))
+          .take(2),
+    ];
+
+    final options = <IronVoiceOption>[
+      ...cloudVoices(
+          hasGemini: store.hasApiKey, hasGroq: store.hasBackupProvider),
+      ...limited,
+    ];
     options.sort((a, b) {
       final group = _group(a).compareTo(_group(b));
       if (group != 0) return group;
@@ -351,24 +473,25 @@ class IronTts {
       if (score != 0) return score;
       return a.name.compareTo(b.name);
     });
-
-    options.addAll(
-      cloudVoices(hasGemini: store.hasApiKey, hasGroq: store.hasBackupProvider),
-    );
     return options;
   }
 
   static int _group(IronVoiceOption voice) {
-    if (voice.provider == IronTtsProvider.device && voice.supportsBulgarian) {
+    if (voice.provider == IronTtsProvider.gemini &&
+        voice.supportsBulgarian &&
+        !voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en')) {
       return 0;
     }
     if (voice.provider == IronTtsProvider.gemini) return 1;
-    if (voice.provider == IronTtsProvider.device &&
-        voice.locale.toLowerCase().startsWith('en')) {
-      return 2;
+    if (voice.provider == IronTtsProvider.groq) return 2;
+    if (voice.provider == IronTtsProvider.device && voice.supportsBulgarian) {
+      return 3;
     }
-    if (voice.provider == IronTtsProvider.groq) return 3;
-    return 4;
+    if (voice.provider == IronTtsProvider.device &&
+        voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en')) {
+      return 4;
+    }
+    return 5;
   }
 
   Future<IronVoiceOption> resolveSelection(
@@ -381,19 +504,53 @@ class IronTts {
       if (match.isNotEmpty) return match.first;
       if (saved.provider != IronTtsProvider.device) return saved;
     }
-    if (voices.isNotEmpty) {
-      final best = voices.first;
-      if (store.ttsVoiceName.isEmpty) {
-        await store.saveVoiceSettings(
-          rate: store.ttsRate,
-          pitch: store.ttsPitch,
-          voiceName:
-              best.provider == IronTtsProvider.device ? best.name : best.id,
-          voiceLocale: best.locale,
-        );
-      }
-      return best;
+    final best = preferredDefaultVoice(store, voices);
+    if (store.ttsVoiceName.isEmpty) {
+      await store.saveVoiceSettings(
+        rate: store.ttsRate,
+        pitch: store.ttsPitch,
+        voiceName:
+            best.provider == IronTtsProvider.device ? best.name : best.id,
+        voiceLocale: best.locale,
+      );
     }
+    return best;
+  }
+
+  static IronVoiceOption preferredDefaultVoice(
+    LocalStore store,
+    List<IronVoiceOption> voices,
+  ) {
+    if (store.hasApiKey) {
+      final sulafat = voices.where(
+        (voice) =>
+            voice.provider == IronTtsProvider.gemini &&
+            voice.name == defaultGeminiVoice &&
+            !voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en'),
+      );
+      if (sulafat.isNotEmpty) return sulafat.first;
+      final geminiBg = voices.where(
+        (voice) =>
+            voice.provider == IronTtsProvider.gemini &&
+            !voice.locale.toLowerCase().replaceAll('_', '-').startsWith('en'),
+      );
+      if (geminiBg.isNotEmpty) return geminiBg.first;
+      return const IronVoiceOption(
+        id: 'gemini:$defaultGeminiVoice',
+        name: defaultGeminiVoice,
+        locale: 'bg-BG',
+        provider: IronTtsProvider.gemini,
+        trait: 'топъл, женски',
+        supportsBulgarian: true,
+        score: 80,
+      );
+    }
+    final deviceBg = voices.where(
+      (voice) =>
+          voice.provider == IronTtsProvider.device && voice.supportsBulgarian,
+    );
+    if (deviceBg.isNotEmpty) return deviceBg.first;
+    if (voices.isNotEmpty) return voices.first;
     return const IronVoiceOption(
       id: 'device:system|bg-BG',
       name: '',
@@ -441,14 +598,19 @@ class IronTts {
     final cleaned = text.trim();
     if (cleaned.isEmpty) return null;
 
-    var use = voice;
+    final voices = await listVoices(store);
+    var use = resolvePlaybackVoice(
+      selected: voice,
+      text: cleaned,
+      voices: voices,
+      hasGemini: store.hasApiKey,
+    );
     String? notice;
-    if (playbackProvider(selected: use, text: cleaned) ==
-            IronTtsProvider.device &&
-        use.provider == IronTtsProvider.groq) {
-      use = await _bestDevice(store, voices: await listVoices(store));
-      notice =
-          'Groq TTS е само за английски. За български се ползва гласът от телефона.';
+    if (voice.provider == IronTtsProvider.groq &&
+        use.provider != IronTtsProvider.groq) {
+      notice = use.provider == IronTtsProvider.gemini
+          ? 'Groq TTS е само за английски. За български се ползва Gemini.'
+          : 'Groq TTS е само за английски. За български се ползва гласът от телефона.';
     }
 
     try {
@@ -504,7 +666,7 @@ class IronTts {
     IronVoiceOption voice,
   ) async {
     final key = cacheKey(
-        voiceId: voice.id,
+        voiceId: '${voice.id}|${voice.locale}',
         rate: store.ttsRate,
         pitch: store.ttsPitch,
         text: chunk);
@@ -513,7 +675,8 @@ class IronTts {
 
     late final Uint8List bytes;
     if (voice.provider == IronTtsProvider.gemini) {
-      bytes = await _geminiSpeech(chunk, store.apiKey, voice.name);
+      bytes = await _geminiSpeech(chunk, store.apiKey, voice.name,
+          locale: voice.locale);
     } else {
       bytes = await _groqSpeech(
           chunk, store.backupApiKey, voice.id.substring(5), store.ttsRate);
@@ -528,8 +691,8 @@ class IronTts {
     return bytes;
   }
 
-  Future<Uint8List> _geminiSpeech(
-      String text, String apiKey, String voiceName) async {
+  Future<Uint8List> _geminiSpeech(String text, String apiKey, String voiceName,
+      {String locale = 'bg-BG'}) async {
     if (apiKey.trim().isEmpty) {
       throw StateError('Липсва Gemini ключ.');
     }
@@ -539,7 +702,7 @@ class IronTts {
       ...geminiModels,
     ].toSet().toList();
     for (final model in models) {
-      for (final body in _geminiBodies(text, voiceName)) {
+      for (final body in _geminiBodies(text, voiceName, locale: locale)) {
         try {
           final uri = Uri.parse(
               '$geminiBase/models/$model:generateContent?key=${Uri.encodeQueryComponent(apiKey)}');
@@ -573,8 +736,7 @@ class IronTts {
           final raw = base64Decode(data);
           final mime =
               (inline['mimeType'] ?? inline['mime_type'] ?? '').toString();
-          if (mime.toLowerCase().contains('wav') || _isWav(raw)) return raw;
-          return _wrapPcmAsWav(raw);
+          return audioBytesForPlayback(raw, mime);
         } on _RateLimit {
           rethrow;
         } catch (error) {
@@ -585,7 +747,13 @@ class IronTts {
     throw StateError('Gemini TTS не успя: $lastError');
   }
 
-  List<Map<String, Object>> _geminiBodies(String text, String voiceName) {
+  List<Map<String, Object>> _geminiBodies(
+    String text,
+    String voiceName, {
+    String locale = 'bg-BG',
+  }) {
+    final languageCode =
+        locale.trim().isEmpty ? 'bg-BG' : locale.replaceAll('_', '-');
     return [
       {
         'contents': [
@@ -599,6 +767,7 @@ class IronTts {
         'generationConfig': {
           'responseModalities': ['AUDIO'],
           'speechConfig': {
+            'languageCode': languageCode,
             'voiceConfig': {'voice': voiceName},
           },
         },
@@ -615,6 +784,7 @@ class IronTts {
         'generationConfig': {
           'responseModalities': ['AUDIO'],
           'speechConfig': {
+            'languageCode': languageCode,
             'voiceConfig': {
               'prebuiltVoiceConfig': {'voiceName': voiceName},
             },
@@ -665,13 +835,11 @@ class IronTts {
     LocalStore store, {
     required List<IronVoiceOption> voices,
   }) async {
-    final device =
-        voices.where((voice) => voice.provider == IronTtsProvider.device);
-    if (device.isNotEmpty) return device.first;
-    return resolveSelection(store, voices);
+    return _bestDeviceVoice(voices, bulgarian: true) ??
+        await resolveSelection(store, voices);
   }
 
-  bool _isWav(Uint8List bytes) {
+  static bool _isWav(Uint8List bytes) {
     return bytes.length >= 12 &&
         bytes[0] == 0x52 &&
         bytes[1] == 0x49 &&
@@ -679,7 +847,85 @@ class IronTts {
         bytes[3] == 0x46;
   }
 
-  Uint8List _wrapPcmAsWav(Uint8List pcm, {int sampleRate = 24000}) {
+  /// Parses a Gemini/Groq audio mime type into encoding + sample rate.
+  /// Linear PCM/WAV from Gemini TTS is 24 kHz mono 16-bit unless rate= is set.
+  /// μ-law / A-law default to 8 kHz and must not be wrapped as 24 kHz PCM.
+  static ({int sampleRate, String encoding}) parseAudioMime(String mime) {
+    final lower = mime.toLowerCase();
+    var rate = 24000;
+    final match = RegExp(r'rate=(\d+)').firstMatch(lower);
+    if (match != null) {
+      rate = int.parse(match.group(1)!);
+    }
+    if (lower.contains('mulaw') ||
+        lower.contains('u-law') ||
+        lower.contains('ulaw') ||
+        lower.contains('pcmu')) {
+      return (sampleRate: match != null ? rate : 8000, encoding: 'mulaw');
+    }
+    if (lower.contains('alaw') ||
+        lower.contains('a-law') ||
+        lower.contains('pcma')) {
+      return (sampleRate: match != null ? rate : 8000, encoding: 'alaw');
+    }
+    return (sampleRate: rate, encoding: 'pcm');
+  }
+
+  static Uint8List audioBytesForPlayback(Uint8List raw, String mime) {
+    final lower = mime.toLowerCase();
+    if (lower.contains('wav') || _isWav(raw)) return raw;
+    final parsed = parseAudioMime(mime);
+    var pcm = raw;
+    if (parsed.encoding == 'mulaw') {
+      pcm = _mulawToPcm16(raw);
+    } else if (parsed.encoding == 'alaw') {
+      pcm = _alawToPcm16(raw);
+    }
+    return _wrapPcmAsWav(pcm, sampleRate: parsed.sampleRate);
+  }
+
+  static Uint8List _mulawToPcm16(Uint8List mulaw) {
+    final out = Uint8List(mulaw.length * 2);
+    for (var i = 0; i < mulaw.length; i++) {
+      final sample = _decodeMulaw(mulaw[i]);
+      out[i * 2] = sample & 0xff;
+      out[i * 2 + 1] = (sample >> 8) & 0xff;
+    }
+    return out;
+  }
+
+  static Uint8List _alawToPcm16(Uint8List alaw) {
+    final out = Uint8List(alaw.length * 2);
+    for (var i = 0; i < alaw.length; i++) {
+      final sample = _decodeAlaw(alaw[i]);
+      out[i * 2] = sample & 0xff;
+      out[i * 2 + 1] = (sample >> 8) & 0xff;
+    }
+    return out;
+  }
+
+  static int _decodeMulaw(int value) {
+    final byte = ~value & 0xff;
+    final sign = byte & 0x80;
+    final exponent = (byte >> 4) & 0x07;
+    final mantissa = byte & 0x0f;
+    var sample = ((mantissa << 3) + 0x84) << exponent;
+    sample -= 0x84;
+    return sign != 0 ? -sample : sample;
+  }
+
+  static int _decodeAlaw(int value) {
+    var byte = value ^ 0x55;
+    final sign = byte & 0x80;
+    final exponent = (byte >> 4) & 0x07;
+    final mantissa = byte & 0x0f;
+    var sample = exponent == 0
+        ? (mantissa << 4) + 8
+        : ((mantissa << 4) + 0x108) << (exponent - 1);
+    return sign != 0 ? sample : -sample;
+  }
+
+  static Uint8List _wrapPcmAsWav(Uint8List pcm, {int sampleRate = 24000}) {
     final header = BytesBuilder();
     final dataLength = pcm.length;
     final fileLength = 36 + dataLength;
@@ -700,10 +946,10 @@ class IronTts {
     return header.toBytes();
   }
 
-  Uint8List _le16(int value) =>
+  static Uint8List _le16(int value) =>
       Uint8List.fromList([value & 0xff, (value >> 8) & 0xff]);
 
-  Uint8List _le32(int value) => Uint8List.fromList([
+  static Uint8List _le32(int value) => Uint8List.fromList([
         value & 0xff,
         (value >> 8) & 0xff,
         (value >> 16) & 0xff,

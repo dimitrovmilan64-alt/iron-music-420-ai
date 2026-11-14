@@ -50,7 +50,9 @@ void main() {
 
     expect(find.text('Скорост'), findsOneWidget);
     expect(find.text('Височина'), findsOneWidget);
+    expect(find.textContaining('Sulafat'), findsWidgets);
     expect(find.textContaining('Kore'), findsWidgets);
+    expect(find.text('Чуй пробен глас'), findsWidgets);
     await tester.scrollUntilVisible(
       find.textContaining('Autumn'),
       300,
@@ -59,8 +61,7 @@ void main() {
     expect(find.textContaining('Autumn'), findsWidgets);
     expect(find.textContaining('само EN'), findsWidgets);
     expect(
-      find.text(
-          'Gemini гласовете работят и на български. Groq е само за английски.'),
+      find.textContaining('естествен глас на Gemini на български'),
       findsOneWidget,
     );
   });
@@ -86,9 +87,8 @@ void main() {
     expect(find.textContaining('Kore'), findsNothing);
     expect(find.textContaining('Autumn'), findsNothing);
     expect(
-      find.textContaining(
-          'Добави Gemini ключ за облачни гласове на български.'),
-      findsOneWidget,
+      find.textContaining('Добави Gemini ключ за естествен глас'),
+      findsWidgets,
     );
   });
 }

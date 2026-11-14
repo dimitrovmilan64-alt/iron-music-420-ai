@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/chat_message.dart';
 import 'ai_provider_config.dart';
+import 'lyric_craft.dart';
 
 class GeminiException implements Exception {
   final String message;
@@ -26,12 +27,30 @@ class GeminiService {
       'https://generativelanguage.googleapis.com/v1beta';
 
   static const _preferredModels = <String>[
+    'gemini-3.8-flash',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
     'gemini-flash-latest',
+  ];
+
+  static const lyricPreferredModels = <String>[
+    'gemini-3.1-pro-preview',
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+  ];
+
+  static const lyricBackupModels = <String>[
+    'llama-3.3-70b-versatile',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
   ];
 
   final http.Client _client;
@@ -96,27 +115,61 @@ class GeminiService {
   Future<String> generateRap({
     required String apiKey,
     required String instruction,
-  }) {
-    const systemPrompt = '''
-Ти си Iron Rap Writer — професионален редактор на оригинален български рап.
-Пишеш сурово, естествено и конкретно. Използваш речника, фактите, образите и личния тон от материала на потребителя; не измисляш биография, престъпления, затвор, наркотици или уличен авторитет, ако не са подадени.
-Всеки ред трябва да добавя случка, образ, напрежение, позиция или punchline. Премахваш пълнежа, общите мотивационни фрази и кухите твърдения.
-Избягваш изтъркани двойки и готови рап клишета като „мрак–прах“, „бетон–закон“, „болка–борба“, „върха–страха“ и „нощта–самота“, освен ако потребителят изрично ги е дал и ги преработваш по свеж начин.
-Римуваш смисъл, не само последната дума: използваш вътрешни, многосрични, асонансни и неточни рими, свързани в поредици от 2–4 бара. Не чупиш граматиката и не използваш неестествен словоред заради рима.
-Запазваш силните оригинални редове и конкретната история. Българският звучи живо и разговорно, без книжовни инверсии, преводни конструкции и фалшив гангстерски образ.
-Не копираш конкретен изпълнител или песен. Можеш да следваш зададени енергия, темпо, структура и технически характеристики.
-Преди отговора правиш тиха редакторска проверка: заменяш баналните рими, повторените идеи, слабите окончания и редовете без съдържание.
-Връщаш само готовия резултат със секции като [Куплет], [Припев] и [Бридж], когато са нужни.
-Никога не прекъсваш по средата на ред или изречение. При цяла песен завършваш всички поискани части; ако е нужно, скъсяваш куплетите, но даваш завършен финал.
-''';
+    LyricLanguage? language,
+    bool twoPass = true,
+  }) async {
+    final resolvedLanguage =
+        language ?? LyricCraft.detectLanguage(material: instruction);
+    final systemPrompt = LyricCraft.buildSystemPrompt(resolvedLanguage);
 
-    return _generateWithFallback(
+    final draft = await _generateWithFallback(
       geminiApiKey: apiKey,
       systemPrompt: systemPrompt,
       messages: [_AiMessage('user', instruction)],
       maxOutputTokens: 7000,
-      temperature: 0.92,
+      temperature: 0.95,
+      preferredModels: lyricPreferredModels,
+      forceSampling: true,
+      frequencyPenalty: 0.7,
+      presencePenalty: 0.6,
     );
+    if (!twoPass || draft.trim().isEmpty) return draft;
+
+    var current = draft;
+    var report = LyricCraft.analyzeLyricsRhymeQuality(current);
+    const temperatures = <double>[0.7, 0.55];
+    for (var pass = 0; pass < temperatures.length; pass++) {
+      if (pass > 0 && !report.needsRewrite) break;
+      final revisionInstruction = LyricCraft.buildRevisionInstruction(
+        draft: current,
+        language: resolvedLanguage,
+        report: report,
+        originalInstruction: instruction,
+      );
+      final revised = await _generateWithFallback(
+        geminiApiKey: apiKey,
+        systemPrompt: systemPrompt,
+        messages: [_AiMessage('user', revisionInstruction)],
+        maxOutputTokens: 7000,
+        temperature: temperatures[pass],
+        preferredModels: lyricPreferredModels,
+        forceSampling: true,
+        frequencyPenalty: 0.55,
+        presencePenalty: 0.45,
+      );
+      if (revised.trim().isEmpty) break;
+      final nextReport = LyricCraft.analyzeLyricsRhymeQuality(revised);
+      final improved = nextReport.weakPairs.length < report.weakPairs.length ||
+          (nextReport.weakPairs.length == report.weakPairs.length &&
+              nextReport.clicheEndWords.length <= report.clicheEndWords.length);
+      if (improved || pass == 0) {
+        current = revised;
+        report = nextReport;
+      } else {
+        break;
+      }
+    }
+    return current;
   }
 
   Future<String> _generateWithFallback({
@@ -125,6 +178,10 @@ class GeminiService {
     required List<_AiMessage> messages,
     required int maxOutputTokens,
     required double temperature,
+    List<String>? preferredModels,
+    bool forceSampling = false,
+    double frequencyPenalty = 0,
+    double presencePenalty = 0,
   }) async {
     final cleanGeminiKey = geminiApiKey.trim();
     final backup = AiProviderConfig.current;
@@ -139,6 +196,8 @@ class GeminiService {
           messages: messages,
           maxOutputTokens: maxOutputTokens,
           temperature: temperature,
+          preferredModels: preferredModels,
+          forceSampling: forceSampling,
         );
       } on GeminiException catch (error) {
         geminiError = error;
@@ -153,6 +212,9 @@ class GeminiService {
           messages: messages,
           maxOutputTokens: maxOutputTokens,
           temperature: temperature,
+          preferredModels: preferredModels,
+          frequencyPenalty: frequencyPenalty,
+          presencePenalty: presencePenalty,
         );
       } on GeminiException catch (error) {
         backupError = error;
@@ -183,9 +245,16 @@ class GeminiService {
     required List<_AiMessage> messages,
     required int maxOutputTokens,
     required double temperature,
+    List<String>? preferredModels,
+    bool forceSampling = false,
   }) async {
-    final resolvedModel = await _resolveGeminiModel(apiKey);
+    final preferred = preferredModels ?? _preferredModels;
+    final resolvedModel = await _resolveGeminiModel(
+      apiKey,
+      preferredModels: preferred,
+    );
     final modelsToTry = <String>[
+      ...preferred,
       resolvedModel,
       ..._preferredModels,
     ].toSet().toList(growable: false);
@@ -200,8 +269,9 @@ class GeminiService {
         'maxOutputTokens': maxOutputTokens,
       };
 
-      if (!model.startsWith('gemini-3.5') &&
-          !model.startsWith('gemini-3.6')) {
+      if (forceSampling ||
+          (!model.startsWith('gemini-3.5') &&
+              !model.startsWith('gemini-3.6'))) {
         generationConfig['temperature'] = temperature;
         generationConfig['topP'] = 0.95;
       }
@@ -226,9 +296,8 @@ class GeminiService {
                   'contents': messages
                       .map(
                         (message) => {
-                          'role': message.role == 'assistant'
-                              ? 'model'
-                              : 'user',
+                          'role':
+                              message.role == 'assistant' ? 'model' : 'user',
                           'parts': [
                             {'text': message.text},
                           ],
@@ -312,6 +381,9 @@ class GeminiService {
     required List<_AiMessage> messages,
     required int maxOutputTokens,
     required double temperature,
+    List<String>? preferredModels,
+    double frequencyPenalty = 0,
+    double presencePenalty = 0,
   }) async {
     final uri = config.chatCompletionsUri;
     if (uri == null) {
@@ -320,118 +392,144 @@ class GeminiService {
       );
     }
 
-    final model = config.backupModel.trim();
-    if (model.isEmpty) {
+    final configured = config.backupModel.trim();
+    if (configured.isEmpty) {
       throw const GeminiException('Липсва модел за резервния AI доставчик.');
     }
 
-    final payload = <String, dynamic>{
-      'model': model,
-      'messages': [
-        {'role': 'system', 'content': systemPrompt},
-        ...messages.map(
-          (message) => {
-            'role': message.role,
-            'content': message.text,
-          },
-        ),
-      ],
-    };
+    final isGroq = config.backupBaseUrl.toLowerCase().contains('groq.com');
+    final modelsToTry = <String>[
+      configured,
+      if (isGroq && preferredModels != null) ...lyricBackupModels,
+    ].toSet().toList(growable: false);
 
-    final lowerModel = model.toLowerCase();
-    final reasoningModel = lowerModel.startsWith('gpt-5') ||
-        lowerModel.startsWith('o1') ||
-        lowerModel.startsWith('o3') ||
-        lowerModel.startsWith('o4');
-    if (reasoningModel) {
-      payload['max_completion_tokens'] = maxOutputTokens;
-    } else {
-      payload['max_tokens'] = maxOutputTokens;
-      payload['temperature'] = temperature;
-    }
+    GeminiException? lastError;
+    for (final model in modelsToTry) {
+      final payload = <String, dynamic>{
+        'model': model,
+        'messages': [
+          {'role': 'system', 'content': systemPrompt},
+          ...messages.map(
+            (message) => {
+              'role': message.role,
+              'content': message.text,
+            },
+          ),
+        ],
+      };
 
-    for (var attempt = 0; attempt < 2; attempt++) {
-      http.Response response;
-      try {
-        response = await _client
-            .post(
-              uri,
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ${config.backupApiKey.trim()}',
-              },
-              body: jsonEncode(payload),
-            )
-            .timeout(const Duration(seconds: 70));
-      } catch (_) {
-        if (attempt == 0) {
+      final lowerModel = model.toLowerCase();
+      final reasoningModel = lowerModel.startsWith('gpt-5') ||
+          lowerModel.startsWith('o1') ||
+          lowerModel.startsWith('o3') ||
+          lowerModel.startsWith('o4');
+      if (reasoningModel) {
+        payload['max_completion_tokens'] = maxOutputTokens;
+      } else {
+        payload['max_tokens'] = maxOutputTokens;
+        payload['temperature'] = temperature;
+        if (frequencyPenalty != 0) {
+          payload['frequency_penalty'] = frequencyPenalty;
+        }
+        if (presencePenalty != 0) {
+          payload['presence_penalty'] = presencePenalty;
+        }
+      }
+
+      var modelMissing = false;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        http.Response response;
+        try {
+          response = await _client
+              .post(
+                uri,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ${config.backupApiKey.trim()}',
+                },
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 70));
+        } catch (_) {
+          if (attempt == 0) {
+            await Future<void>.delayed(const Duration(seconds: 1));
+            continue;
+          }
+          lastError = const GeminiException(
+            'Няма връзка с резервния AI доставчик.',
+          );
+          break;
+        }
+
+        if (response.statusCode == 200) {
+          final text = _extractBackupText(response.body);
+          if (text.isEmpty) {
+            lastError = const GeminiException(
+              'Резервният AI доставчик върна празен отговор.',
+            );
+            break;
+          }
+          _activeModel = 'Резервен · $model';
+          return text;
+        }
+
+        final transient = response.statusCode == 408 ||
+            response.statusCode == 500 ||
+            response.statusCode == 502 ||
+            response.statusCode == 503 ||
+            response.statusCode == 504;
+        if (transient && attempt == 0) {
           await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
-        throw const GeminiException(
-          'Няма връзка с резервния AI доставчик.',
-        );
-      }
 
-      if (response.statusCode == 200) {
-        final text = _extractBackupText(response.body);
-        if (text.isEmpty) {
-          throw const GeminiException(
-            'Резервният AI доставчик върна празен отговор.',
-          );
+        final raw = _extractError(response.body);
+        switch (response.statusCode) {
+          case 401:
+          case 403:
+            throw const GeminiException(
+              'Резервният API ключ не е валиден или няма разрешение.',
+            );
+          case 404:
+            lastError = GeminiException(
+              'Резервният модел „$model“ не е наличен.',
+            );
+            modelMissing = true;
+            break;
+          case 429:
+            throw const GeminiException(
+              'Лимитът на резервния AI доставчик също е достигнат.',
+            );
+          case 500:
+          case 502:
+          case 503:
+          case 504:
+            lastError = const GeminiException(
+              'Резервният AI доставчик временно не отговаря.',
+            );
+            break;
+          default:
+            lastError = GeminiException(
+              'Резервният AI върна грешка ${response.statusCode}: $raw',
+            );
+            break;
         }
-        _activeModel = 'Резервен · $model';
-        return text;
-      }
-
-      final transient = response.statusCode == 408 ||
-          response.statusCode == 500 ||
-          response.statusCode == 502 ||
-          response.statusCode == 503 ||
-          response.statusCode == 504;
-      if (transient && attempt == 0) {
-        await Future<void>.delayed(const Duration(seconds: 1));
-        continue;
-      }
-
-      final raw = _extractError(response.body);
-      switch (response.statusCode) {
-        case 401:
-        case 403:
-          throw const GeminiException(
-            'Резервният API ключ не е валиден или няма разрешение.',
-          );
-        case 404:
-          throw GeminiException(
-            'Резервният модел „$model“ не е наличен.',
-          );
-        case 429:
-          throw const GeminiException(
-            'Лимитът на резервния AI доставчик също е достигнат.',
-          );
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-          throw const GeminiException(
-            'Резервният AI доставчик временно не отговаря.',
-          );
-        default:
-          throw GeminiException(
-            'Резервният AI върна грешка ${response.statusCode}: $raw',
-          );
+        if (modelMissing) break;
       }
     }
 
-    throw const GeminiException(
-      'Резервният AI доставчик временно не отговаря.',
-    );
+    throw lastError ??
+        const GeminiException(
+          'Резервният AI доставчик временно не отговаря.',
+        );
   }
 
-  Future<String> _resolveGeminiModel(String apiKey) async {
+  Future<String> _resolveGeminiModel(
+    String apiKey, {
+    List<String>? preferredModels,
+  }) async {
     final fingerprint = _fingerprint(apiKey);
-    if (_activeGeminiModel != null &&
-        _modelForKeyFingerprint == fingerprint) {
+    if (_activeGeminiModel != null && _modelForKeyFingerprint == fingerprint) {
       return _activeGeminiModel!;
     }
 
@@ -465,7 +563,8 @@ class GeminiService {
         if (name.isNotEmpty) available.add(name);
       }
 
-      for (final preferred in _preferredModels) {
+      final preferredList = preferredModels ?? _preferredModels;
+      for (final preferred in preferredList) {
         if (available.contains(preferred)) {
           _activeGeminiModel = preferred;
           _modelForKeyFingerprint = fingerprint;

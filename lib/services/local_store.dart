@@ -17,10 +17,10 @@ class LocalStore extends ChangeNotifier {
   static const _backupBaseUrlKey = 'backup_base_url';
   static const _backupModelKey = 'backup_model';
   static const _voiceRepliesKey = 'voice_replies_enabled';
-  static const _ttsRateKey = 'tts_rate_v152';
-  static const _ttsPitchKey = 'tts_pitch_v152';
-  static const _ttsVoiceNameKey = 'tts_voice_name_v152';
-  static const _ttsVoiceLocaleKey = 'tts_voice_locale_v152';
+  static const _ttsRateKey = 'tts_rate_v171';
+  static const _ttsPitchKey = 'tts_pitch_v171';
+  static const _ttsVoiceNameKey = 'tts_voice_name_v171';
+  static const _ttsVoiceLocaleKey = 'tts_voice_locale_v171';
   static const _chatHistoryKey = 'chat_history_v15';
   static const _rapDraftKey = 'rap_studio_draft';
   static const _rapResultKey = 'rap_studio_result';
@@ -42,8 +42,8 @@ class LocalStore extends ChangeNotifier {
   String _backupBaseUrl = AiProviderConfig.defaultBackupBaseUrl;
   String _backupModel = AiProviderConfig.defaultBackupModel;
   bool _voiceRepliesEnabled = true;
-  double _ttsRate = 0.44;
-  double _ttsPitch = 0.92;
+  double _ttsRate = 0.50;
+  double _ttsPitch = 1.00;
   String _ttsVoiceName = '';
   String _ttsVoiceLocale = '';
   List<ChatMessage> _chatHistory = const [];
@@ -64,8 +64,7 @@ class LocalStore extends ChangeNotifier {
     _preferences = await SharedPreferences.getInstance();
     _apiKeyPromptDismissed =
         _preferences.getBool(_apiKeyPromptDismissedKey) ?? false;
-    _onboardingComplete =
-        _preferences.getBool(_onboardingCompleteKey) ?? false;
+    _onboardingComplete = _preferences.getBool(_onboardingCompleteKey) ?? false;
     _apiKey = await _readSecret(
       secureKey: _apiKeyKey,
       legacyPrefsKey: _apiKeyKey,
@@ -85,18 +84,18 @@ class LocalStore extends ChangeNotifier {
       _backupModel = AiProviderConfig.defaultBackupModel;
     }
     _voiceRepliesEnabled = _preferences.getBool(_voiceRepliesKey) ?? true;
-    _ttsRate = _preferences.getDouble(_ttsRateKey) ?? 0.44;
-    _ttsPitch = _preferences.getDouble(_ttsPitchKey) ?? 0.92;
+    _ttsRate = _preferences.getDouble(_ttsRateKey) ?? 0.50;
+    _ttsPitch = _preferences.getDouble(_ttsPitchKey) ?? 1.00;
     _ttsVoiceName = _preferences.getString(_ttsVoiceNameKey) ?? '';
     _ttsVoiceLocale = _preferences.getString(_ttsVoiceLocaleKey) ?? '';
     _rapDraft = _preferences.getString(_rapDraftKey) ?? '';
     _rapResult = _preferences.getString(_rapResultKey) ?? '';
     _activeSongId = _preferences.getString(_activeSongIdKey) ?? '';
-    _favoriteAutomationIds = (_preferences
-                .getStringList(_favoriteAutomationIdsKey) ??
-            const <String>[])
-        .where((item) => item.trim().isNotEmpty)
-        .toSet();
+    _favoriteAutomationIds =
+        (_preferences.getStringList(_favoriteAutomationIdsKey) ??
+                const <String>[])
+            .where((item) => item.trim().isNotEmpty)
+            .toSet();
 
     final rawHistory = _preferences.getString(_chatHistoryKey);
     if (rawHistory != null && rawHistory.isNotEmpty) {
@@ -205,8 +204,7 @@ class LocalStore extends ChangeNotifier {
   String get pendingStudioPrompt => _pendingStudioPrompt;
   String get pendingStudioOutputType => _pendingStudioOutputType;
   bool get pendingStudioAutoGenerate => _pendingStudioAutoGenerate;
-  bool get hasPendingChatVoiceRequest =>
-      _pendingChatVoiceRequests.isNotEmpty;
+  bool get hasPendingChatVoiceRequest => _pendingChatVoiceRequests.isNotEmpty;
   Set<String> get favoriteAutomationIds =>
       Set.unmodifiable(_favoriteAutomationIds);
   List<CustomAutomation> get customAutomations =>

@@ -4,7 +4,7 @@ import 'package:ironmusic420ai/services/hey_iron_watchdog.dart';
 void main() {
   test('three failures inside the window trip the watchdog', () {
     final watchdog = HeyIronWatchdog();
-    final t0 = DateTime(2026, 11, 13, 20);
+    final t0 = DateTime.now().subtract(const Duration(minutes: 10));
     watchdog.recordFailure(now: t0);
     watchdog.recordFailure(now: t0.add(const Duration(minutes: 5)));
     expect(watchdog.isTripped, isFalse);
@@ -32,7 +32,8 @@ void main() {
   });
 
   test('reset clears a tripped watchdog', () {
-    final watchdog = HeyIronWatchdog(failureCount: 3, lastFailureAt: DateTime.now());
+    final watchdog =
+        HeyIronWatchdog(failureCount: 3, lastFailureAt: DateTime.now());
     expect(watchdog.isTripped, isTrue);
     watchdog.reset();
     expect(watchdog.isTripped, isFalse);

@@ -121,8 +121,8 @@ class _VoiceSettingsPanelState extends State<VoiceSettingsPanel> {
         const SizedBox(height: 6),
         Text(
           geminiReady
-              ? 'Gemini гласовете работят и на български. Groq е само за английски.'
-              : 'Избери глас от телефона. Ако добавиш Gemini ключ по-горе, ще се появят по-естествени облачни гласове, включително на български.',
+              ? 'По подразбиране се ползва естествен глас на Gemini на български. Английският се включва автоматично при английски текст. Groq е допълнителна опция само за английски.'
+              : 'Без Gemini ключ се ползва гласът от телефона, който често звучи по-роботски. Добави Gemini ключ за естествен глас на български и английски.',
           style: const TextStyle(color: Colors.white70, height: 1.35),
         ),
         const SizedBox(height: 10),
@@ -159,9 +159,9 @@ class _VoiceSettingsPanelState extends State<VoiceSettingsPanel> {
                 Text(
                   [
                     if (!geminiReady)
-                      'Добави Gemini ключ за облачни гласове на български.',
+                      'Добави Gemini ключ за естествен глас — без него телефонът звучи по-роботски.',
                     if (!groqReady)
-                      'Добави Groq ключ за облачни английски гласове.',
+                      'Добави Groq ключ, ако искаш допълнителни английски гласове.',
                   ].join(' '),
                   style: const TextStyle(
                       color: Colors.white54, height: 1.35, fontSize: 13),
@@ -191,31 +191,45 @@ class _VoiceSettingsPanelState extends State<VoiceSettingsPanel> {
                 itemBuilder: (context, index) {
                   final voice = _voices[index];
                   final selected = _selected?.id == voice.id;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    selected: selected,
-                    title: Text(
-                      voice.title,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight:
-                            selected ? FontWeight.w800 : FontWeight.w600,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        selected: selected,
+                        title: Text(
+                          voice.title,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight:
+                                selected ? FontWeight.w800 : FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${voice.locale} · ${voice.badge}',
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12),
+                        ),
+                        onTap: () => _select(voice),
                       ),
-                    ),
-                    subtitle: Text(
-                      '${voice.locale} · ${voice.badge}',
-                      style:
-                          const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Прослушай',
-                      onPressed: _previewing ? null : () => _preview(voice),
-                      icon: Icon(
-                        Icons.play_circle_outline,
-                        color: _previewing ? Colors.white38 : ironGreen,
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _previewing ? null : () => _preview(voice),
+                          icon: Icon(
+                            Icons.play_circle_outline,
+                            color: _previewing ? Colors.white38 : ironGreen,
+                          ),
+                          label: Text(
+                            'Чуй пробен глас',
+                            style: TextStyle(
+                              color: _previewing ? Colors.white38 : ironGreen,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    onTap: () => _select(voice),
+                    ],
                   );
                 },
               ),
