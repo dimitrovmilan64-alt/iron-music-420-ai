@@ -4,7 +4,7 @@ import '../services/automation_service.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
 
-class CommandsPage extends StatefulWidget {
+class CommandsPage extends StatelessWidget {
   final LocalStore store;
 
   const CommandsPage({
@@ -13,10 +13,38 @@ class CommandsPage extends StatefulWidget {
   });
 
   @override
-  State<CommandsPage> createState() => _CommandsPageState();
+  Widget build(BuildContext context) {
+    return IronBackground(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 108),
+        children: [
+          const PageTitle(
+            eyebrow: 'IRON',
+            title: 'Инструменти',
+            subtitle:
+                'Само най-полезните действия. Останалото го кажи на Хей Айрън.',
+          ),
+          const SizedBox(height: 18),
+          CommandsToolsBody(store: store),
+        ],
+      ),
+    );
+  }
 }
 
-class _CommandsPageState extends State<CommandsPage>
+class CommandsToolsBody extends StatefulWidget {
+  final LocalStore store;
+
+  const CommandsToolsBody({
+    super.key,
+    required this.store,
+  });
+
+  @override
+  State<CommandsToolsBody> createState() => _CommandsToolsBodyState();
+}
+
+class _CommandsToolsBodyState extends State<CommandsToolsBody>
     with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
   bool _busy = false;
@@ -110,17 +138,9 @@ class _CommandsPageState extends State<CommandsPage>
 
   @override
   Widget build(BuildContext context) {
-    return IronBackground(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 108),
-        children: [
-          const PageTitle(
-            eyebrow: 'IRON',
-            title: 'Инструменти',
-            subtitle:
-                'Само най-полезните действия. Останалото го кажи на Хей Айрън.',
-          ),
-          const SizedBox(height: 18),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           IronCard(
             bright: _youtubeAutoPlayEnabled,
             child: Column(
@@ -268,8 +288,7 @@ class _CommandsPageState extends State<CommandsPage>
               ],
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

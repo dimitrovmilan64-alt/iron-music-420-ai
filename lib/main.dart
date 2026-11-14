@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'pages/chat_page.dart';
-import 'pages/commands_page.dart';
 import 'pages/rap_studio_page.dart';
+import 'pages/settings_page.dart';
 import 'pages/songs_page.dart';
 import 'services/automation_service.dart';
 import 'services/local_store.dart';
@@ -143,7 +143,8 @@ class IronMusic420App extends StatelessWidget {
       builder: (context, child) {
         final media = MediaQuery.of(context);
         final currentScale = media.textScaler.scale(1.0);
-        final safeScale = currentScale.clamp(0.90, 1.0).toDouble();
+        // Allow system scaling; only cap extreme values that break compact layouts.
+        final safeScale = currentScale.clamp(0.85, 1.3).toDouble();
         return MediaQuery(
           data: media.copyWith(textScaler: TextScaler.linear(safeScale)),
           child: child ?? const SizedBox.shrink(),
@@ -166,7 +167,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
   int _currentIndex = 0;
-  late final List<Widget> _pages;
+  late List<Widget> _pages;
 
   static const _navItems = <IronNavItem>[
     IronNavItem(
@@ -184,6 +185,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       selectedIcon: Icons.library_music,
       label: 'Песни',
     ),
+    IronNavItem(
+      icon: Icons.tune_outlined,
+      selectedIcon: Icons.tune_rounded,
+      label: 'Настройки',
+    ),
   ];
 
   @override
@@ -191,19 +197,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _automation.setPendingRequestListener(_openPendingSection);
-    _pages = [
-      ChatPage(
-        store: widget.store,
-        onOpenTools: () => _openSection(4),
-        onSendToStudio: (text) async {
-          await widget.store.sendTextToStudio(text);
-          _openSection(1);
-        },
-      ),
-      RapStudioPage(store: widget.store),
-      SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
-      CommandsPage(store: widget.store),
-    ];
+    _rebuildPages();
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
   }
 
@@ -268,7 +262,36 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return;
     }
 
-    setState(() => _currentIndex = targetIndex);
+    _selectTab(targetIndex);
+  }
+
+  void _selectTab(int index) {
+    if (!mounted || index < 0 || index >= _navItems.length) return;
+    setState(() {
+      _currentIndex = index;
+      _rebuildPages();
+    });
+  }
+
+  void _rebuildPages() {
+    _pages = [
+      ChatPage(
+        store: widget.store,
+        isActive: _currentIndex == 0,
+        onOpenTools: () => _openSection(4),
+        onOpenSettings: () => _selectTab(3),
+        onSendToStudio: (text) async {
+          await widget.store.sendTextToStudio(text);
+          _openSection(1);
+        },
+      ),
+      RapStudioPage(store: widget.store),
+      SongsPage(store: widget.store, onOpenStudio: () => _openSection(1)),
+      SettingsPage(
+        store: widget.store,
+        onOpenChat: () => _selectTab(0),
+      ),
+    ];
   }
 
   @override
@@ -277,8 +300,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: IronBottomNavigation(
-        selectedIndex: _currentIndex < _navItems.length ? _currentIndex : 0,
-        onSelected: _openSection,
+        selectedIndex: _currentIndex,
+        onSelected: _selectTab,
         items: _navItems,
       ),
     );

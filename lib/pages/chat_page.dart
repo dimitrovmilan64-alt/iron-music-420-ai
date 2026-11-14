@@ -6,18 +6,23 @@ import '../models/chat_message.dart';
 import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
+import '../services/iron_voice_flags.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
   final LocalStore store;
+  final bool isActive;
   final VoidCallback? onOpenTools;
+  final VoidCallback? onOpenSettings;
   final Future<void> Function(String text)? onSendToStudio;
 
   const ChatPage({
     super.key,
     required this.store,
+    this.isActive = true,
     this.onOpenTools,
+    this.onOpenSettings,
     this.onSendToStudio,
   });
 
@@ -62,7 +67,8 @@ class _ChatPageState extends State<ChatPage>
     _coreController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
+    );
+    _syncCoreAnimation();
     _apiKeyController = TextEditingController(text: widget.store.apiKey);
     _backupApiKeyController =
         TextEditingController(text: widget.store.backupApiKey);
@@ -123,14 +129,41 @@ class _ChatPageState extends State<ChatPage>
   }
 
   @override
+  void didUpdateWidget(ChatPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _syncCoreAnimation();
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadIronStatus();
       _consumePendingChatVoiceRequest();
+      _syncCoreAnimation();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _coreController.stop();
+    }
+  }
+
+  void _syncCoreAnimation() {
+    final shouldAnimate = widget.isActive &&
+        (WidgetsBinding.instance.lifecycleState == null ||
+            WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed);
+    if (shouldAnimate) {
+      if (!_coreController.isAnimating) {
+        _coreController.repeat(reverse: true);
+      }
+    } else if (_coreController.isAnimating) {
+      _coreController.stop();
     }
   }
 
   void _handleStoreChange() {
+    if (mounted) setState(() {});
     if (!widget.store.hasPendingChatVoiceRequest ||
         _processingPendingChatPrompt) {
       return;
@@ -163,12 +196,21 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<void> _loadIronStatus() async {
+    if (!ironVoiceServiceEnabled) {
+      if (mounted) setState(() => _ironActive = false);
+      return;
+    }
     final active = await _automation.isIronVoiceActive();
     if (!mounted) return;
     setState(() => _ironActive = active);
   }
 
   Future<void> _toggleIronMode() async {
+    if (!ironVoiceServiceEnabled) {
+      setState(() => _ironActive = false);
+      _showMessage(ironVoiceDisabledMessage);
+      return;
+    }
     if (_voiceToggleBusy) return;
     setState(() => _voiceToggleBusy = true);
     final turningOn = !_ironActive;
@@ -1072,11 +1114,15 @@ class _ChatPageState extends State<ChatPage>
                   icon: _ironActive
                       ? Icons.hearing_rounded
                       : Icons.hearing_disabled_rounded,
-                  tooltip: _ironActive
-                      ? 'Изключи „Хей Айрън“'
-                      : 'Включи „Хей Айрън“',
+                  tooltip: !ironVoiceServiceEnabled
+                      ? '„Hey Iron“ е временно изключен'
+                      : _ironActive
+                          ? 'Изключи „Хей Айрън“'
+                          : 'Включи „Хей Айрън“',
                   active: _ironActive,
-                  onPressed: _voiceToggleBusy ? null : _toggleIronMode,
+                  onPressed: (!ironVoiceServiceEnabled || !_voiceToggleBusy)
+                      ? _toggleIronMode
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 _roundAction(
@@ -1161,6 +1207,8 @@ class _ChatPageState extends State<ChatPage>
                       _clearHistory();
                     } else if (value == 'tools') {
                       widget.onOpenTools?.call();
+                    } else if (value == 'settings') {
+                      (widget.onOpenSettings ?? widget.onOpenTools)?.call();
                     }
                   },
                   itemBuilder: (context) => [
@@ -1172,6 +1220,12 @@ class _ChatPageState extends State<ChatPage>
                       value: 'voice',
                       child: Text('Настройки на гласа'),
                     ),
+                    if (widget.onOpenSettings != null ||
+                        widget.onOpenTools != null)
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Text('Настройки и инструменти'),
+                      ),
                     if (widget.onOpenTools != null)
                       const PopupMenuItem(
                         value: 'tools',
@@ -1186,6 +1240,52 @@ class _ChatPageState extends State<ChatPage>
               ],
             ),
           ),
+          if (widget.store.shouldPromptForApiKey)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+              child: IronCard(
+                bright: true,
+                margin: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Добави AI ключ, за да започнеш',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Постави безплатен Gemini или Groq ключ. Пази се само на този телефон, криптиран.',
+                      style: TextStyle(color: Colors.white70, height: 1.35),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: IronButton(
+                            text: 'Добави ключ',
+                            icon: Icons.key_rounded,
+                            onPressed: _openApiKeySheet,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () async {
+                            await widget.store.dismissApiKeyPrompt();
+                            if (mounted) setState(() {});
+                          },
+                          child: const Text('По-късно'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,

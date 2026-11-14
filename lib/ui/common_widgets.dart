@@ -523,9 +523,9 @@ class CannabisCore extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: ironGreen.withOpacity(0.18 + progress * 0.13),
-                    blurRadius: 36 + progress * 18,
-                    spreadRadius: 4,
+                    color: ironGreen.withOpacity(0.08 + progress * 0.06),
+                    blurRadius: 12 + progress * 6,
+                    spreadRadius: 0,
                   ),
                 ],
               ),

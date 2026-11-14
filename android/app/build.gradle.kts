@@ -87,6 +87,18 @@ android {
     packaging {
         jniLibs {
             pickFirsts += setOf("**/libc++_shared.so")
+            val voiceService = file("src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt")
+            val voiceEnabled = voiceService.exists() &&
+                voiceService.readText().contains("const val SERVICE_ENABLED = true")
+            if (!voiceEnabled) {
+                // Keep the AAR for compilation, but do not ship sherpa/onnx native libs
+                // while the wake-word service is disabled.
+                excludes += setOf(
+                    "**/libsherpa-onnx*.so",
+                    "**/libonnxruntime.so",
+                    "**/libonnxruntime*.so",
+                )
+            }
         }
         resources {
             excludes += setOf(
