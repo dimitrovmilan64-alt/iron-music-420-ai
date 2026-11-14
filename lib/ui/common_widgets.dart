@@ -643,32 +643,6 @@ class IronNavItem {
   });
 }
 
-class _PanelAccentPainter extends CustomPainter {
-  final Color color;
-
-  const _PanelAccentPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withOpacity(0.62)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    final path = Path()
-      ..moveTo(15, 1)
-      ..lineTo(math.min(size.width * 0.34, 105), 1)
-      ..moveTo(size.width - 1, size.height * 0.58)
-      ..lineTo(size.width - 1, size.height - 16)
-      ..quadraticBezierTo(size.width - 1, size.height - 1, size.width - 16, size.height - 1)
-      ..lineTo(size.width * 0.72, size.height - 1);
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _PanelAccentPainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
 class _HudCorePainter extends CustomPainter {
   final double progress;
 
