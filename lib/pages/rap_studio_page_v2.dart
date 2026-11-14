@@ -743,9 +743,9 @@ $exclude''';
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
         children: [
           PageTitle(
-            eyebrow: 'IRON RAP LAB',
-            title: 'Rap Studio',
-            subtitle: 'Пишеш текста тук. Инструментите отдолу реално го обработват.',
+            eyebrow: 'СТУДИО',
+            title: 'Рап студио',
+            subtitle: 'Пишеш текста тук. Инструментите отдолу го обработват.',
             trailing: IconButton(
               tooltip: 'Нов проект',
               onPressed: _isLoading ? null : _newProject,
@@ -790,7 +790,7 @@ $exclude''';
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'МОЯТ ТЕКСТ',
+                  'Моят текст',
                   style: TextStyle(
                     color: ironGreen,
                     fontSize: 16,
@@ -806,7 +806,7 @@ $exclude''';
                 const SizedBox(height: 12),
                 IronInput(
                   controller: _draftController,
-                  label: 'Lyrics / Чернова',
+                  label: 'Текст / чернова',
                   hint: 'Пиши тук…',
                   icon: Icons.edit_note,
                   minLines: 12,
@@ -856,12 +856,12 @@ $exclude''';
                       onPressed: _createVerse,
                     ),
                     _quickAction(
-                      label: 'Suno формат',
+                      label: 'Формат за Suno',
                       icon: Icons.cleaning_services_outlined,
                       onPressed: _formatForSuno,
                     ),
                     _quickAction(
-                      label: 'Style Prompt',
+                      label: 'Стил на музиката',
                       icon: Icons.tune,
                       onPressed: _generateStylePrompt,
                     ),
@@ -873,6 +873,11 @@ $exclude''';
           if (_isLoading) ...[
             const SizedBox(height: 14),
             const LinearProgressIndicator(color: ironGreen),
+            const SizedBox(height: 8),
+            Text(
+              _activeAction.isEmpty ? 'Iron пише…' : _activeAction,
+              style: const TextStyle(color: ironGreen, fontWeight: FontWeight.w600),
+            ),
           ],
           const SizedBox(height: 14),
           IronCard(
@@ -967,7 +972,7 @@ $exclude''';
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'SUNO ПАКЕТ',
+                  'Пакет за Suno',
                   style: TextStyle(
                     color: ironGreen,
                     fontWeight: FontWeight.w900,
@@ -1014,7 +1019,7 @@ $exclude''';
                     const SizedBox(width: 8),
                     Expanded(
                       child: IronButton(
-                        text: 'Copy Suno пакет',
+                        text: 'Копирай пакета за Suno',
                         icon: Icons.content_copy,
                         compact: true,
                         onPressed: _currentLyrics.isEmpty ? null : _copySunoPackage,

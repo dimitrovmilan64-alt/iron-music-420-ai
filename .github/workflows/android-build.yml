@@ -2,9 +2,9 @@ name: Android build
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/phase1-stability, feat/phase2-modern-ui, feat/voice-quality]
   pull_request:
-    branches: [main]
+    branches: [main, feat/phase1-stability, feat/phase2-modern-ui]
   workflow_dispatch:
 
 concurrency:

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'pages/chat_page.dart';
+import 'pages/onboarding_page.dart';
 import 'pages/rap_studio_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/songs_page.dart';
 import 'services/automation_service.dart';
 import 'services/local_store.dart';
+import 'theme/iron_theme.dart';
 import 'ui/common_widgets.dart';
 
 Future<void> main() async {
@@ -58,99 +60,27 @@ class IronMusic420App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Iron Music 420 AI',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        scaffoldBackgroundColor: ironDark,
-        fontFamily: 'Roboto',
-        colorScheme: const ColorScheme.dark(
-          primary: ironGreen,
-          secondary: ironGreenSoft,
-          surface: ironPanel,
-          error: Color(0xFFFF745C),
-        ),
-        dividerColor: Colors.white12,
-        iconTheme: const IconThemeData(color: Colors.white70),
-        popupMenuTheme: PopupMenuThemeData(
-          color: ironPanelRaised,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: ironGreen.withOpacity(0.24)),
-          ),
-        ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: ironPanelRaised,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-            side: BorderSide(color: ironGreen.withOpacity(0.28)),
-          ),
-        ),
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: Color(0xFF031108),
-          modalBackgroundColor: Color(0xFF031108),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: ironPanelRaised,
-          contentTextStyle: const TextStyle(color: Colors.white),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: ironGreen.withOpacity(0.25)),
-          ),
-        ),
-        sliderTheme: SliderThemeData(
-          activeTrackColor: ironGreen,
-          inactiveTrackColor: ironGreen.withOpacity(0.16),
-          thumbColor: ironGreenSoft,
-          overlayColor: ironGreen.withOpacity(0.12),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            backgroundColor: ironGreen,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: ironGreen,
-            side: BorderSide(color: ironGreen.withOpacity(0.45)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF010A05).withOpacity(0.94),
-          labelStyle: const TextStyle(color: ironGreen),
-          hintStyle: const TextStyle(color: Colors.white30),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(17),
-            borderSide: BorderSide(color: ironGreen.withOpacity(0.28)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(17),
-            borderSide: const BorderSide(color: ironGreen, width: 1.6),
-          ),
-        ),
-      ),
-      builder: (context, child) {
-        final media = MediaQuery.of(context);
-        final currentScale = media.textScaler.scale(1.0);
-        // Allow system scaling; only cap extreme values that break compact layouts.
-        final safeScale = currentScale.clamp(0.85, 1.3).toDouble();
-        return MediaQuery(
-          data: media.copyWith(textScaler: TextScaler.linear(safeScale)),
-          child: child ?? const SizedBox.shrink(),
+    return AnimatedBuilder(
+      animation: store,
+      builder: (context, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Iron Music 420 AI',
+          theme: ironTheme(),
+          builder: (context, child) {
+            final media = MediaQuery.of(context);
+            final currentScale = media.textScaler.scale(1.0);
+            final safeScale = currentScale.clamp(0.85, 1.3).toDouble();
+            return MediaQuery(
+              data: media.copyWith(textScaler: TextScaler.linear(safeScale)),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: store.onboardingComplete
+              ? MainScreen(store: store)
+              : OnboardingPage(store: store),
         );
       },
-      home: MainScreen(store: store),
     );
   }
 }
@@ -168,29 +98,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final AutomationService _automation = AutomationService();
   int _currentIndex = 0;
   late List<Widget> _pages;
-
-  static const _navItems = <IronNavItem>[
-    IronNavItem(
-      icon: Icons.auto_awesome_outlined,
-      selectedIcon: Icons.auto_awesome_rounded,
-      label: 'Хей Айрън',
-    ),
-    IronNavItem(
-      icon: Icons.mic_external_on_outlined,
-      selectedIcon: Icons.mic_external_on,
-      label: 'Студио',
-    ),
-    IronNavItem(
-      icon: Icons.library_music_outlined,
-      selectedIcon: Icons.library_music,
-      label: 'Песни',
-    ),
-    IronNavItem(
-      icon: Icons.tune_outlined,
-      selectedIcon: Icons.tune_rounded,
-      label: 'Настройки',
-    ),
-  ];
+  static const int _tabCount = 4;
 
   @override
   void initState() {
@@ -266,7 +174,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _selectTab(int index) {
-    if (!mounted || index < 0 || index >= _navItems.length) return;
+    if (!mounted || index < 0 || index >= _tabCount) return;
     setState(() {
       _currentIndex = index;
       _rebuildPages();
@@ -299,10 +207,39 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: IronBottomNavigation(
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0B0F0C),
+          border: Border(
+            top: BorderSide(color: ironOutline, width: 1),
+          ),
+        ),
+        child: NavigationBar(
         selectedIndex: _currentIndex,
-        onSelected: _selectTab,
-        items: _navItems,
+        onDestinationSelected: _selectTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome_rounded),
+            label: 'Хей Айрън',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mic_external_on_outlined),
+            selectedIcon: Icon(Icons.mic_external_on),
+            label: 'Студио',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.library_music_outlined),
+            selectedIcon: Icon(Icons.library_music),
+            label: 'Песни',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.tune_outlined),
+            selectedIcon: Icon(Icons.tune_rounded),
+            label: 'Настройки',
+          ),
+        ],
+      ),
       ),
     );
   }

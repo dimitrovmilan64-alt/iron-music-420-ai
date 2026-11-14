@@ -68,7 +68,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'onboarding_complete_v2': true,
+    });
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
     final store = LocalStore();
     await store.initialize();

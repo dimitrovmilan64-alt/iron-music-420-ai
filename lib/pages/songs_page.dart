@@ -26,6 +26,7 @@ class SongsPage extends StatefulWidget {
 class _SongsPageState extends State<SongsPage> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  String _styleFilter = '';
 
   @override
   void dispose() {
@@ -35,8 +36,11 @@ class _SongsPageState extends State<SongsPage> {
 
   List<SongProject> _filteredSongs(List<SongProject> songs) {
     final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return songs;
     return songs.where((song) {
+      if (_styleFilter.isNotEmpty && song.style != _styleFilter) {
+        return false;
+      }
+      if (query.isEmpty) return true;
       final haystack = [
         song.title,
         song.theme,
@@ -48,6 +52,44 @@ class _SongsPageState extends State<SongsPage> {
       ].join(' ').toLowerCase();
       return haystack.contains(query);
     }).toList(growable: false);
+  }
+
+  Future<void> _openStyleFilter() async {
+    final styles = widget.store.songProjects
+        .map((song) => song.style.trim())
+        .where((style) => style.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(title: Text('Филтър по стил')),
+              RadioListTile<String>(
+                value: '',
+                groupValue: _styleFilter,
+                title: const Text('Всички стилове'),
+                onChanged: (value) => Navigator.pop(context, value ?? ''),
+              ),
+              for (final style in styles)
+                RadioListTile<String>(
+                  value: style,
+                  groupValue: _styleFilter,
+                  title: Text(style),
+                  onChanged: (value) => Navigator.pop(context, value),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && mounted) {
+      setState(() => _styleFilter = selected);
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -96,7 +138,7 @@ class _SongsPageState extends State<SongsPage> {
   Future<void> _openInStudio(SongProject song) async {
     await widget.store.loadSongIntoStudio(song);
     widget.onOpenStudio();
-    if (mounted) _showMessage('Песента е заредена в Rap Studio.');
+    if (mounted) _showMessage('Песента е заредена в Рап студио.');
   }
 
   Future<void> _deleteSong(SongProject song) async {
@@ -307,15 +349,29 @@ class _SongsPageState extends State<SongsPage> {
                 decoration: InputDecoration(
                   hintText: 'Търси песен',
                   prefixIcon: const Icon(Icons.search, color: ironGreen),
-                  suffixIcon: _query.isEmpty
-                      ? const Icon(Icons.tune, color: Colors.white38)
-                      : IconButton(
+                  suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_query.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Изчисти търсенето',
                           onPressed: () {
                             _searchController.clear();
                             setState(() => _query = '');
                           },
                           icon: const Icon(Icons.close),
                         ),
+                      IconButton(
+                        tooltip: 'Филтър по стил',
+                        onPressed: _openStyleFilter,
+                        icon: Icon(
+                          Icons.tune,
+                          color: _styleFilter.isEmpty ? Colors.white38 : ironGreen,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -332,9 +388,9 @@ class _SongsPageState extends State<SongsPage> {
                       ),
                       const SizedBox(height: 13),
                       Text(
-                        _query.isEmpty
+                        _query.isEmpty && _styleFilter.isEmpty
                             ? 'Още няма запазени песни.'
-                            : 'Няма резултати за това търсене.',
+                            : 'Няма резултати за това търсене или филтър.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 18,
@@ -352,7 +408,7 @@ class _SongsPageState extends State<SongsPage> {
                         SizedBox(
                           width: double.infinity,
                           child: IronButton(
-                            text: 'ОТВОРИ RAP STUDIO',
+                            text: 'Отвори студиото',
                             icon: Icons.auto_awesome,
                             onPressed: widget.onOpenStudio,
                           ),
@@ -421,7 +477,7 @@ class _SongProjectCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      song.title.toUpperCase(),
+                      song.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -480,7 +536,7 @@ class _SongProjectCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.22),
                 borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: ironGreen.withOpacity(0.12)),
+                border: const Border.fromBorderSide(BorderSide(color: ironOutline, width: 1)),
               ),
               child: Text(
                 preview,
@@ -500,28 +556,28 @@ class _SongProjectCard extends StatelessWidget {
               Expanded(
                 child: _SongAction(
                   icon: Icons.open_in_new,
-                  label: 'ОТВОРИ',
+                  label: 'Отвори',
                   onTap: onOpen,
                 ),
               ),
               Expanded(
                 child: _SongAction(
                   icon: Icons.edit_outlined,
-                  label: 'РЕДАКТИРАЙ',
+                  label: 'Редактирай',
                   onTap: onEdit,
                 ),
               ),
               Expanded(
                 child: _SongAction(
                   icon: Icons.copy_outlined,
-                  label: 'КОПИРАЙ',
+                  label: 'Копирай',
                   onTap: onCopy,
                 ),
               ),
               Expanded(
                 child: _SongAction(
                   icon: Icons.ios_share,
-                  label: 'ЕКСПОРТ',
+                  label: 'Експорт',
                   onTap: onExport,
                 ),
               ),
