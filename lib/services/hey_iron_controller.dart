@@ -16,7 +16,8 @@ enum HeyIronPhase {
 }
 
 class HeyIronController extends ChangeNotifier {
-  static const MethodChannel _channel = MethodChannel('iron_music_420/hey_iron');
+  static const MethodChannel _channel =
+      MethodChannel('iron_music_420/hey_iron');
   static const EventChannel _events =
       EventChannel('iron_music_420/hey_iron_events');
   static const String modelLabel = 'sherpa-onnx-kws-zipformer-zh-en-3M';
@@ -52,7 +53,8 @@ class HeyIronController extends ChangeNotifier {
             ? 'Слуша (и на заден план, експериментално)'
             : 'Слуша, докато приложението е отворено';
       case HeyIronPhase.error:
-        return 'Грешка';
+        final detail = _shortError(message);
+        return detail.isEmpty ? 'Хей Айрън: грешка' : 'Хей Айрън: $detail';
       case HeyIronPhase.blocked:
         return 'Спрян автоматично (защита на телефона)';
     }
@@ -112,7 +114,8 @@ class HeyIronController extends ChangeNotifier {
       phase = modelReady ? HeyIronPhase.ready : HeyIronPhase.off;
     } else {
       phase = HeyIronPhase.off;
-      message = '„Хей Айрън“ е изключен. Работи само докато приложението е отворено.';
+      message =
+          '„Хей Айрън“ е изключен. Работи само докато приложението е отворено.';
     }
     notifyListeners();
   }
@@ -291,7 +294,8 @@ class HeyIronController extends ChangeNotifier {
     switch (type) {
       case 'progress':
         final received = (event['received'] as num?)?.toDouble() ?? 0;
-        final total = (event['total'] as num?)?.toDouble() ?? modelBytes.toDouble();
+        final total =
+            (event['total'] as num?)?.toDouble() ?? modelBytes.toDouble();
         downloadProgress = total <= 0 ? 0 : (received / total).clamp(0, 1);
         phase = HeyIronPhase.downloading;
         message =
@@ -326,6 +330,36 @@ class HeyIronController extends ChangeNotifier {
       _prefWatchdog,
       '${watchdog.failureCount}|$last|${watchdog.uncleanShutdown ? 1 : 0}',
     );
+  }
+
+  String _shortError(String value) {
+    var trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    final newlineAt = trimmed.indexOf('\n');
+    if (newlineAt >= 0) {
+      trimmed = trimmed.substring(0, newlineAt).trim();
+    }
+    final periodAt = trimmed.indexOf('.');
+    if (periodAt > 0) {
+      trimmed = trimmed.substring(0, periodAt).trim();
+    }
+    if (trimmed.length <= 48) return trimmed;
+    return '${trimmed.substring(0, 45)}…';
+  }
+
+  bool _recovering = false;
+
+  /// Clears a sticky error and retries listening once, if still enabled.
+  Future<void> recoverFromTransientError() async {
+    if (_recovering) return;
+    if (!enabled || watchdog.isTripped) return;
+    if (phase != HeyIronPhase.error) return;
+    _recovering = true;
+    try {
+      await startListening();
+    } finally {
+      _recovering = false;
+    }
   }
 
   @override

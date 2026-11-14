@@ -153,15 +153,75 @@ void main() {
     );
   });
 
-  test('lyric model lists prefer the strongest writers first', () {
+  test('lyric model lists prefer official free-tier flash models', () {
+    expect(GeminiService.lyricPreferredModels.first, 'gemini-3.8-flash');
     expect(
-      GeminiService.lyricPreferredModels.first,
-      'gemini-3.1-pro-preview',
+      GeminiService.lyricPreferredModels,
+      isNot(contains('gemini-3.1-pro-preview')),
     );
-    expect(GeminiService.lyricPreferredModels, contains('gemini-3.8-flash'));
+    expect(GeminiService.lyricBackupModels.first, 'openai/gpt-oss-120b');
     expect(
-      GeminiService.lyricBackupModels.first,
-      'llama-3.3-70b-versatile',
+      GeminiService.lyricBackupModels,
+      isNot(contains('llama-3.3-70b-versatile')),
     );
+    expect(GeminiService.lyricCallTimeout, const Duration(seconds: 18));
+  });
+
+  test('chat lyric intent detects rap, chorus and verse requests', () {
+    expect(
+      LyricCraft.isLyricRequest(
+        'Направи ми един рап припев да е със мрачно настроение',
+      ),
+      isTrue,
+    );
+    expect(
+      LyricCraft.isShortLyricRequest(
+        'Направи ми един рап припев да е със мрачно настроение',
+      ),
+      isTrue,
+    );
+    expect(LyricCraft.isLyricRequest('Какво време е утре?'), isFalse);
+    expect(LyricCraft.isShortLyricRequest('Напиши ми цяла песен'), isFalse);
+    expect(LyricCraft.isLyricRequest('Напиши ми цяла песен'), isTrue);
+  });
+
+  test('Milan\'s weak chat chorus fails the rhyme check', () {
+    const weak = '''
+Припев (мрачно настроение)
+Блъсна светлина, но я не виждам,
+Сянката в сърцето ми е пламък.
+Със звънища на тъга, стъпвам в тъмно,
+Когато всичко се смина, аз останах сам.
+
+Тази нощ не се събужда,
+Душата ми се превръща в кристална къща.
+Вятърът шепне, но аз не слушам,
+Въпросът е: "Къде е свободата, където?"
+''';
+    final report = LyricCraft.analyzeLyricsRhymeQuality(weak);
+    expect(report.needsRewrite, isTrue);
+    expect(LyricCraft.rhymeScore('виждам', 'тъмно'), 0);
+    expect(LyricCraft.rhymeScore('пламък', 'сам'), 0);
+    expect(LyricCraft.rhymeScore('събужда', 'къща'), 0);
+    expect(LyricCraft.rhymeScore('слушам', 'където'), 0);
+    final ends =
+        report.pairs.map((pair) => '${pair.left}/${pair.right}').toList();
+    expect(ends, contains('виждам/пламък'));
+    expect(report.weakPairs.length, greaterThanOrEqualTo(3));
+  });
+
+  test('a well-rhymed Bulgarian chorus passes the rhyme check', () {
+    const strong = '''
+[Припев]
+Лампата мига над пукнатия двор
+В стъклото сече жълт и празен хор
+Не връщам обаждането в този час
+Ключът не пасва вече на нашия глас
+''';
+    final report = LyricCraft.analyzeLyricsRhymeQuality(strong);
+    expect(report.weakPairs, isEmpty);
+    expect(report.needsRewrite, isFalse);
+    expect(LyricCraft.rhymeScore('двор', 'хор'), greaterThanOrEqualTo(2));
+    expect(LyricCraft.rhymeScore('час', 'глас'), greaterThanOrEqualTo(2));
   });
 }

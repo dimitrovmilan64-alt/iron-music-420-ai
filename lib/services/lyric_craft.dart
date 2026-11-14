@@ -154,6 +154,113 @@ class LyricCraft {
     return LyricLanguage.bulgarian;
   }
 
+  static final _lyricIntent = RegExp(
+    r'припев|предприпев|куплет|рап\b|бридж|аутро|интро|рими|рима\b|'
+    r'текст(а|ът)? (за |на )?(песен|рап)|напиши( ми)? (текст|песен)|'
+    r'\b(hook|chorus|verse|lyrics|bridge|outro|intro)\b|'
+    r'punchline|барове|\bbars\b',
+    caseSensitive: false,
+  );
+
+  static final _shortLyricIntent = RegExp(
+    r'припев|предприпев|куплет|бридж|хук|\b(hook|chorus|verse|bridge)\b',
+    caseSensitive: false,
+  );
+
+  static final _fullSongIntent = RegExp(
+    r'цял[ао](та)? песен|цялата рап|full song|напиши( ми)? (една |цяла )?песен',
+    caseSensitive: false,
+  );
+
+  static final _sectionHeading = RegExp(
+    r'^(припев|предприпев|куплет|интро|бридж|аутро|финален припев|'
+    r'hook|chorus|verse|bridge|intro|outro)(\s*\(.*\))?$',
+    caseSensitive: false,
+  );
+
+  static bool isLyricRequest(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    return _lyricIntent.hasMatch(trimmed) || _fullSongIntent.hasMatch(trimmed);
+  }
+
+  static bool isShortLyricRequest(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    if (_fullSongIntent.hasMatch(trimmed) &&
+        !_shortLyricIntent.hasMatch(trimmed)) {
+      return false;
+    }
+    return _shortLyricIntent.hasMatch(trimmed);
+  }
+
+  static String buildChatLyricInstruction({
+    required String userRequest,
+    required LyricLanguage language,
+    String recentContext = '',
+  }) {
+    final short = isShortLyricRequest(userRequest);
+    const scheme = 'AABB';
+    final contextBlock = recentContext.trim().isEmpty
+        ? ''
+        : (language == LyricLanguage.english
+            ? 'Recent conversation context:\n$recentContext\n'
+            : 'Контекст от разговора:\n$recentContext\n');
+    if (language == LyricLanguage.english) {
+      final shape = short
+          ? 'only a finished chorus (8 lines)'
+          : 'a finished original rap song';
+      return 'Write $shape in English.\n'
+          'Rhyme scheme: $scheme. End-rhymes must rhyme by stressed vowel + '
+          'following consonants, not the last letter alone. Keep paired lines '
+          'close in syllable count. Concrete images matching the requested mood. '
+          'No stock heart/sky/pain pairs.\n'
+          'User request:\n$userRequest\n'
+          '$contextBlock'
+          'Return only singable lyrics with square section tags. '
+          'No parenthetical stage directions and no intro explanation.\n';
+    }
+    final shape = short
+        ? 'само завършен припев от 8 реда'
+        : 'завършена оригинална българска рап песен';
+    return 'Напиши $shape.\n'
+        'Римна схема: $scheme. Крайните рими да се римуват по ударена гласна '
+        'и следващите съгласни, не само по последната буква. Двойките редове '
+        'да са близки по брой срички.\n'
+        'Конкретни образи според поисканото настроение. Без изтъркани двойки '
+        'сърце/небе/болка и без граматически рими като -ам/-ам.\n'
+        'Заявка на потребителя:\n$userRequest\n'
+        '$contextBlock'
+        'Върни само текста за пеене с квадратни секционни етикети като [Припев]. '
+        'Без обяснения и без указания в кръгли скоби.\n';
+  }
+
+  static String buildWeakLinesInstruction({
+    required String draft,
+    required LyricLanguage language,
+    required LyricRhymeReport report,
+    required String originalInstruction,
+  }) {
+    final weak = report.weakPairs
+        .map((pair) => '- ${pair.left} / ${pair.right}: ${pair.reason}')
+        .join('\n');
+    final weakBlock = weak.isEmpty ? '- няма маркирани' : weak;
+    if (language == LyricLanguage.english) {
+      return 'Rewrite ONLY the weakly rhymed lines in this draft. '
+          'Keep strong lines and the story.\n'
+          'Weak pairs:\n${weak.isEmpty ? '- none flagged' : weak}\n'
+          'Original request:\n$originalInstruction\n\n'
+          'DRAFT:\n$draft\n\n'
+          'Return only the full improved lyrics with section tags.\n';
+    }
+    return 'Пренапиши САМО редовете със слаби рими в този черновик. '
+        'Запази силните редове и историята.\n'
+        'Слаби двойки:\n$weakBlock\n'
+        'Първоначална задача:\n$originalInstruction\n\n'
+        'ЧЕРНОВИК:\n$draft\n\n'
+        'Върни само целия подобрен текст със секционни етикети.\n';
+  }
+
   static String pickStoryAngle(LyricLanguage language, [Random? random]) {
     final source =
         language == LyricLanguage.english ? englishStoryAngles : storyAngles;
@@ -239,18 +346,12 @@ class LyricCraft {
     if (tailA.isEmpty || tailB.isEmpty) return 0;
     if (isGrammaticalRhyme(a, b) && tailA == tailB) return 1;
     if (tailA == tailB) {
+      // A tail of only a vowel (no following consonants) is too weak.
+      if (tailA.length < 2) return 1;
       if (tailA.length >= 3) return 3;
-      if (a.length >= 2 &&
-          b.length >= 2 &&
-          a[a.length - 2] == b[b.length - 2]) {
-        return 3;
-      }
       return 2;
     }
-    // Same last letter only is not a rhyme.
-    if (a.isNotEmpty && b.isNotEmpty && a[a.length - 1] == b[b.length - 1]) {
-      return 0;
-    }
+    // Same last letter or a lone shared vowel is not a rhyme.
     return 0;
   }
 
@@ -284,7 +385,9 @@ class LyricCraft {
           .split('\n')
           .map((line) => line.trim())
           .where((line) =>
-              line.isNotEmpty && !RegExp(r'^\[[^\]]+\]$').hasMatch(line))
+              line.isNotEmpty &&
+              !RegExp(r'^\[[^\]]+\]$').hasMatch(line) &&
+              !_sectionHeading.hasMatch(line))
           .toList();
       if (lines.length < 2) continue;
 

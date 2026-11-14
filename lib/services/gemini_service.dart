@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -13,6 +14,24 @@ class GeminiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class LyricGenerationStats {
+  final int draftMs;
+  final int reviseMs;
+  final int rewriteMs;
+  final int totalMs;
+  final String model;
+  final int passes;
+
+  const LyricGenerationStats({
+    required this.draftMs,
+    required this.reviseMs,
+    required this.rewriteMs,
+    required this.totalMs,
+    required this.model,
+    required this.passes,
+  });
 }
 
 class _AiMessage {
@@ -36,22 +55,29 @@ class GeminiService {
     'gemini-flash-latest',
   ];
 
+  /// Official Gemini text models with a documented free tier, fastest first.
+  /// gemini-3.1-pro-preview is official but has no free tier, so it is omitted.
   static const lyricPreferredModels = <String>[
-    'gemini-3.1-pro-preview',
     'gemini-3.8-flash',
     'gemini-3.6-flash',
-    'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
     'gemini-flash-latest',
   ];
 
+  /// Official Groq production chat models available outside Enterprise.
+  /// llama-3.3-70b-versatile was deprecated for free/developer tiers on 2026-08-16.
   static const lyricBackupModels = <String>[
-    'llama-3.3-70b-versatile',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
   ];
+
+  static const Duration lyricCallTimeout = Duration(seconds: 18);
+  static const Duration chatCallTimeout = Duration(seconds: 20);
+
+  final Set<String> _unavailableModels = <String>{};
+  LyricGenerationStats? lastLyricStats;
 
   final http.Client _client;
   String? _activeModel;
@@ -109,6 +135,7 @@ class GeminiService {
       messages: messages,
       maxOutputTokens: 3600,
       temperature: 0.82,
+      timeout: chatCallTimeout,
     );
   }
 
@@ -117,46 +144,89 @@ class GeminiService {
     required String instruction,
     LyricLanguage? language,
     bool twoPass = true,
+    bool shortForm = false,
+    void Function(String status)? onProgress,
   }) async {
     final resolvedLanguage =
         language ?? LyricCraft.detectLanguage(material: instruction);
     final systemPrompt = LyricCraft.buildSystemPrompt(resolvedLanguage);
+    final total = Stopwatch()..start();
+    var draftMs = 0;
+    var reviseMs = 0;
+    var rewriteMs = 0;
+    var passes = 1;
 
+    onProgress?.call('Пиша…');
+    final draftWatch = Stopwatch()..start();
     final draft = await _generateWithFallback(
       geminiApiKey: apiKey,
       systemPrompt: systemPrompt,
       messages: [_AiMessage('user', instruction)],
-      maxOutputTokens: 7000,
+      maxOutputTokens: shortForm ? 1800 : 7000,
       temperature: 0.95,
       preferredModels: lyricPreferredModels,
       forceSampling: true,
       frequencyPenalty: 0.7,
       presencePenalty: 0.6,
+      timeout: lyricCallTimeout,
+      skipModelDiscovery: true,
+      thinkingLevel: 'low',
     );
-    if (!twoPass || draft.trim().isEmpty) return draft;
+    draftMs = draftWatch.elapsedMilliseconds;
+    if (!twoPass || draft.trim().isEmpty) {
+      lastLyricStats = LyricGenerationStats(
+        draftMs: draftMs,
+        reviseMs: 0,
+        rewriteMs: 0,
+        totalMs: total.elapsedMilliseconds,
+        model: _activeModel ?? '',
+        passes: passes,
+      );
+      return draft;
+    }
 
     var current = draft;
     var report = LyricCraft.analyzeLyricsRhymeQuality(current);
+    final revisePasses = shortForm ? 1 : 2;
     const temperatures = <double>[0.7, 0.55];
-    for (var pass = 0; pass < temperatures.length; pass++) {
+    for (var pass = 0; pass < revisePasses; pass++) {
       if (pass > 0 && !report.needsRewrite) break;
-      final revisionInstruction = LyricCraft.buildRevisionInstruction(
-        draft: current,
-        language: resolvedLanguage,
-        report: report,
-        originalInstruction: instruction,
-      );
+      onProgress?.call('Проверявам римите…');
+      final reviseWatch = Stopwatch()..start();
+      final revisionInstruction = pass == 0
+          ? LyricCraft.buildRevisionInstruction(
+              draft: current,
+              language: resolvedLanguage,
+              report: report,
+              originalInstruction: instruction,
+            )
+          : LyricCraft.buildWeakLinesInstruction(
+              draft: current,
+              language: resolvedLanguage,
+              report: report,
+              originalInstruction: instruction,
+            );
       final revised = await _generateWithFallback(
         geminiApiKey: apiKey,
         systemPrompt: systemPrompt,
         messages: [_AiMessage('user', revisionInstruction)],
-        maxOutputTokens: 7000,
+        maxOutputTokens: shortForm ? 1800 : 7000,
         temperature: temperatures[pass],
         preferredModels: lyricPreferredModels,
         forceSampling: true,
         frequencyPenalty: 0.55,
         presencePenalty: 0.45,
+        timeout: lyricCallTimeout,
+        skipModelDiscovery: true,
+        thinkingLevel: 'low',
       );
+      final elapsed = reviseWatch.elapsedMilliseconds;
+      if (pass == 0) {
+        reviseMs = elapsed;
+      } else {
+        rewriteMs = elapsed;
+      }
+      passes += 1;
       if (revised.trim().isEmpty) break;
       final nextReport = LyricCraft.analyzeLyricsRhymeQuality(revised);
       final improved = nextReport.weakPairs.length < report.weakPairs.length ||
@@ -169,6 +239,15 @@ class GeminiService {
         break;
       }
     }
+
+    lastLyricStats = LyricGenerationStats(
+      draftMs: draftMs,
+      reviseMs: reviseMs,
+      rewriteMs: rewriteMs,
+      totalMs: total.elapsedMilliseconds,
+      model: _activeModel ?? '',
+      passes: passes,
+    );
     return current;
   }
 
@@ -182,6 +261,9 @@ class GeminiService {
     bool forceSampling = false,
     double frequencyPenalty = 0,
     double presencePenalty = 0,
+    Duration timeout = chatCallTimeout,
+    bool skipModelDiscovery = false,
+    String? thinkingLevel,
   }) async {
     final cleanGeminiKey = geminiApiKey.trim();
     final backup = AiProviderConfig.current;
@@ -198,6 +280,9 @@ class GeminiService {
           temperature: temperature,
           preferredModels: preferredModels,
           forceSampling: forceSampling,
+          timeout: timeout,
+          skipModelDiscovery: skipModelDiscovery,
+          thinkingLevel: thinkingLevel,
         );
       } on GeminiException catch (error) {
         geminiError = error;
@@ -215,6 +300,7 @@ class GeminiService {
           preferredModels: preferredModels,
           frequencyPenalty: frequencyPenalty,
           presencePenalty: presencePenalty,
+          timeout: timeout,
         );
       } on GeminiException catch (error) {
         backupError = error;
@@ -247,17 +333,35 @@ class GeminiService {
     required double temperature,
     List<String>? preferredModels,
     bool forceSampling = false,
+    Duration timeout = chatCallTimeout,
+    bool skipModelDiscovery = false,
+    String? thinkingLevel,
   }) async {
     final preferred = preferredModels ?? _preferredModels;
-    final resolvedModel = await _resolveGeminiModel(
-      apiKey,
-      preferredModels: preferred,
-    );
+    String? resolvedModel;
+    if (!skipModelDiscovery) {
+      resolvedModel = await _resolveGeminiModel(
+        apiKey,
+        preferredModels: preferred,
+      );
+    } else if (_activeGeminiModel != null &&
+        _modelForKeyFingerprint == _fingerprint(apiKey) &&
+        !_unavailableModels.contains(_activeGeminiModel)) {
+      resolvedModel = _activeGeminiModel;
+    }
     final modelsToTry = <String>[
+      if (resolvedModel != null) resolvedModel,
       ...preferred,
-      resolvedModel,
-      ..._preferredModels,
-    ].toSet().toList(growable: false);
+      if (!skipModelDiscovery) ..._preferredModels,
+    ]
+        .where((model) => !_unavailableModels.contains(model))
+        .toSet()
+        .toList(growable: false);
+    if (modelsToTry.isEmpty) {
+      throw const GeminiException(
+        'Няма наличен Gemini модел за този ключ. Провери ключа в Настройки и опитай отново.',
+      );
+    }
 
     GeminiException? lastError;
 
@@ -274,6 +378,13 @@ class GeminiService {
               !model.startsWith('gemini-3.6'))) {
         generationConfig['temperature'] = temperature;
         generationConfig['topP'] = 0.95;
+      }
+      if (thinkingLevel != null &&
+          thinkingLevel.isNotEmpty &&
+          model.startsWith('gemini-3')) {
+        generationConfig['thinkingConfig'] = {
+          'thinkingLevel': thinkingLevel,
+        };
       }
 
       for (var attempt = 0; attempt < 2; attempt++) {
@@ -307,15 +418,17 @@ class GeminiService {
                   'generationConfig': generationConfig,
                 }),
               )
-              .timeout(const Duration(seconds: 70));
+              .timeout(timeout);
+        } on TimeoutException {
+          lastError = const GeminiException(
+            'Gemini не отговори навреме. Пробвам друг модел.',
+          );
+          break;
         } catch (_) {
-          if (attempt == 0) {
-            await Future<void>.delayed(const Duration(seconds: 1));
-            continue;
-          }
-          throw const GeminiException(
+          lastError = const GeminiException(
             'Няма връзка с Gemini. Преминавам към резервния доставчик.',
           );
+          break;
         }
 
         if (response.statusCode == 200) {
@@ -331,9 +444,12 @@ class GeminiService {
 
         final message = _extractError(response.body);
 
-        if (response.statusCode == 404) {
-          lastError = const GeminiException(
-            'Избраният Gemini модел не е наличен.',
+        if (response.statusCode == 404 ||
+            (response.statusCode == 400 &&
+                message.toLowerCase().contains('not found'))) {
+          _unavailableModels.add(model);
+          lastError = GeminiException(
+            'Моделът „$model“ не е наличен за този ключ.',
           );
           break;
         }
@@ -344,7 +460,24 @@ class GeminiService {
           );
         }
 
-        if (response.statusCode == 401 || response.statusCode == 403) {
+        if (response.statusCode == 401) {
+          throw const GeminiException(
+            'Gemini API ключът не е валиден или няма разрешение.',
+          );
+        }
+
+        if (response.statusCode == 403) {
+          final lower = message.toLowerCase();
+          final modelBlocked = lower.contains('not found') ||
+              lower.contains('not supported') ||
+              lower.contains('not available');
+          if (modelBlocked) {
+            _unavailableModels.add(model);
+            lastError = GeminiException(
+              'Моделът „$model“ не е достъпен за този ключ.',
+            );
+            break;
+          }
           throw const GeminiException(
             'Gemini API ключът не е валиден или няма разрешение.',
           );
@@ -384,6 +517,7 @@ class GeminiService {
     List<String>? preferredModels,
     double frequencyPenalty = 0,
     double presencePenalty = 0,
+    Duration timeout = chatCallTimeout,
   }) async {
     final uri = config.chatCompletionsUri;
     if (uri == null) {
@@ -449,12 +583,13 @@ class GeminiService {
                 },
                 body: jsonEncode(payload),
               )
-              .timeout(const Duration(seconds: 70));
+              .timeout(timeout);
+        } on TimeoutException {
+          lastError = const GeminiException(
+            'Резервният AI не отговори навреме. Пробвам друг модел.',
+          );
+          break;
         } catch (_) {
-          if (attempt == 0) {
-            await Future<void>.delayed(const Duration(seconds: 1));
-            continue;
-          }
           lastError = const GeminiException(
             'Няма връзка с резервния AI доставчик.',
           );

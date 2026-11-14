@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +10,7 @@ import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
 import '../services/iron_tts.dart';
 import '../services/local_store.dart';
+import '../services/lyric_craft.dart';
 import '../widgets/voice_settings_panel.dart';
 import '../ui/common_widgets.dart';
 
@@ -55,6 +57,7 @@ class _ChatPageState extends State<ChatPage>
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
+  String _loadingStatus = '';
   DateTime? _handledWakeAt;
   bool _isListening = false;
   bool _ironActive = false;
@@ -559,10 +562,42 @@ class _ChatPageState extends State<ChatPage>
     _scrollToBottom();
 
     try {
-      final reply = await _gemini.generateChat(
-        apiKey: apiKey,
-        history: _messages,
-      );
+      final latest = text;
+      final String reply;
+      if (LyricCraft.isLyricRequest(latest)) {
+        final language = LyricCraft.detectLanguage(material: latest);
+        final context = _messages
+            .where((message) => !message.isLocalNotice)
+            .toList(growable: false);
+        final recent =
+            context.length > 6 ? context.sublist(context.length - 6) : context;
+        final recentBlock = recent
+            .where((message) => message.text != latest)
+            .map((message) =>
+                '${message.isUser ? 'Потребител' : 'Iron'}: ${message.text}')
+            .join('\n');
+        setState(() => _loadingStatus = 'Пиша…');
+        reply = await _gemini.generateRap(
+          apiKey: apiKey,
+          instruction: LyricCraft.buildChatLyricInstruction(
+            userRequest: latest,
+            language: language,
+            recentContext: recentBlock,
+          ),
+          language: language,
+          shortForm: LyricCraft.isShortLyricRequest(latest),
+          onProgress: (status) {
+            if (!mounted) return;
+            setState(() => _loadingStatus = status);
+          },
+        );
+      } else {
+        setState(() => _loadingStatus = 'Iron мисли…');
+        reply = await _gemini.generateChat(
+          apiKey: apiKey,
+          history: _messages,
+        );
+      }
       if (!mounted) return;
 
       final aiMessage = ChatMessage(
@@ -585,10 +620,14 @@ class _ChatPageState extends State<ChatPage>
       await _addLocalNotice('Неочаквана грешка при връзката с AI.');
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _loadingStatus = '';
+        });
         _syncCoreAnimation();
         _scrollToBottom();
       }
+      unawaited(widget.heyIron?.recoverFromTransientError());
     }
   }
 
@@ -880,7 +919,7 @@ class _ChatPageState extends State<ChatPage>
     final status = _isListening
         ? 'Слушам…'
         : _isLoading
-            ? 'Iron мисли…'
+            ? (_loadingStatus.isEmpty ? 'Iron мисли…' : _loadingStatus)
             : hey != null && hey.enabled
                 ? hey.statusLabel
                 : ironVoiceServiceEnabled && _ironActive
@@ -1118,31 +1157,31 @@ class _ChatPageState extends State<ChatPage>
                           ),
                         ),
                         child: TextField(
-                        focusNode: _composerFocus,
-                        controller: _messageController,
-                        minLines: 1,
-                        maxLines: 4,
-                        textCapitalization: TextCapitalization.sentences,
-                        style:
-                            const TextStyle(color: Colors.white, height: 1.35),
-                        decoration: InputDecoration(
-                          isCollapsed: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
-                          filled: false,
-                          hintText: _isListening
-                              ? 'Слушам на български…'
-                              : 'Пиши на Iron…',
-                          hintStyle: const TextStyle(color: Colors.white38),
+                          focusNode: _composerFocus,
+                          controller: _messageController,
+                          minLines: 1,
+                          maxLines: 4,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: const TextStyle(
+                              color: Colors.white, height: 1.35),
+                          decoration: InputDecoration(
+                            isCollapsed: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                            filled: false,
+                            hintText: _isListening
+                                ? 'Слушам на български…'
+                                : 'Пиши на Iron…',
+                            hintStyle: const TextStyle(color: Colors.white38),
+                          ),
+                          onSubmitted: (_) {
+                            if (!_isLoading) _sendMessage();
+                          },
                         ),
-                        onSubmitted: (_) {
-                          if (!_isLoading) _sendMessage();
-                        },
-                      ),
                       ),
                     ),
                     IconButton(
@@ -1283,7 +1322,8 @@ class _ChatBubble extends StatelessWidget {
       alignment: alignment,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: EdgeInsets.fromLTRB(notice ? 4 : 16, notice ? 6 : 12, notice ? 4 : 16, notice ? 8 : 14),
+        padding: EdgeInsets.fromLTRB(
+            notice ? 4 : 16, notice ? 6 : 12, notice ? 4 : 16, notice ? 8 : 14),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * (notice ? 0.94 : 0.82),
         ),
