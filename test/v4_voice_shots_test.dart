@@ -33,8 +33,15 @@ Future<void> _saveShot(WidgetTester tester, String name) async {
     );
     final image = await boundary.toImage(pixelRatio: 2.6);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final dir = Directory('/workspace/iron-shots/v4')
-      ..createSync(recursive: true);
+    final preferred = Directory('/workspace/iron-shots/v4');
+    late final Directory dir;
+    try {
+      preferred.createSync(recursive: true);
+      dir = preferred;
+    } on FileSystemException {
+      dir = Directory('${Directory.systemTemp.path}/iron-shots-v4')
+        ..createSync(recursive: true);
+    }
     File('${dir.path}/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
   });
 }
