@@ -46,7 +46,7 @@ Future<void> _saveShot(WidgetTester tester, String name) async {
     );
     final image = await boundary.toImage(pixelRatio: 2.6);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final preferred = Directory('/workspace/iron-shots/v2');
+    final preferred = Directory('/workspace/iron-shots/v3');
     late final Directory dir;
     try {
       preferred.createSync(recursive: true);
@@ -125,7 +125,7 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Хей Айрън'), findsWidgets);
     expect(find.text('Готов за разговор'), findsOneWidget);
-    expect(find.text('Напиши или говори с Iron...'), findsOneWidget);
+    expect(find.text('Пиши на Iron…'), findsOneWidget);
 
     await tester.tap(find.text('Студио'));
     await tester.pump(const Duration(milliseconds: 400));

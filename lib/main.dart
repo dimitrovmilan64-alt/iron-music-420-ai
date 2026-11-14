@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'pages/chat_page.dart';
 import 'pages/onboarding_page.dart';
@@ -13,6 +14,14 @@ import 'ui/common_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  ));
   ErrorWidget.builder = (details) => Material(
         color: ironDark,
         child: IronBackground(
@@ -230,17 +239,31 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final view = MediaQuery.viewPaddingOf(context);
+    final media = MediaQuery.of(context);
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0B0F0C),
-          border: Border(
-            top: BorderSide(color: ironOutline, width: 1),
+      backgroundColor: ironDark,
+      body: MediaQuery(
+        data: media.copyWith(
+          padding: media.padding.copyWith(
+            top: view.top,
+            left: view.left,
+            right: view.right,
           ),
         ),
-        child: NavigationBar(
+        child: IndexedStack(index: _currentIndex, children: _pages),
+      ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0B0E0F),
+          border: Border(
+            top: BorderSide(color: ironHairline, width: 1),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: view.bottom),
+          child: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: _selectTab,
         destinations: const [
@@ -265,7 +288,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             label: 'Настройки',
           ),
         ],
-      ),
+          ),
+        ),
       ),
     );
   }

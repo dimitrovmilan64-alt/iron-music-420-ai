@@ -30,13 +30,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
 
-    final apiButton = find.byTooltip('AI доставчици');
-    expect(apiButton, findsOneWidget);
-    await tester.ensureVisible(apiButton);
-    await tester.tap(apiButton);
+    final moreButton = find.byTooltip('Още');
+    expect(moreButton, findsOneWidget);
+    await tester.tap(moreButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI доставчици'));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('AI доставчици'), findsOneWidget);
+    expect(find.text('AI доставчици'), findsWidgets);
     expect(find.text('Запази AI доставчиците'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

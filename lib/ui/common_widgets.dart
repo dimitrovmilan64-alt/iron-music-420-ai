@@ -82,7 +82,29 @@ class IronBackground extends StatelessWidget {
           ],
         ),
       ),
-      child: SafeArea(child: child),
+      child: _ViewSafeArea(child: child),
+    );
+  }
+}
+
+/// Uses viewPadding so Android 15 edge-to-edge still insets after Scaffold
+/// has already consumed MediaQuery.padding.
+class _ViewSafeArea extends StatelessWidget {
+  final Widget child;
+  const _ViewSafeArea({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final view = MediaQuery.viewPaddingOf(context);
+    final padding = MediaQuery.paddingOf(context);
+    final top = view.top > padding.top ? view.top - padding.top : padding.top;
+    final bottom = view.bottom > padding.bottom ? 0.0 : 0.0;
+    // Horizontal insets (notches) should still apply.
+    final left = view.left > padding.left ? view.left : padding.left;
+    final right = view.right > padding.right ? view.right : padding.right;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(left, top, right, bottom),
+      child: child,
     );
   }
 }
@@ -112,44 +134,31 @@ class PageTitle extends StatelessWidget {
             children: [
               if (eyebrow != null) ...[
                 Text(
-                  eyebrow!.toUpperCase(),
-                  style: TextStyle(
-                    color: ironGreen.withOpacity(0.72),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.0,
+                  eyebrow!,
+                  style: const TextStyle(
+                    color: ironMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
               ],
               Text(
                 title,
                 style: ironText(
-                  size: 28,
-                  weight: FontWeight.w700,
-                  height: 1.1,
+                  size: 32,
+                  weight: FontWeight.w800,
+                  height: 1.05,
                 ),
               ),
-              const SizedBox(height: 7),
+              const SizedBox(height: 8),
               Text(
                 subtitle,
                 style: const TextStyle(
-                  color: Colors.white60,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                width: 86,
-                height: 2,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      ironGreen,
-                      ironGreen.withOpacity(0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(9),
+                  color: ironMuted,
+                  fontSize: 14,
+                  height: 1.35,
                 ),
               ),
             ],
@@ -171,12 +180,15 @@ class IronCard extends StatelessWidget {
   final bool bright;
   final BorderRadius? borderRadius;
 
+  final bool accent;
+
   const IronCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.margin = const EdgeInsets.only(bottom: 12),
+    this.margin = const EdgeInsets.only(bottom: 16),
     this.bright = false,
+    this.accent = false,
     this.borderRadius,
   });
 
@@ -190,27 +202,22 @@ class IronCard extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.32),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Material(
-        color: bright ? const Color(0xFF102016) : ironSurfaceHigh,
+        color: bright ? const Color(0xFF151C18) : ironSurfaceHigh,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: ironBorderSide(accent: true, strong: bright),
+          side: ironBorderSide(accent: accent, strong: accent),
         ),
         clipBehavior: Clip.antiAlias,
-        child: CustomPaint(
-          foregroundPainter: _PanelAccentPainter(
-            color: bright ? ironGreenSoft : ironGreen,
-          ),
-          child: Padding(
-            padding: padding,
-            child: child,
-          ),
+        child: Padding(
+          padding: padding,
+          child: child,
         ),
       ),
     );
@@ -253,11 +260,11 @@ class IronInput extends StatelessWidget {
       style: const TextStyle(color: Colors.white, height: 1.35),
       cursorColor: ironGreen,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: label.isEmpty ? null : label,
         hintText: hint,
         prefixIcon: icon == null ? null : Icon(icon, color: ironGreen),
         labelStyle: const TextStyle(
-          color: ironGreen,
+          color: ironMuted,
           fontWeight: FontWeight.w600,
         ),
         floatingLabelStyle: const TextStyle(
@@ -266,15 +273,15 @@ class IronInput extends StatelessWidget {
         ),
         hintStyle: const TextStyle(color: Colors.white30),
         filled: true,
-        fillColor: const Color(0xFF010A05).withOpacity(0.92),
+        fillColor: ironSurface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(17),
-          borderSide: BorderSide(color: ironGreen.withOpacity(0.29)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: ironHairline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(17),
-          borderSide: const BorderSide(color: ironGreen, width: 1.6),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: ironGreen, width: 1.4),
         ),
       ),
     );
@@ -329,7 +336,7 @@ class IronButton extends StatelessWidget {
                     ),
               border: secondary
                   ? Border.all(
-                      color: ironGreen.withOpacity(enabled ? 0.62 : 0.2),
+                      color: ironHairline.withOpacity(enabled ? 1 : 0.5),
                     )
                   : null,
               boxShadow: enabled

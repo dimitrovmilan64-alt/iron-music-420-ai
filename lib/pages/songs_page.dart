@@ -236,12 +236,16 @@ class _SongsPageState extends State<SongsPage> {
                       if (song.musicPrompt.trim().isNotEmpty) ...[
                         const SizedBox(height: 22),
                         const Text(
-                          'Style of Music',
+                          'Стил на музиката',
                           style: TextStyle(
-                            color: ironGreen,
+                            color: Colors.white,
                             fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
+                        ),
+                        const Text(
+                          'Style of Music',
+                          style: TextStyle(color: ironMuted, fontSize: 11),
                         ),
                         const SizedBox(height: 8),
                         SelectableText(
@@ -252,12 +256,16 @@ class _SongsPageState extends State<SongsPage> {
                       if (song.excludePrompt.trim().isNotEmpty) ...[
                         const SizedBox(height: 22),
                         const Text(
-                          'Exclude',
+                          'Изключи',
                           style: TextStyle(
-                            color: ironGreen,
+                            color: Colors.white,
                             fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
+                        ),
+                        const Text(
+                          'Exclude',
+                          style: TextStyle(color: ironMuted, fontSize: 11),
                         ),
                         const SizedBox(height: 8),
                         SelectableText(

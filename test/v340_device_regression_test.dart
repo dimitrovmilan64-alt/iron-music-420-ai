@@ -8,7 +8,7 @@ void main() {
     final chat = File('lib/pages/chat_page.dart').readAsStringSync();
 
     expect(main, contains("label: 'Хей Айрън'"));
-    expect(chat, contains("'Хей Айрън'"));
+    expect(chat, contains('Хей Айрън'));
     expect(File('lib/pages/home_page.dart').existsSync(), isFalse);
   });
 

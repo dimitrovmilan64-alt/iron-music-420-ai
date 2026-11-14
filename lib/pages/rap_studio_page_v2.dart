@@ -7,18 +7,20 @@ import '../models/song_project.dart';
 import '../services/gemini_service.dart';
 import '../services/local_store.dart';
 import '../ui/common_widgets.dart';
+import '../utils/lyric_sections.dart';
 
 class RapStudioPage extends StatefulWidget {
   final LocalStore store;
+  final GeminiService? gemini;
 
-  const RapStudioPage({super.key, required this.store});
+  const RapStudioPage({super.key, required this.store, this.gemini});
 
   @override
   State<RapStudioPage> createState() => _RapStudioPageState();
 }
 
 class _RapStudioPageState extends State<RapStudioPage> {
-  final GeminiService _gemini = GeminiService();
+  late final GeminiService _gemini;
 
   late final TextEditingController _titleController;
   late final TextEditingController _themeController;
@@ -70,6 +72,7 @@ class _RapStudioPageState extends State<RapStudioPage> {
   @override
   void initState() {
     super.initState();
+    _gemini = widget.gemini ?? GeminiService();
     final song = widget.store.activeSong;
     _titleController = TextEditingController(text: song?.title ?? '');
     _themeController = TextEditingController(text: song?.theme ?? '');
@@ -283,6 +286,221 @@ class _RapStudioPageState extends State<RapStudioPage> {
     return values.join(', ');
   }
 
+  void _fillSunoFieldsFromGeneration() {
+    _restoring = true;
+    _musicPromptController.text = _buildStylePrompt();
+    _excludeController.text = _buildExcludePrompt();
+    _restoring = false;
+    if (mounted) setState(() {});
+  }
+
+  Widget _sunoLabeledField({
+    required TextEditingController controller,
+    required String label,
+    required String subtitle,
+    required String hint,
+    required IconData icon,
+    int minLines = 2,
+    int maxLines = 6,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: const TextStyle(color: ironMuted, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        IronInput(
+          controller: controller,
+          label: '',
+          hint: hint,
+          icon: icon,
+          minLines: minLines,
+          maxLines: maxLines,
+        ),
+      ],
+    );
+  }
+
+  Widget _stickyStudioBar({required bool hasResult}) {
+    final canCopy = hasResult || _draftController.text.trim().isNotEmpty;
+    return Material(
+      color: ironSurfaceHigh,
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: ironHairline)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            children: [
+              Expanded(
+                child: IronButton(
+                  text: 'Копирай текста',
+                  icon: Icons.copy,
+                  compact: true,
+                  secondary: true,
+                  onPressed: canCopy ? _copyLyrics : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: IronButton(
+                  text: 'Копирай за Suno',
+                  icon: Icons.content_copy,
+                  compact: true,
+                  secondary: true,
+                  onPressed: _currentLyrics.isEmpty ? null : _copySunoPackage,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: IronButton(
+                  text: 'Запази',
+                  icon: Icons.save_outlined,
+                  compact: true,
+                  onPressed:
+                      _isLoading || _currentLyrics.isEmpty ? null : _saveProject,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lyricResultSection({required bool hasResult}) {
+    final sections = parseLyricSections(_resultController.text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'AI резултат',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (sections.length > 1) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final section in sections)
+                Chip(
+                  label: Text(section.label),
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: ironHairline),
+                  backgroundColor: ironSurface,
+                  labelStyle: const TextStyle(fontSize: 12, color: Colors.white),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...[
+            for (var i = 0; i < sections.length; i++)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  initiallyExpanded: i == 0,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                  childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                  title: Text(
+                    sections[i].label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        sections[i].body.isEmpty
+                            ? '—'
+                            : sections[i].body,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 8),
+        ],
+        Theme(
+          data: Theme.of(context).copyWith(
+            inputDecorationTheme: const InputDecorationTheme(
+              filled: true,
+              fillColor: ironSurface,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide(color: ironGreen, width: 1.4),
+              ),
+            ),
+          ),
+          child: TextField(
+            controller: _resultController,
+            minLines: 6,
+            maxLines: 16,
+            keyboardType: TextInputType.multiline,
+            textCapitalization: TextCapitalization.sentences,
+            cursorColor: ironGreen,
+            style: const TextStyle(color: Colors.white, height: 1.45),
+            decoration: const InputDecoration(
+              hintText: 'Генерираният текст ще се появи тук.',
+              hintStyle: TextStyle(color: Colors.white30),
+              filled: true,
+              fillColor: ironSurface,
+              border: InputBorder.none,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide(color: ironHairline),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide(color: ironGreen, width: 1.4),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: hasResult ? _moveResultToDraft : null,
+            icon: const Icon(Icons.arrow_upward, size: 18),
+            label: const Text('Към основния текст'),
+          ),
+        ),
+        if (_gemini.activeModel != null)
+          Text(
+            'Модел: ${_gemini.activeModel}',
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+      ],
+    );
+  }
+
   String _cleanForSuno(String source) {
     var text = cleanMarkdownForDisplay(source)
         .replaceAll('\r\n', '\n')
@@ -372,6 +590,7 @@ ${seed.isEmpty ? 'Няма готов текст. Създай песента о
           ? '$before\n\n$cleaned'.trim()
           : cleaned;
       _setResult(value);
+      _fillSunoFieldsFromGeneration();
       await _persist();
       if (mounted) _showMessage('$action — готово.');
     } on GeminiException catch (error) {
@@ -484,12 +703,7 @@ $seed
     }
     final cleaned = _cleanForSuno(current);
     _setResult(cleaned);
-    if (_musicPromptController.text.trim().isEmpty) {
-      _restoring = true;
-      _musicPromptController.text = _buildStylePrompt();
-      _excludeController.text = _buildExcludePrompt();
-      _restoring = false;
-    }
+    _fillSunoFieldsFromGeneration();
     await _persist();
     if (mounted) _showMessage('Текстът е подготвен за Suno.');
   }
@@ -502,7 +716,7 @@ $seed
     _restoring = false;
     _scheduleSave();
     await _persist();
-    if (mounted) _showMessage('Style Prompt и Exclude са готови.');
+    if (mounted) _showMessage('Стилът и изключенията са готови.');
   }
 
   Future<void> _copyLyrics() async {
@@ -635,7 +849,11 @@ $exclude''';
   void _showMessage(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text)),
+      SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+      ),
     );
   }
 
@@ -738,9 +956,13 @@ $exclude''';
     final hasResult = _resultController.text.trim().isNotEmpty;
 
     return IronBackground(
-      child: ListView(
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+        key: const ValueKey('studio-scroll'),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           PageTitle(
             eyebrow: 'СТУДИО',
@@ -783,37 +1005,27 @@ $exclude''';
             maxLines: 3,
           ),
           const SizedBox(height: 14),
-          IronCard(
-            margin: EdgeInsets.zero,
-            bright: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Моят текст',
-                  style: TextStyle(
-                    color: ironGreen,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Постави готов текст, няколко реда или само идея. Нищо не се губи — полето се пази локално.',
-                  style: TextStyle(color: Colors.white60, height: 1.35),
-                ),
-                const SizedBox(height: 12),
-                IronInput(
-                  controller: _draftController,
-                  label: 'Текст / чернова',
-                  hint: 'Пиши тук…',
-                  icon: Icons.edit_note,
-                  minLines: 12,
-                  maxLines: 24,
-                ),
-              ],
+          const Text(
+            'Моят текст',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Постави готов текст, няколко реда или само идея. Нищо не се губи — полето се пази локално.',
+            style: TextStyle(color: ironMuted, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          IronInput(
+            controller: _draftController,
+            label: 'Текст / чернова',
+            hint: 'Пиши тук…',
+            icon: Icons.edit_note,
+            minLines: 8,
+            maxLines: 16,
           ),
           const SizedBox(height: 14),
           IronButton(
@@ -879,155 +1091,51 @@ $exclude''';
               style: const TextStyle(color: ironGreen, fontWeight: FontWeight.w600),
             ),
           ],
-          const SizedBox(height: 14),
-          IronCard(
-            margin: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'AI РЕЗУЛТАТ',
-                        style: TextStyle(
-                          color: ironGreen,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
-                    if (hasResult)
-                      IconButton(
-                        tooltip: 'Копирай Lyrics',
-                        onPressed: _copyLyrics,
-                        icon: const Icon(Icons.copy, color: ironGreen),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _resultController,
-                  minLines: 12,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
-                  cursorColor: ironGreen,
-                  style: const TextStyle(color: Colors.white, height: 1.45),
-                  decoration: InputDecoration(
-                    hintText: 'Генерираният или обработеният текст ще се появи тук.',
-                    hintStyle: const TextStyle(color: Colors.white30),
-                    filled: true,
-                    fillColor: const Color(0xFF010A05).withOpacity(0.92),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(17),
-                      borderSide: BorderSide(color: ironGreen.withOpacity(0.29)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(17),
-                      borderSide: const BorderSide(color: ironGreen, width: 1.6),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: IronButton(
-                        text: 'Copy Lyrics',
-                        icon: Icons.copy,
-                        compact: true,
-                        secondary: true,
-                        onPressed: hasResult || _draftController.text.trim().isNotEmpty
-                            ? _copyLyrics
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: IronButton(
-                        text: 'Към основния текст',
-                        icon: Icons.arrow_upward,
-                        compact: true,
-                        secondary: true,
-                        onPressed: hasResult ? _moveResultToDraft : null,
-                      ),
-                    ),
-                  ],
-                ),
-                if (_gemini.activeModel != null) ...[
-                  const SizedBox(height: 9),
-                  Text(
-                    'Модел: ${_gemini.activeModel}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 16),
+          _lyricResultSection(hasResult: hasResult),
+          const SizedBox(height: 16),
+          const Text(
+            'Пакет за Suno',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
             ),
           ),
-          const SizedBox(height: 14),
-          IronCard(
-            margin: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Пакет за Suno',
-                  style: TextStyle(
-                    color: ironGreen,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Lyrics, Style of Music и Exclude са отделени, за да ги поставиш директно в Suno.',
-                  style: TextStyle(color: Colors.white60, height: 1.35),
-                ),
-                const SizedBox(height: 12),
-                IronInput(
-                  controller: _musicPromptController,
-                  label: 'Style of Music',
-                  hint: 'Натисни „Style Prompt“',
-                  icon: Icons.graphic_eq,
-                  minLines: 4,
-                  maxLines: 8,
-                ),
-                const SizedBox(height: 10),
-                IronInput(
-                  controller: _excludeController,
-                  label: 'Exclude',
-                  hint: 'Нежелани елементи',
-                  icon: Icons.block,
-                  minLines: 2,
-                  maxLines: 5,
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: IronButton(
-                        text: 'Copy Prompt',
-                        icon: Icons.copy,
-                        compact: true,
-                        secondary: true,
-                        onPressed: _musicPromptController.text.trim().isEmpty
-                            ? null
-                            : _copyPrompt,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: IronButton(
-                        text: 'Копирай пакета за Suno',
-                        icon: Icons.content_copy,
-                        compact: true,
-                        onPressed: _currentLyrics.isEmpty ? null : _copySunoPackage,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          const SizedBox(height: 6),
+          const Text(
+            'Текстът, стилът и изключенията са отделени, за да ги поставиш директно в Suno.',
+            style: TextStyle(color: ironMuted, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          _sunoLabeledField(
+            controller: _musicPromptController,
+            label: 'Стил на музиката',
+            subtitle: 'Style of Music',
+            hint: 'Попълва се автоматично след генериране',
+            icon: Icons.graphic_eq,
+            minLines: 3,
+            maxLines: 6,
+          ),
+          const SizedBox(height: 12),
+          _sunoLabeledField(
+            controller: _excludeController,
+            label: 'Изключи',
+            subtitle: 'Exclude',
+            hint: 'Нежелани елементи',
+            icon: Icons.block,
+            minLines: 2,
+            maxLines: 4,
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _musicPromptController.text.trim().isEmpty
+                  ? null
+                  : _copyPrompt,
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Копирай стила'),
             ),
           ),
           const SizedBox(height: 14),
@@ -1091,14 +1199,11 @@ $exclude''';
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          IronButton(
-            text: 'Запази в „Моите песни“',
-            icon: Icons.save,
-            secondary: true,
-            onPressed: _isLoading || _currentLyrics.isEmpty ? null : _saveProject,
+          const SizedBox(height: 24),
+        ],
+            ),
           ),
-          const SizedBox(height: 20),
+          _stickyStudioBar(hasResult: hasResult),
         ],
       ),
     );
