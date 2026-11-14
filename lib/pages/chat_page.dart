@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
 import '../models/chat_message.dart';
 import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
 import '../services/iron_voice_flags.dart';
+import '../services/iron_tts.dart';
 import '../services/local_store.dart';
+import '../widgets/voice_settings_panel.dart';
 import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
@@ -42,7 +43,7 @@ class _ChatPageState extends State<ChatPage>
   late final TextEditingController _backupBaseUrlController;
   late final TextEditingController _backupModelController;
   final ScrollController _scrollController = ScrollController();
-  final FlutterTts _flutterTts = FlutterTts();
+  final IronTts _tts = IronTts.instance;
   final GeminiService _gemini = GeminiService();
   final AutomationService _automation = AutomationService();
   late final AnimationController _coreController;
@@ -54,11 +55,6 @@ class _ChatPageState extends State<ChatPage>
   bool _voiceToggleBusy = false;
   bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
-  List<Map<String, String>> _bulgarianVoices = const [];
-  String _selectedVoiceName = '';
-  String _selectedVoiceLocale = '';
-  double _voiceRate = 0.44;
-  double _voicePitch = 0.92;
 
   @override
   void initState() {
@@ -94,11 +90,7 @@ class _ChatPageState extends State<ChatPage>
       Future.microtask(() => widget.store.replaceChatHistory(_messages));
     }
 
-    _voiceRate = widget.store.ttsRate;
-    _voicePitch = widget.store.ttsPitch;
-    _selectedVoiceName = widget.store.ttsVoiceName;
-    _selectedVoiceLocale = widget.store.ttsVoiceLocale;
-    _configureBulgarianVoice();
+    _prepareVoice();
     _automation.setNativeSpeechPartialListener((recognized) {
       if (!mounted || !_isListening) return;
       setState(() {
@@ -119,7 +111,7 @@ class _ChatPageState extends State<ChatPage>
     WidgetsBinding.instance.removeObserver(this);
     widget.store.removeListener(_handleStoreChange);
     _coreController.dispose();
-    _flutterTts.stop();
+    _tts.stop();
     _automation.setNativeSpeechPartialListener(null);
     _automation.cancelNativeSpeechRecognition();
     _gemini.dispose();
@@ -244,258 +236,36 @@ class _ChatPageState extends State<ChatPage>
     _showMessage(result.message);
   }
 
-  int _voiceScore(Map<String, String> voice) {
-    final name = (voice['name'] ?? '').toLowerCase();
-    var score = 0;
-    for (final word in const [
-      'natural',
-      'neural',
-      'network',
-      'online',
-      'enhanced',
-      'premium',
-      'wavenet',
-      'high',
-    ]) {
-      if (name.contains(word)) score += 10;
-    }
-    for (final word in const ['embedded', 'local', 'compact']) {
-      if (name.contains(word)) score -= 3;
-    }
-    return score;
-  }
-
-  Future<void> _applyVoice({
-    required double rate,
-    required double pitch,
-    required String voiceName,
-    required String voiceLocale,
-  }) async {
-    await _flutterTts.setLanguage(
-      voiceLocale.isEmpty ? 'bg-BG' : voiceLocale.replaceAll('_', '-'),
-    );
-    await _flutterTts.setSpeechRate(rate);
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(pitch);
-    await _flutterTts.awaitSpeakCompletion(true);
-
-    if (voiceName.isNotEmpty) {
-      await _flutterTts.setVoice({
-        'name': voiceName,
-        'locale': voiceLocale.isEmpty ? 'bg-BG' : voiceLocale,
-      });
-    }
-  }
-
-  Future<void> _configureBulgarianVoice() async {
+  Future<void> _prepareVoice() async {
     try {
-      final dynamic voices = await _flutterTts.getVoices;
-      final found = <Map<String, String>>[];
-
-      if (voices is List) {
-        for (final dynamic item in voices) {
-          if (item is! Map) continue;
-          final locale = item['locale']?.toString() ?? '';
-          final name = item['name']?.toString() ?? '';
-          if (locale.toLowerCase().startsWith('bg') && name.isNotEmpty) {
-            found.add({'name': name, 'locale': locale});
-          }
-        }
-      }
-
-      found.sort((a, b) {
-        final scoreCompare = _voiceScore(b).compareTo(_voiceScore(a));
-        if (scoreCompare != 0) return scoreCompare;
-        return (a['name'] ?? '').compareTo(b['name'] ?? '');
-      });
-
-      var selectedName = _selectedVoiceName;
-      var selectedLocale = _selectedVoiceLocale;
-      final savedVoiceExists = found.any(
-        (voice) =>
-            voice['name'] == selectedName && voice['locale'] == selectedLocale,
-      );
-
-      if (!savedVoiceExists && found.isNotEmpty) {
-        selectedName = found.first['name'] ?? '';
-        selectedLocale = found.first['locale'] ?? 'bg-BG';
-      }
-
-      await _applyVoice(
-        rate: _voiceRate,
-        pitch: _voicePitch,
-        voiceName: selectedName,
-        voiceLocale: selectedLocale,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _bulgarianVoices = found;
-        _selectedVoiceName = selectedName;
-        _selectedVoiceLocale = selectedLocale;
-        _voiceReady = true;
-      });
+      final voices = await _tts.listVoices(widget.store);
+      await _tts.resolveSelection(widget.store, voices);
+      if (mounted) setState(() => _voiceReady = true);
     } catch (_) {
-      try {
-        await _applyVoice(
-          rate: _voiceRate,
-          pitch: _voicePitch,
-          voiceName: '',
-          voiceLocale: 'bg-BG',
-        );
-      } catch (_) {
-        // Текстовите отговори остават достъпни и без TTS.
-      }
       if (mounted) setState(() => _voiceReady = false);
     }
   }
 
-  String _voiceKey(Map<String, String> voice) {
-    return '${voice['name'] ?? ''}|${voice['locale'] ?? ''}';
-  }
-
   Future<void> _openVoiceSettings() async {
-    var tempRate = _voiceRate;
-    var tempPitch = _voicePitch;
-    var tempVoiceName = _selectedVoiceName;
-    var tempVoiceLocale = _selectedVoiceLocale;
-
-    final saved = await showDialog<bool>(
+    await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final selectedKey =
-              tempVoiceName.isEmpty ? null : '$tempVoiceName|$tempVoiceLocale';
-          final validSelectedKey = _bulgarianVoices.any(
-            (voice) => _voiceKey(voice) == selectedKey,
-          )
-              ? selectedKey
-              : null;
-
-          return AlertDialog(
-            title: const Text('Настройки на гласа'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_bulgarianVoices.isEmpty)
-                    const Text(
-                      'На телефона не е намерен отделен български глас. Ще се използва системният.',
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      value: validSelectedKey,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Български глас',
-                      ),
-                      items: _bulgarianVoices.map((voice) {
-                        final name = voice['name'] ?? 'Глас';
-                        final locale = voice['locale'] ?? 'bg-BG';
-                        return DropdownMenuItem<String>(
-                          value: _voiceKey(voice),
-                          child: Text(
-                            '$name ($locale)',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        final selected = _bulgarianVoices.firstWhere(
-                          (voice) => _voiceKey(voice) == value,
-                        );
-                        setDialogState(() {
-                          tempVoiceName = selected['name'] ?? '';
-                          tempVoiceLocale = selected['locale'] ?? 'bg-BG';
-                        });
-                      },
-                    ),
-                  const SizedBox(height: 18),
-                  Text('Скорост: ${(tempRate * 100).round()}%'),
-                  Slider(
-                    value: tempRate,
-                    min: 0.30,
-                    max: 0.65,
-                    divisions: 14,
-                    label: tempRate.toStringAsFixed(2),
-                    onChanged: (value) {
-                      setDialogState(() => tempRate = value);
-                    },
-                  ),
-                  Text('Плътност на гласа: ${(tempPitch * 100).round()}%'),
-                  Slider(
-                    value: tempPitch,
-                    min: 0.75,
-                    max: 1.10,
-                    divisions: 14,
-                    label: tempPitch.toStringAsFixed(2),
-                    onChanged: (value) {
-                      setDialogState(() => tempPitch = value);
-                    },
-                  ),
-                  const Text(
-                    'За по-естествено звучене остави скоростта около 44% и плътността около 92%.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Отказ'),
-              ),
-              TextButton.icon(
-                onPressed: () async {
-                  try {
-                    await _flutterTts.stop();
-                    await _applyVoice(
-                      rate: tempRate,
-                      pitch: tempPitch,
-                      voiceName: tempVoiceName,
-                      voiceLocale: tempVoiceLocale,
-                    );
-                    await _playSpeechWithWakePaused(
-                      'Здравей. Аз съм Iron Music 420 AI. Това е тест на българския глас.',
-                    );
-                  } catch (_) {
-                    if (mounted) {
-                      _showMessage('Тестът на гласа не можа да стартира.');
-                    }
-                  }
-                },
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Тест'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Запази'),
-              ),
-            ],
-          );
-        },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Настройки на гласа'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: VoiceSettingsPanel(store: widget.store),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Готово'),
+          ),
+        ],
       ),
     );
-
-    if (saved != true || !mounted) {
-      await _configureBulgarianVoice();
-      return;
-    }
-
-    _voiceRate = tempRate;
-    _voicePitch = tempPitch;
-    _selectedVoiceName = tempVoiceName;
-    _selectedVoiceLocale = tempVoiceLocale;
-    await widget.store.saveVoiceSettings(
-      rate: tempRate,
-      pitch: tempPitch,
-      voiceName: tempVoiceName,
-      voiceLocale: tempVoiceLocale,
-    );
-    await _configureBulgarianVoice();
-    if (mounted) _showMessage('Настройките на гласа са запазени.');
+    if (mounted) setState(() {});
   }
 
   Future<void> _speak(String text) async {
@@ -517,13 +287,14 @@ class _ChatPageState extends State<ChatPage>
       if (resumeIronVoice) {
         await Future<void>.delayed(const Duration(milliseconds: 180));
       }
-      await _flutterTts.stop();
-      await _flutterTts
-          .speak(text)
-          .timeout(const Duration(minutes: 7));
+      await _tts.stop();
+      final notice = await _tts.speak(text, widget.store);
+      if (notice != null && mounted) {
+        _showMessage(notice);
+      }
     } catch (_) {
       try {
-        await _flutterTts.stop();
+        await _tts.stop();
       } catch (_) {
         // The wake listener still has to be restored below.
       }
@@ -543,7 +314,7 @@ class _ChatPageState extends State<ChatPage>
     if (enabled) {
       await _speak('Гласовите отговори са включени.');
     } else {
-      await _flutterTts.stop();
+      await _tts.stop();
     }
   }
 
@@ -555,7 +326,7 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
-    await _flutterTts.stop();
+    await _tts.stop();
     FocusManager.instance.primaryFocus?.unfocus();
     if (!mounted) return;
 
@@ -617,7 +388,9 @@ class _ChatPageState extends State<ChatPage>
 
   ChatMessage? _lastAssistantMessage() {
     for (final message in _messages.reversed) {
-      if (!message.isUser && !message.isLocalNotice && message.text.trim().isNotEmpty) {
+      if (!message.isUser &&
+          !message.isLocalNotice &&
+          message.text.trim().isNotEmpty) {
         return message;
       }
     }
@@ -1051,14 +824,11 @@ class _ChatPageState extends State<ChatPage>
             height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: active
-                  ? ironGreen.withValues(alpha: 0.14)
-                  : ironSurfaceHigh,
+              color:
+                  active ? ironGreen.withValues(alpha: 0.14) : ironSurfaceHigh,
               border: Border.all(
                 width: 1,
-                color: active
-                    ? ironOutlineStrong
-                    : ironOutlineMuted,
+                color: active ? ironOutlineStrong : ironOutlineMuted,
               ),
             ),
             child: Icon(
@@ -1071,7 +841,6 @@ class _ChatPageState extends State<ChatPage>
       ),
     );
   }
-
 
   Widget _buildStatusHeader() {
     final status = _isListening
@@ -1093,7 +862,9 @@ class _ChatPageState extends State<ChatPage>
                   : 1.0;
               return Transform.scale(
                 scale: pulse,
-                child: CannabisCore(progress: _isListening || _isLoading ? 0.6 : 0.15, size: 42),
+                child: CannabisCore(
+                    progress: _isListening || _isLoading ? 0.6 : 0.15,
+                    size: 42),
               );
             },
           ),
@@ -1145,7 +916,9 @@ class _ChatPageState extends State<ChatPage>
                 ? Icons.volume_up_rounded
                 : Icons.volume_off_rounded,
             tooltip: widget.store.voiceRepliesEnabled
-                ? (_voiceReady ? 'Гласовите отговори са включени' : 'Системен глас')
+                ? (_voiceReady
+                    ? 'Гласовите отговори са включени'
+                    : 'Системен глас')
                 : 'Гласовите отговори са изключени',
             active: widget.store.voiceRepliesEnabled,
             onPressed: _toggleVoiceReplies,
@@ -1283,9 +1056,8 @@ class _ChatPageState extends State<ChatPage>
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   width: 1,
-                  color: _composerFocus.hasFocus
-                      ? ironOutlineStrong
-                      : ironOutline,
+                  color:
+                      _composerFocus.hasFocus ? ironOutlineStrong : ironOutline,
                 ),
                 boxShadow: ironFocusGlow(_composerFocus.hasFocus),
               ),
@@ -1301,7 +1073,8 @@ class _ChatPageState extends State<ChatPage>
                         minLines: 1,
                         maxLines: 4,
                         textCapitalization: TextCapitalization.sentences,
-                        style: const TextStyle(color: Colors.white, height: 1.35),
+                        style:
+                            const TextStyle(color: Colors.white, height: 1.35),
                         decoration: InputDecoration(
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
@@ -1321,7 +1094,9 @@ class _ChatPageState extends State<ChatPage>
                       tooltip: 'Микрофон',
                       onPressed: _isLoading ? null : _toggleListening,
                       icon: Icon(
-                        _isListening ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                        _isListening
+                            ? Icons.stop_circle_rounded
+                            : Icons.mic_rounded,
                         color: _isListening ? Colors.redAccent : ironGreen,
                       ),
                     ),
