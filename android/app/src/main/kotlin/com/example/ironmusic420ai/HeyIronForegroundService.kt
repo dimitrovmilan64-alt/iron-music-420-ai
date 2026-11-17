@@ -60,6 +60,7 @@ class HeyIronForegroundService : Service(), HeyIronEngine.Listener {
     }
 
     override fun onListeningChanged(listening: Boolean) {}
+    override fun onMicLevel(rms: Float) {}
 
     private fun startAsForeground() {
         val manager = getSystemService(NotificationManager::class.java)

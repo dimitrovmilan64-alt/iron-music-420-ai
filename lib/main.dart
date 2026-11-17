@@ -121,7 +121,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _automation.setPendingRequestListener(_openPendingSection);
     widget.heyIron?.addListener(_onHeyIron);
     _rebuildPages();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingSection());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _openPendingSection();
+      // Cold start never emits AppLifecycleState.resumed, so start listening
+      // here once the first frame is on screen.
+      widget.heyIron?.handleAppResumed();
+    });
   }
 
   @override

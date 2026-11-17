@@ -158,7 +158,7 @@ void main() {
 
     expect(find.textContaining('Куплет тук'), findsWidgets);
     expect(find.text('Копирай текста'), findsOneWidget);
-    expect(find.text('Копирай за Suno'), findsOneWidget);
+    expect(find.text('Копирай всичко за Suno'), findsOneWidget);
     expect(find.text('Запази'), findsOneWidget);
     expect(find.text('Copy Lyrics'), findsNothing);
     await tester.drag(_pageScroll(), const Offset(0, -900));

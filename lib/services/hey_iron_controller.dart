@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'error_log.dart';
 import 'hey_iron_watchdog.dart';
 
 enum HeyIronPhase {
@@ -38,6 +39,13 @@ class HeyIronController extends ChangeNotifier {
   Timer? _stallTimer;
   VoidCallback? onWakeWord;
   DateTime? lastWakeAt;
+  DateTime? lastDetectionAt;
+  String? lastDetectedKeyword;
+  double micLevel = 0;
+  String micTestMessage = '';
+  bool micTestBusy = false;
+  bool _stopping = false;
+  DateTime? _lastMicNotifyAt;
 
   String get statusLabel {
     switch (phase) {
@@ -58,6 +66,30 @@ class HeyIronController extends ChangeNotifier {
       case HeyIronPhase.blocked:
         return 'Спрян автоматично (защита на телефона)';
     }
+  }
+
+  /// 0-1 meter driven by live RMS, or the last mic test.
+  double get micMeterValue => (micLevel / 0.08).clamp(0.0, 1.0);
+
+  String get micLevelLabel {
+    if (micLevel <= 0 && phase != HeyIronPhase.listening) {
+      return 'Ниво на микрофона: няма сигнал';
+    }
+    final pct = (micMeterValue * 100).round();
+    return 'Ниво на микрофона: $pct%';
+  }
+
+  String get lastDetectionLabel {
+    final at = lastDetectionAt ?? lastWakeAt;
+    final keyword = lastDetectedKeyword;
+    if (at == null && (keyword == null || keyword.isEmpty)) {
+      return 'Последно разпознаване: няма';
+    }
+    final label = (keyword == null || keyword.isEmpty) ? 'Хей Айрън' : keyword;
+    final time = at == null ? '' : _formatClock(at);
+    return time.isEmpty
+        ? 'Последно разпознаване: $label'
+        : 'Последно разпознаване: $label • $time';
   }
 
   static String formatSize(int bytes) {
@@ -109,7 +141,7 @@ class HeyIronController extends ChangeNotifier {
 
     if (enabled) {
       message = modelReady
-          ? 'Моделът е готов. Слушането започва, когато екранът е активен.'
+          ? 'Моделът е готов. Слушането ще започне веднага щом екранът е активен.'
           : 'Подготвям вградения офлайн модел.';
       phase = modelReady ? HeyIronPhase.ready : HeyIronPhase.off;
     } else {
@@ -177,7 +209,12 @@ class HeyIronController extends ChangeNotifier {
     if (!enabled) return;
     if (backgroundExperimental) {
       try {
+        // Release the in-app AudioRecord before the service takes the mic.
+        await _channel.invokeMethod('stopEngine');
         await _channel.invokeMethod('startBackground');
+        phase = HeyIronPhase.listening;
+        message = 'Слуша на заден план (експериментално).';
+        notifyListeners();
       } catch (error) {
         await _fail('Фоновият режим не можа да стартира: $error');
       }
@@ -274,18 +311,57 @@ class HeyIronController extends ChangeNotifier {
   }
 
   Future<void> stopListening({bool clean = false}) async {
+    _stopping = true;
     _stallTimer?.cancel();
     try {
       await _channel.invokeMethod('stop');
     } catch (_) {}
+    micLevel = 0;
     if (clean) {
       watchdog.markCleanStop();
       await _persistWatchdog();
+    } else if (enabled && modelReady && phase == HeyIronPhase.listening) {
+      phase = HeyIronPhase.ready;
+    }
+    _stopping = false;
+    notifyListeners();
+  }
+
+  Future<void> testMicrophone() async {
+    if (micTestBusy) return;
+    micTestBusy = true;
+    micTestMessage = 'Тествам микрофона…';
+    notifyListeners();
+    try {
+      final result = _asResult(await _channel.invokeMethod('testMic'));
+      final rms = (result['rms'] as num?)?.toDouble() ?? 0;
+      final peak = (result['peak'] as num?)?.toDouble() ?? rms;
+      micLevel = peak > 0 ? peak : rms;
+      if (result['ok'] == true) {
+        if (micLevel <= 0.001) {
+          micTestMessage =
+              'Микрофонът работи, но почти няма звук. Кажи нещо и натисни отново.';
+        } else {
+          final pct = ((micLevel / 0.08).clamp(0, 1) * 100).round();
+          micTestMessage = 'Микрофонът работи. Ниво: $pct%.';
+        }
+      } else {
+        micTestMessage =
+            result['error']?.toString() ?? 'Тестът на микрофона не успя.';
+      }
+    } on PlatformException catch (error) {
+      micTestMessage = error.message ?? 'Тестът на микрофона не успя.';
+    } catch (error) {
+      micTestMessage = 'Тестът на микрофона не успя: $error';
+    } finally {
+      micTestBusy = false;
+      notifyListeners();
     }
   }
 
   Future<void> _fail(String reason) async {
     _stallTimer?.cancel();
+    AppErrorLog.instance.record(source: 'Хей Айрън', message: reason);
     watchdog.recordFailure();
     await _persistWatchdog();
     try {
@@ -316,6 +392,9 @@ class HeyIronController extends ChangeNotifier {
     });
   }
 
+  @visibleForTesting
+  void handleNativeEventForTest(dynamic event) => _onNativeEvent(event);
+
   void _onNativeEvent(dynamic event) {
     if (event is! Map) return;
     final type = event['type']?.toString();
@@ -336,14 +415,40 @@ class HeyIronController extends ChangeNotifier {
       case 'detected':
         watchdog.markHeartbeat();
         lastWakeAt = DateTime.now();
+        lastDetectionAt = lastWakeAt;
+        lastDetectedKeyword = event['keyword']?.toString();
         HapticFeedback.mediumImpact();
         SystemSound.play(SystemSoundType.click);
         onWakeWord?.call();
         notifyListeners();
         break;
+      case 'micLevel':
+        final rms = (event['rms'] as num?)?.toDouble() ?? 0;
+        micLevel = rms;
+        final now = DateTime.now();
+        final last = _lastMicNotifyAt;
+        if (last == null || now.difference(last).inMilliseconds >= 200) {
+          _lastMicNotifyAt = now;
+          notifyListeners();
+        }
+        break;
       case 'listening':
         phase = HeyIronPhase.listening;
+        message = backgroundExperimental
+            ? 'Слуша за „Хей Айрън“. Фоновият режим е експериментален и може да натовари слаби телефони.'
+            : 'Слуша за „Хей Айрън“, докато приложението е отворено.';
         notifyListeners();
+        break;
+      case 'stopped':
+        micLevel = 0;
+        if (!_stopping &&
+            enabled &&
+            phase == HeyIronPhase.listening &&
+            !backgroundExperimental) {
+          phase = HeyIronPhase.ready;
+          message = 'Слушането спря.';
+          notifyListeners();
+        }
         break;
       case 'error':
         unawaited(_fail(event['message']?.toString() ?? 'Неизвестна грешка.'));
@@ -358,6 +463,12 @@ class HeyIronController extends ChangeNotifier {
       _prefWatchdog,
       '${watchdog.failureCount}|$last|${watchdog.uncleanShutdown ? 1 : 0}',
     );
+  }
+
+  String _formatClock(DateTime time) {
+    final local = time.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
   String _shortError(String value) {

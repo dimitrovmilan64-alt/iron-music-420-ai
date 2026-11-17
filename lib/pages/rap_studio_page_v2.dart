@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/song_project.dart';
+import '../services/error_log.dart';
 import '../services/gemini_service.dart';
 import '../services/lyric_craft.dart';
 import '../services/local_store.dart';
@@ -264,10 +265,14 @@ class _RapStudioPageState extends State<RapStudioPage> {
   }
 
   String _buildStylePrompt() {
-    return '${_styleDescription()} at $_bpm BPM, ${_moodDescription()}, '
-        'deep natural low male rap vocal, precise Bulgarian diction, '
-        'strong verse-to-hook dynamics, tight vocal doubles, restrained autotune, '
-        'wide ad-libs with short plate reverb, clean modern mix, powerful controlled low end';
+    return LyricCraft.buildSunoStylePrompt(
+      style: '${_styleDescription()} (${_style})',
+      mood: _moodDescription(),
+      bpm: _bpm,
+      vocal: 'deep natural low male rap vocal, precise Bulgarian diction',
+      instruments:
+          'tight drums, tight vocal doubles, reserved autotune, wide ad-libs, clean modern mix, controlled low end',
+    );
   }
 
   String _buildExcludePrompt() {
@@ -360,7 +365,7 @@ class _RapStudioPageState extends State<RapStudioPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: IronButton(
-                  text: 'Копирай за Suno',
+                  text: 'Копирай всичко за Suno',
                   icon: Icons.content_copy,
                   compact: true,
                   secondary: true,
@@ -398,6 +403,13 @@ class _RapStudioPageState extends State<RapStudioPage> {
             fontSize: 18,
           ),
         ),
+        const SizedBox(height: 6),
+        const Text(
+          'Силна рима • приемлива • слаба. Докосни ред за „Друг вариант“.',
+          style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.3),
+        ),
+        const SizedBox(height: 8),
+        if (_currentLyrics.isNotEmpty) _rhymeLines(),
         const SizedBox(height: 8),
         if (sections.length > 1) ...[
           Wrap(
@@ -505,6 +517,87 @@ class _RapStudioPageState extends State<RapStudioPage> {
     );
   }
 
+  Widget _rhymeLines() {
+    final lines = LyricCraft.annotateLines(_currentLyrics);
+    Color colorFor(RhymeStrength? strength) {
+      switch (strength) {
+        case RhymeStrength.strong:
+          return ironGreen;
+        case RhymeStrength.ok:
+          return const Color(0xFFFFC857);
+        case RhymeStrength.weak:
+          return const Color(0xFFFF6B6B);
+        case null:
+          return Colors.white24;
+      }
+    }
+
+    String mark(RhymeStrength? strength) {
+      switch (strength) {
+        case RhymeStrength.strong:
+          return 'силна';
+        case RhymeStrength.ok:
+          return 'ок';
+        case RhymeStrength.weak:
+          return 'слаба';
+        case null:
+          return '';
+      }
+    }
+
+    return Column(
+      children: [
+        for (final line in lines)
+          if (!line.isBlank)
+            InkWell(
+              onTap: line.isSectionTag || _isLoading
+                  ? null
+                  : () => _rewriteLine(line.index),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!line.isSectionTag)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(top: 6, right: 8),
+                        decoration: BoxDecoration(
+                          color: colorFor(line.strength),
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        line.isSectionTag ? line.text.trim() : line.text,
+                        style: TextStyle(
+                          color: line.isSectionTag ? ironGreen : Colors.white,
+                          fontWeight: line.isSectionTag
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    if (!line.isSectionTag && line.strength != null)
+                      Text(
+                        mark(line.strength),
+                        style: TextStyle(
+                          color: colorFor(line.strength),
+                          fontSize: 11,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+
   String _cleanForSuno(String source) {
     var text = cleanMarkdownForDisplay(source)
         .replaceAll('\r\n', '\n')
@@ -535,9 +628,9 @@ class _RapStudioPageState extends State<RapStudioPage> {
     text = lines.join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
     if (text.isNotEmpty &&
         !RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(text)) {
-      text = '[Куплет 1]\n$text';
+      text = '[Verse 1]\n$text';
     }
-    return text;
+    return LyricCraft.normalizeSunoTags(text);
   }
 
   String _songInstruction() {
@@ -601,8 +694,22 @@ class _RapStudioPageState extends State<RapStudioPage> {
       await _persist();
       if (mounted) _showMessage('$action — готово.');
     } on GeminiException catch (error) {
+      AppErrorLog.instance.record(
+        source: 'Студио',
+        message: error.message,
+        statusCode: error.statusCode,
+      );
+      if (isOfflineError(error)) {
+        await _saveOfflineDraft();
+        return;
+      }
       if (mounted) _showMessage(error.message);
-    } catch (_) {
+    } catch (error) {
+      AppErrorLog.instance.record(source: 'Студио', message: error.toString());
+      if (isOfflineError(error)) {
+        await _saveOfflineDraft();
+        return;
+      }
       if (mounted) _showMessage('Неочаквана грешка при AI обработката.');
     } finally {
       if (mounted) {
@@ -622,6 +729,96 @@ class _RapStudioPageState extends State<RapStudioPage> {
     );
     _restoring = false;
     _scheduleSave();
+  }
+
+  Future<void> _saveOfflineDraft() async {
+    await widget.store.upsertSong(
+      SongProject.create(
+        title: _titleController.text,
+        lyrics: _currentLyrics.isEmpty ? _contextSeed : _currentLyrics,
+        musicPrompt: _musicPromptController.text,
+        excludePrompt: _excludeController.text,
+        theme: _themeController.text.isEmpty
+            ? _contextSeed
+            : _themeController.text,
+        style: _style,
+        mood: _mood,
+        rhymeScheme: 'AABB',
+        bpm: _bpm,
+        isDraft: true,
+      ),
+    );
+    if (mounted) {
+      _showMessage('Няма интернет — записано като чернова');
+    }
+  }
+
+  Future<void> _rewriteLine(int lineIndex) async {
+    if (!widget.store.hasAnyAiProvider) {
+      _showMessage('Добави Gemini или резервен AI ключ в раздел „AI“.');
+      return;
+    }
+    final lyrics = _currentLyrics;
+    if (lyrics.isEmpty) return;
+    final language = LyricCraft.detectLanguage(
+      theme: _themeController.text,
+      material: lyrics,
+      title: _titleController.text,
+    );
+    setState(() {
+      _isLoading = true;
+      _activeAction = 'Друг вариант';
+    });
+    try {
+      final raw = await _gemini.generateRap(
+        apiKey: widget.store.apiKey.trim(),
+        instruction: LyricCraft.buildLineRewriteInstruction(
+          lyrics: lyrics,
+          lineIndex: lineIndex,
+          rhymeScheme: 'AABB',
+          language: language,
+        ),
+        language: language,
+        shortForm: true,
+      );
+      final candidate = raw.split('\n').map((line) => line.trim()).firstWhere(
+            (line) => line.isNotEmpty && !LyricCraft.isSectionTagLine(line),
+            orElse: () => '',
+          );
+      if (!LyricCraft.isValidLineRewrite(
+        originalLyrics: lyrics,
+        lineIndex: lineIndex,
+        newLine: candidate,
+      )) {
+        _showMessage('Новият ред не запази римата. Опитай отново.');
+        return;
+      }
+      _setResult(LyricCraft.replaceLineAt(lyrics, lineIndex, candidate));
+      _fillSunoFieldsFromGeneration();
+      await _persist();
+      _showMessage('Редът е сменен.');
+    } on GeminiException catch (error) {
+      AppErrorLog.instance.record(
+        source: 'Студио',
+        message: error.message,
+        statusCode: error.statusCode,
+      );
+      if (isOfflineError(error)) {
+        await _saveOfflineDraft();
+        return;
+      }
+      _showMessage(error.message);
+    } catch (error) {
+      AppErrorLog.instance.record(source: 'Студио', message: error.toString());
+      _showMessage('Неочаквана грешка при AI обработката.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _activeAction = '';
+        });
+      }
+    }
   }
 
   Future<void> _generateSong() async {
@@ -761,19 +958,13 @@ $seed
     final exclude = _excludeController.text.trim().isEmpty
         ? _buildExcludePrompt()
         : _excludeController.text.trim();
-    final package = '''LYRICS
-------
-$lyrics
-
-STYLE OF MUSIC
---------------
-$style
-
-EXCLUDE
--------
-$exclude''';
+    final package = LyricCraft.buildSunoPackage(
+      lyrics: lyrics,
+      stylePrompt: style,
+      exclude: exclude,
+    );
     await Clipboard.setData(ClipboardData(text: package));
-    if (mounted) _showMessage('Целият Suno пакет е копиран.');
+    if (mounted) _showMessage('Копирах всичко за Suno.');
   }
 
   Future<void> _moveResultToDraft() async {

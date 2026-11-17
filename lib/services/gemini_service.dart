@@ -9,8 +9,9 @@ import 'lyric_craft.dart';
 
 class GeminiException implements Exception {
   final String message;
+  final int? statusCode;
 
-  const GeminiException(this.message);
+  const GeminiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;

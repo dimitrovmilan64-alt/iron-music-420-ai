@@ -90,8 +90,14 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
+      - name: Install sherpa-onnx for Hey Iron spotter test
+        run: python3 -m pip install --user sherpa-onnx
+
       - name: Test
         run: flutter test
+
+      - name: Verify Hey Iron keyword spotter
+        run: python3 scripts/test_hey_iron_spotter.py --wav test/fixtures/hey_iron.wav
 
       - name: Build release APK
         shell: bash

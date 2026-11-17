@@ -1,6 +1,10 @@
 package com.example.ironmusic420ai
 
 import android.app.Activity
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import android.content.pm.PackageManager
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -24,14 +28,16 @@ class HeyIronBridge(
         const val METHOD_CHANNEL = "iron_music_420/hey_iron"
         const val EVENT_CHANNEL = "iron_music_420/hey_iron_events"
         private const val LOG_TAG = "HeyIronV2"
+        const val MIC_PERMISSION_REQUEST = 4204
         private val KEYWORDS = """
-            HH EY1 AY1 R AH0 N :6.5 #0.03 @HEY_IRON_BG
-            HH EY1 AY1 R AH1 N :6.5 #0.03 @HEY_IRON_BG_STRESS
-            HH EY1 AY1 R N :6.5 #0.03 @HEY_IRON_BG_FAST
-            HH EH1 Y AY1 R AH0 N :6.5 #0.03 @HEY_IRON_BG_EH
-            HH EH1 AY1 R AH0 N :6.5 #0.03 @HEY_IRON_BG_EH_SHORT
-            HH EY1 AY1 R AO0 N :6.5 #0.03 @HEY_IRON_BG_O
-            HH EY1 AY1 R OW0 N :6.5 #0.03 @HEY_IRON_BG_OW
+            HH EY1 AY1 ER0 N :2.5 #0.10 @HEY_IRON_1_1
+            HH EY1 AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG
+            HH EY1 AY1 R AH1 N :2.5 #0.10 @HEY_IRON_BG_STRESS
+            HH EY1 AY1 R N :2.5 #0.10 @HEY_IRON_BG_FAST
+            HH EH1 Y AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG_EH
+            HH EH1 AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG_EH_SHORT
+            HH EY1 AY1 R AO0 N :2.5 #0.10 @HEY_IRON_BG_O
+            HH EY1 AY1 R OW0 N :2.5 #0.10 @HEY_IRON_BG_OW
         """.trimIndent()
 
         /**
@@ -71,6 +77,8 @@ class HeyIronBridge(
     private val engine = HeyIronEngine(activity, this)
     @Volatile
     private var downloading = false
+    private var pendingMicCallback: ((Boolean) -> Unit)? = null
+    private var pendingDetectedKeyword: String? = null
 
     fun attach(messenger: BinaryMessenger) {
         methodChannel = MethodChannel(messenger, METHOD_CHANNEL).also {
@@ -92,14 +100,7 @@ class HeyIronBridge(
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "status" -> result.success(
-                mapOf(
-                    "modelReady" to HeyIronEngine.isModelReady(activity),
-                    "listening" to engine.isRunning(),
-                    "archiveBytes" to HeyIronEngine.EXPECTED_ARCHIVE_BYTES,
-                    "lastError" to engine.lastError,
-                ),
-            )
+            "status" -> result.success(statusMap())
             "downloadModel", "prepareModel" -> {
                 Thread({
                     val payload = prepareModelOnWorker()
@@ -107,34 +108,105 @@ class HeyIronBridge(
                 }, "HeyIronPrepare").start()
             }
             "start" -> {
-                Thread({
-                    val started = try {
-                        engine.start()
-                    } catch (error: Exception) {
-                        Log.e(LOG_TAG, "start_failed", error)
-                        false
+                // The in-app engine must own the mic exclusively. Stop the
+                // background service first so two AudioRecord clients cannot
+                // race on Android 14/15.
+                ensureMicPermission { granted ->
+                    if (!granted) {
+                        result.success(
+                            mapOf(
+                                "ok" to false,
+                                "error" to "Нужно е разрешение за микрофона. Разреши го от настройките на телефона.",
+                            ),
+                        )
+                        return@ensureMicPermission
                     }
-                    val error = if (started) null else (
-                        engine.lastError ?: "Слушането не можа да стартира."
-                    )
-                    activity.runOnUiThread {
-                        result.success(mapOf("ok" to started, "error" to error))
-                    }
-                }, "HeyIronStart").start()
+                    Thread({
+                        stopBackgroundService()
+                        try {
+                            Thread.sleep(200)
+                        } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                        }
+                        val started = try {
+                            engine.start()
+                        } catch (error: Exception) {
+                            Log.e(LOG_TAG, "start_failed", error)
+                            false
+                        }
+                        val error = if (started) {
+                            null
+                        } else {
+                            engine.lastError ?: "Слушането не можа да стартира."
+                        }
+                        activity.runOnUiThread {
+                            result.success(mapOf("ok" to started, "error" to error))
+                        }
+                    }, "HeyIronStart").start()
+                }
             }
             "stop" -> {
                 engine.stop()
                 stopBackgroundService()
                 result.success(true)
             }
+            "stopEngine" -> {
+                engine.stop()
+                result.success(true)
+            }
             "startBackground" -> {
-                try {
-                    startBackgroundService()
-                    result.success(true)
-                } catch (error: Exception) {
-                    result.error("BACKGROUND", error.message, null)
+                engine.stop()
+                ensureMicPermission { granted ->
+                    if (!granted) {
+                        result.error(
+                            "BACKGROUND",
+                            "Нужно е разрешение за микрофона.",
+                            null,
+                        )
+                        return@ensureMicPermission
+                    }
+                    try {
+                        startBackgroundService()
+                        result.success(true)
+                    } catch (error: Exception) {
+                        result.error("BACKGROUND", error.message, null)
+                    }
                 }
             }
+            "testMic" -> {
+                ensureMicPermission { granted ->
+                    if (!granted) {
+                        result.success(
+                            mapOf(
+                                "ok" to false,
+                                "granted" to false,
+                                "rms" to 0.0,
+                                "peak" to 0.0,
+                                "error" to "Нужно е разрешение за микрофона. Разреши го от настройките на телефона.",
+                            ),
+                        )
+                        return@ensureMicPermission
+                    }
+                    Thread({
+                        val payload = try {
+                            engine.testMic()
+                        } catch (error: Exception) {
+                            Log.e(LOG_TAG, "test_mic_failed", error)
+                            mapOf(
+                                "ok" to false,
+                                "granted" to true,
+                                "rms" to 0.0,
+                                "peak" to 0.0,
+                                "error" to (error.message ?: "Тестът на микрофона не успя."),
+                            )
+                        }
+                        activity.runOnUiThread { result.success(payload) }
+                    }, "HeyIronTestMic").start()
+                }
+            }
+            "deviceInfo" -> result.success(
+                "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+            )
             "setBackground" -> result.success(true)
             else -> result.notImplemented()
         }
@@ -142,6 +214,11 @@ class HeyIronBridge(
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
+        val pending = pendingDetectedKeyword
+        if (pending != null) {
+            pendingDetectedKeyword = null
+            emit("detected", mapOf("keyword" to pending))
+        }
     }
 
     override fun onCancel(arguments: Any?) {
@@ -151,7 +228,50 @@ class HeyIronBridge(
     override fun onHeartbeat() = emit("heartbeat")
 
     override fun onDetected(keyword: String) {
+        if (eventSink == null) {
+            pendingDetectedKeyword = keyword
+            return
+        }
         emit("detected", mapOf("keyword" to keyword))
+    }
+
+    override fun onMicLevel(rms: Float) {
+        emit("micLevel", mapOf("rms" to rms.toDouble()))
+    }
+
+    fun handlePermissionResult(granted: Boolean): Boolean {
+        val callback = pendingMicCallback ?: return false
+        pendingMicCallback = null
+        callback(granted)
+        return true
+    }
+
+    private fun ensureMicPermission(callback: (Boolean) -> Unit) {
+        if (HeyIronEngine.hasMicPermission(activity)) {
+            callback(true)
+            return
+        }
+        pendingMicCallback = callback
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            MIC_PERMISSION_REQUEST,
+        )
+    }
+
+    private fun statusMap(): Map<String, Any?> {
+        return mapOf(
+            "modelReady" to HeyIronEngine.isModelReady(activity),
+            "listening" to engine.isListening(),
+            "running" to engine.isRunning(),
+            "recording" to engine.isRecording,
+            "hasMicPermission" to HeyIronEngine.hasMicPermission(activity),
+            "rms" to engine.lastRms.toDouble(),
+            "lastKeyword" to engine.lastDetectedKeyword,
+            "lastDetectedAt" to engine.lastDetectedAtMillis,
+            "archiveBytes" to HeyIronEngine.EXPECTED_ARCHIVE_BYTES,
+            "lastError" to engine.lastError,
+        )
     }
 
     override fun onError(message: String) {

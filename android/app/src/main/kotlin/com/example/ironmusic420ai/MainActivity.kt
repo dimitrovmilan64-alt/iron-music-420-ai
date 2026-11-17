@@ -97,6 +97,7 @@ class MainActivity : FlutterActivity() {
         captureIronSection(intent)
         heyIronBridge = HeyIronBridge(this)
         heyIronBridge?.attach(flutterEngine.dartExecutor.binaryMessenger)
+        deliverHeyIronDetection(intent)
         automationChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
@@ -627,9 +628,7 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureIronSection(intent)
-        intent.getStringExtra("hey_iron_detected")?.let { keyword ->
-            heyIronBridge?.onDetected(keyword)
-        }
+        deliverHeyIronDetection(intent)
         automationChannel?.invokeMethod("ironRequestAvailable", null)
     }
 
@@ -1050,6 +1049,16 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == HeyIronBridge.MIC_PERMISSION_REQUEST) {
+            val granted =
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (heyIronBridge?.handlePermissionResult(granted) == true) {
+                return
+            }
+        }
         when (requestCode) {
             4201 -> {
                 val result = pendingFlashResult ?: return

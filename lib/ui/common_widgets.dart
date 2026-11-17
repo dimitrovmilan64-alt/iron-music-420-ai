@@ -445,22 +445,29 @@ class NeonPill extends StatelessWidget {
           color: ironGreen.withValues(alpha: active ? 0.75 : 0.38),
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, color: ironGreen, size: 14),
-            const SizedBox(width: 5),
-          ],
-          Text(
-            text,
-            style: TextStyle(
-              color: active ? ironGreenSoft : Colors.white70,
-              fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-              fontSize: 11,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 180),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: ironGreen, size: 14),
+              const SizedBox(width: 5),
+            ],
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: active ? ironGreenSoft : Colors.white70,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                  fontSize: 11,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

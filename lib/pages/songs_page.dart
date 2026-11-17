@@ -511,7 +511,11 @@ class _SongProjectCard extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         const _MiniTag('Suno', active: true),
+                        if (song.isDraft)
+                          const _MiniTag('Чернова', active: true),
+                        if (song.theme.trim().isNotEmpty) _MiniTag(song.theme),
                         _MiniTag(song.style),
+                        if (song.mood.trim().isNotEmpty) _MiniTag(song.mood),
                         _MiniTag('${song.bpm} BPM'),
                       ],
                     ),

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/chat_message.dart';
+import '../models/song_project.dart';
 import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
+import '../services/error_log.dart';
 import '../services/gemini_service.dart';
 import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
@@ -395,6 +397,24 @@ class _ChatPageState extends State<ChatPage>
     await _sendMessage();
   }
 
+  Future<void> _saveOfflineDraft(String theme) async {
+    final title = theme.length > 42 ? '${theme.substring(0, 42)}…' : theme;
+    await widget.store.upsertSong(
+      SongProject.create(
+        title: title,
+        lyrics: theme,
+        musicPrompt: '',
+        theme: theme,
+        style: 'Hard trap',
+        mood: 'Тъмно и агресивно',
+        rhymeScheme: 'AABB',
+        bpm: 140,
+        isDraft: true,
+      ),
+    );
+    await _addLocalNotice('Няма интернет — записано като чернова');
+  }
+
   bool _requestsStudioTransfer(String value) {
     final text = value.toLowerCase();
     final mentionsStudio = text.contains('рап студио') ||
@@ -583,6 +603,8 @@ class _ChatPageState extends State<ChatPage>
             userRequest: latest,
             language: language,
             recentContext: recentBlock,
+            recentSongs:
+                LyricCraft.recentSongsSummary(widget.store.songProjects),
           ),
           language: language,
           shortForm: LyricCraft.isShortLyricRequest(latest),
@@ -608,15 +630,43 @@ class _ChatPageState extends State<ChatPage>
       setState(() => _messages.add(aiMessage));
       await widget.store.replaceChatHistory(_messages);
       _scrollToBottom();
+      if (LyricCraft.isLyricRequest(latest)) {
+        await widget.store.upsertSong(
+          SongProject.create(
+            title: latest.length > 42 ? '${latest.substring(0, 42)}…' : latest,
+            lyrics: reply,
+            musicPrompt: '',
+            theme: latest,
+            style: 'Hard trap',
+            mood: 'Тъмно и агресивно',
+            rhymeScheme: 'AABB',
+            bpm: 140,
+          ),
+        );
+      }
       if (wantsStudioTransfer) {
         await _sendTextToStudio(reply);
       }
       await _speak(reply);
     } on GeminiException catch (error) {
       if (!mounted) return;
+      AppErrorLog.instance.record(
+        source: 'Gemini',
+        message: error.message,
+        statusCode: error.statusCode,
+      );
+      if (LyricCraft.isLyricRequest(text) && isOfflineError(error)) {
+        await _saveOfflineDraft(text);
+        return;
+      }
       await _addLocalNotice(error.message);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      AppErrorLog.instance.record(source: 'Chat', message: error.toString());
+      if (LyricCraft.isLyricRequest(text) && isOfflineError(error)) {
+        await _saveOfflineDraft(text);
+        return;
+      }
       await _addLocalNotice('Неочаквана грешка при връзката с AI.');
     } finally {
       if (mounted) {

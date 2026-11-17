@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_info.dart';
 import '../services/ai_provider_config.dart';
+import '../services/error_log.dart';
 import '../services/gemini_service.dart';
 import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
@@ -112,6 +114,44 @@ class _SettingsPageState extends State<SettingsPage> {
       _testingGroq = false;
       _groqTestResult = result.message;
     });
+  }
+
+  Future<void> _reportProblem() async {
+    var device = 'Android устройство';
+    try {
+      const channel = MethodChannel('iron_music_420/hey_iron');
+      final info = await channel.invokeMethod<String>('deviceInfo');
+      if (info != null && info.trim().isNotEmpty) {
+        device = info.trim();
+      }
+    } catch (_) {}
+    final hey = widget.heyIron;
+    final settings = <String, String>{
+      'Хей Айрън':
+          hey == null ? 'няма' : (hey.enabled ? 'включен' : 'изключен'),
+      'Хей Айрън статус': hey?.statusLabel ?? '—',
+      'Фоново слушане':
+          (hey?.backgroundExperimental ?? false) ? 'включено' : 'изключено',
+      'Гласови отговори':
+          widget.store.voiceRepliesEnabled ? 'включени' : 'изключени',
+      'Gemini ключ': widget.store.apiKey.trim().isEmpty ? 'няма' : 'зареден',
+      'Groq ключ':
+          widget.store.backupApiKey.trim().isEmpty ? 'няма' : 'зареден',
+    };
+    final report = await AppErrorLog.instance.copyAndShare(
+      deviceInfo: device,
+      settings: settings,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          report.contains('[редактирано]')
+              ? 'Докладът е копиран. Ключовете са скрити.'
+              : 'Докладът е копиран. Можеш да го изпратиш.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -327,6 +367,50 @@ class _SettingsPageState extends State<SettingsPage> {
                                     hey.setBackgroundExperimental(value)
                                 : null,
                           ),
+                          const SizedBox(height: 12),
+                          Text(
+                            hey.micLevelLabel,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: hey.micMeterValue,
+                              minHeight: 10,
+                              color: ironGreen,
+                              backgroundColor: ironLine,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            hey.lastDetectionLabel,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              height: 1.35,
+                            ),
+                          ),
+                          if (hey.micTestMessage.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                hey.micTestMessage,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          TextButton(
+                            onPressed: hey.micTestBusy
+                                ? null
+                                : () => hey.testMicrophone(),
+                            child: Text(
+                              hey.micTestBusy
+                                  ? 'Тестване…'
+                                  : 'Тест на микрофона',
+                            ),
+                          ),
                           if (hey.phase == HeyIronPhase.blocked)
                             TextButton(
                               onPressed: hey.resetWatchdog,
@@ -359,6 +443,13 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 16),
           VoiceSettingsPanel(store: store),
+          const SizedBox(height: 16),
+          IronButton(
+            text: 'Докладвай проблем',
+            icon: Icons.report_outlined,
+            secondary: true,
+            onPressed: _reportProblem,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Инструменти',

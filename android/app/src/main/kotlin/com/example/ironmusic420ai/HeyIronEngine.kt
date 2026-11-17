@@ -1,6 +1,8 @@
 package com.example.ironmusic420ai
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -10,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.KeywordSpotter
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
@@ -17,11 +20,14 @@ import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
 /**
  * Foreground-safe keyword spotter. Runs ONNX on a single background thread,
  * never on the main thread, and backs off when AudioRecord fails.
+ * start() returns only after the microphone is actually recording.
  */
 class HeyIronEngine(
     private val context: Context,
@@ -32,6 +38,7 @@ class HeyIronEngine(
         fun onDetected(keyword: String)
         fun onError(message: String)
         fun onListeningChanged(listening: Boolean)
+        fun onMicLevel(rms: Float)
     }
 
     companion object {
@@ -44,6 +51,8 @@ class HeyIronEngine(
         private const val FRAME_SAMPLES = 1_600
         private const val MIN_RMS = 0.006f
         private const val LOG_TAG = "HeyIronV2"
+        private const val START_TIMEOUT_MS = 3_000L
+        private const val MIC_EMIT_INTERVAL_MS = 80L
 
         val REQUIRED_FILES = listOf(
             "encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx",
@@ -59,6 +68,13 @@ class HeyIronEngine(
         fun isModelReady(context: Context): Boolean {
             val dir = modelDir(context)
             return REQUIRED_FILES.all { File(dir, it).isFile && File(dir, it).length() > 0L }
+        }
+
+        fun hasMicPermission(context: Context): Boolean {
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
         }
 
         /**
@@ -115,23 +131,53 @@ class HeyIronEngine(
     var lastError: String? = null
         private set
 
+    @Volatile
+    var lastRms: Float = 0f
+        private set
+
+    @Volatile
+    var lastDetectedKeyword: String? = null
+        private set
+
+    @Volatile
+    var lastDetectedAtMillis: Long = 0L
+        private set
+
+    @Volatile
+    var isRecording: Boolean = false
+        private set
+
     private var spotter: KeywordSpotter? = null
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
+    private var startLatch: CountDownLatch? = null
 
     fun isRunning(): Boolean = running
 
+    fun isListening(): Boolean = running && isRecording
+
     @Synchronized
     fun start(): Boolean {
-        if (running) return true
+        if (running && isRecording) return true
+        if (running) {
+            stopLocked()
+        }
         lastError = null
-        if (!isModelReady(context)) {
-            val installError = installBundledModel(context)
-            if (installError != null) {
-                lastError = installError
-                listener.onError(installError)
-                return false
-            }
+        isRecording = false
+        lastRms = 0f
+        if (!hasMicPermission(context)) {
+            val message = "Нужно е разрешение за микрофона."
+            lastError = message
+            listener.onError(message)
+            return false
+        }
+        // Always refresh keywords.txt so a newer APK can lower the
+        // threshold or add pronunciations without a reinstall of the model.
+        val installError = installBundledModel(context, overwriteKeywords = true)
+        if (installError != null && !isModelReady(context)) {
+            lastError = installError
+            listener.onError(installError)
+            return false
         }
         if (!isModelReady(context)) {
             val message = "Офлайн моделът за „Хей Айрън“ липсва. Натисни „Опитай отново“."
@@ -152,15 +198,35 @@ class HeyIronEngine(
             return false
         }
         spotter = engine
+        val latch = CountDownLatch(1)
+        startLatch = latch
         running = true
         startWorker(engine)
+        val started = try {
+            latch.await(START_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            false
+        }
+        if (!started || !isRecording) {
+            val message = lastError ?: "Микрофонът не можа да бъде стартиран."
+            lastError = message
+            stopLocked()
+            listener.onError(message)
+            return false
+        }
         listener.onListeningChanged(true)
         return true
     }
 
     @Synchronized
     fun stop() {
+        stopLocked()
+    }
+
+    private fun stopLocked() {
         running = false
+        startLatch?.countDown()
+        startLatch = null
         val rec = recorder
         recorder = null
         try {
@@ -188,7 +254,94 @@ class HeyIronEngine(
         } catch (_: Exception) {
         }
         spotter = null
+        isRecording = false
+        lastRms = 0f
         handler.post { listener.onListeningChanged(false) }
+    }
+
+    fun testMic(durationMs: Int = 800): Map<String, Any?> {
+        if (!hasMicPermission(context)) {
+            return mapOf(
+                "ok" to false,
+                "granted" to false,
+                "rms" to 0.0,
+                "peak" to 0.0,
+                "listening" to isListening(),
+                "error" to "Нужно е разрешение за микрофона.",
+            )
+        }
+        if (isListening()) {
+            return mapOf(
+                "ok" to true,
+                "granted" to true,
+                "rms" to lastRms.toDouble(),
+                "peak" to lastRms.toDouble(),
+                "listening" to true,
+                "error" to null,
+            )
+        }
+        val rec = createRecorder()
+            ?: return mapOf(
+                "ok" to false,
+                "granted" to true,
+                "rms" to 0.0,
+                "peak" to 0.0,
+                "listening" to false,
+                "error" to "Микрофонът не можа да бъде стартиран.",
+            )
+        val buffer = ShortArray(FRAME_SAMPLES)
+        var squareSum = 0.0
+        var samples = 0
+        var peak = 0.0
+        val deadline = SystemClock.elapsedRealtime() + durationMs.coerceIn(200, 3_000)
+        try {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                val count = try {
+                    rec.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                } catch (_: Exception) {
+                    -1
+                }
+                if (count <= 0) break
+                var square = 0.0
+                for (index in 0 until count) {
+                    val sample = buffer[index] / 32768.0
+                    square += sample * sample
+                }
+                squareSum += square
+                samples += count
+                val rms = sqrt(square / count)
+                if (rms > peak) peak = rms
+            }
+        } finally {
+            try {
+                if (rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) rec.stop()
+            } catch (_: Exception) {
+            }
+            try {
+                rec.release()
+            } catch (_: Exception) {
+            }
+        }
+        if (samples <= 0) {
+            return mapOf(
+                "ok" to false,
+                "granted" to true,
+                "rms" to 0.0,
+                "peak" to 0.0,
+                "listening" to false,
+                "error" to "Микрофонът не върна звук.",
+            )
+        }
+        val rms = sqrt(squareSum / samples)
+        lastRms = rms.toFloat()
+        return mapOf(
+            "ok" to true,
+            "granted" to true,
+            "rms" to rms,
+            "peak" to peak,
+            "listening" to false,
+            "error" to null,
+        )
     }
 
     private fun createConfig(): KeywordSpotterConfig {
@@ -211,10 +364,10 @@ class HeyIronEngine(
                 dither = 0.0f,
             ),
             modelConfig = modelConfig,
-            maxActivePaths = 2,
+            maxActivePaths = 4,
             keywordsFile = "$dir/keywords.txt",
-            keywordsScore = 1.5f,
-            keywordsThreshold = 0.25f,
+            keywordsScore = 2.5f,
+            keywordsThreshold = 0.10f,
             numTrailingBlanks = 1,
         )
     }
@@ -259,24 +412,32 @@ class HeyIronEngine(
         return null
     }
 
+    private fun signalStart(recording: Boolean, error: String?) {
+        if (error != null) lastError = error
+        isRecording = recording
+        startLatch?.countDown()
+    }
+
     private fun startWorker(engine: KeywordSpotter) {
         val thread = Thread({
             var stream: OnlineStream? = null
             var rec: AudioRecord? = null
             var backoffMs = 80L
             var lastHeartbeat = 0L
+            var lastMicEmit = 0L
             try {
                 stream = engine.createStream()
                 if (stream.ptr == 0L) {
-                    postError("Неуспешно отваряне на потока за „Хей Айрън“.")
+                    signalStart(false, "Неуспешно отваряне на потока за „Хей Айрън“.")
                     return@Thread
                 }
                 rec = createRecorder()
                 if (rec == null) {
-                    postError("Микрофонът не можа да бъде стартиран.")
+                    signalStart(false, "Микрофонът не можа да бъде стартиран.")
                     return@Thread
                 }
                 recorder = rec
+                signalStart(true, null)
                 val buffer = ShortArray(FRAME_SAMPLES)
                 wakeGuard.resetSignal()
                 while (running) {
@@ -304,8 +465,13 @@ class HeyIronEngine(
                         sample
                     }
                     val rms = sqrt(square / count).toFloat()
+                    lastRms = rms
                     val now = SystemClock.elapsedRealtime()
                     wakeGuard.observeFrame(voiced = rms >= MIN_RMS, nowMillis = now)
+                    if (now - lastMicEmit >= MIC_EMIT_INTERVAL_MS) {
+                        lastMicEmit = now
+                        handler.post { listener.onMicLevel(rms) }
+                    }
                     if (now - lastHeartbeat >= 2_500L) {
                         lastHeartbeat = now
                         handler.post { listener.onHeartbeat() }
@@ -328,6 +494,8 @@ class HeyIronEngine(
                     }
                     if (detectedKeyword.isNotEmpty()) {
                         running = false
+                        lastDetectedKeyword = detectedKeyword
+                        lastDetectedAtMillis = System.currentTimeMillis()
                         beep()
                         handler.post { listener.onDetected(detectedKeyword) }
                         break
@@ -336,9 +504,13 @@ class HeyIronEngine(
             } catch (error: Exception) {
                 if (running) {
                     Log.w(LOG_TAG, "worker_failed", error)
+                    if (startLatch?.count == 1L) {
+                        signalStart(false, "Слушането беше прекъснато.")
+                    }
                     postError("Слушането беше прекъснато.")
                 }
             } finally {
+                isRecording = false
                 try {
                     rec?.let {
                         if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop()
@@ -351,6 +523,7 @@ class HeyIronEngine(
                     stream?.release()
                 } catch (_: Exception) {
                 }
+                startLatch?.countDown()
             }
         }, "HeyIronV2")
         thread.isDaemon = true

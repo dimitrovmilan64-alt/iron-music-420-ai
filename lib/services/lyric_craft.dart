@@ -41,6 +41,44 @@ class LyricRhymeReport {
       repeatedEndWords.isNotEmpty;
 }
 
+enum RhymeStrength { strong, ok, weak }
+
+class AnnotatedLyricLine {
+  final int index;
+  final String text;
+  final bool isSectionTag;
+  final bool isBlank;
+  final RhymeStrength? strength;
+  final int? partnerIndex;
+  final String? reason;
+
+  const AnnotatedLyricLine({
+    required this.index,
+    required this.text,
+    this.isSectionTag = false,
+    this.isBlank = false,
+    this.strength,
+    this.partnerIndex,
+    this.reason,
+  });
+
+  AnnotatedLyricLine copyWith({
+    RhymeStrength? strength,
+    int? partnerIndex,
+    String? reason,
+  }) {
+    return AnnotatedLyricLine(
+      index: index,
+      text: text,
+      isSectionTag: isSectionTag,
+      isBlank: isBlank,
+      strength: strength ?? this.strength,
+      partnerIndex: partnerIndex ?? this.partnerIndex,
+      reason: reason ?? this.reason,
+    );
+  }
+}
+
 class LyricCraft {
   static const storyAngles = <String>[
     'една конкретна нощ и едно решение, взето прекалено късно',
@@ -198,6 +236,7 @@ class LyricCraft {
     required String userRequest,
     required LyricLanguage language,
     String recentContext = '',
+    String recentSongs = '',
   }) {
     final short = isShortLyricRequest(userRequest);
     const scheme = 'AABB';
@@ -206,6 +245,11 @@ class LyricCraft {
         : (language == LyricLanguage.english
             ? 'Recent conversation context:\n$recentContext\n'
             : 'Контекст от разговора:\n$recentContext\n');
+    final recentBlock = recentSongs.trim().isEmpty
+        ? ''
+        : (language == LyricLanguage.english
+            ? 'Do not repeat the plot, hook or central image of these earlier songs:\n$recentSongs\n'
+            : 'Не повтаряй сюжета, куката или централния образ на тези по-ранни песни:\n$recentSongs\n');
     if (language == LyricLanguage.english) {
       final shape = short
           ? 'only a finished chorus (8 lines)'
@@ -217,6 +261,7 @@ class LyricCraft {
           'No stock heart/sky/pain pairs.\n'
           'User request:\n$userRequest\n'
           '$contextBlock'
+          '$recentBlock'
           'Return only singable lyrics with square section tags. '
           'No parenthetical stage directions and no intro explanation.\n';
     }
@@ -231,7 +276,8 @@ class LyricCraft {
         'сърце/небе/болка и без граматически рими като -ам/-ам.\n'
         'Заявка на потребителя:\n$userRequest\n'
         '$contextBlock'
-        'Върни само текста за пеене с квадратни секционни етикети като [Припев]. '
+        '$recentBlock'
+        'Върни само текста за пеене с квадратни секционни етикети като [Chorus] и [Verse]. '
         'Без обяснения и без указания в кръгли скоби.\n';
   }
 
@@ -510,7 +556,7 @@ Return only the finished lyrics with section tags like [Verse 1], [Chorus], [Bri
 - Избягвай изтъркани крайни думи и двойки като сърце/небе, болка/любов, мрак/прах, бетон/закон, страх/нощта/самота, освен ако образът е наистина свеж и не е използвана като шаблонна двойка.
 - Римувай смисъл, не само последната дума. Не чупи граматиката и не обръщай словореда само заради рима.
 
-Връщаш само готовия текст със секции като [Интро], [Куплет 1], [Припев], [Куплет 2], [Бридж], [Финален припев], [Аутро]. Без режисьорски указания в кръгли скоби. Не прекъсвай ред по средата.
+Връщаш само готовия текст със секции като [Intro], [Verse 1], [Chorus], [Verse 2], [Bridge], [Final Chorus], [Outro]. Без режисьорски указания в кръгли скоби. Не прекъсвай ред по средата.
 ''';
   }
 
@@ -558,7 +604,7 @@ Return only singable lyrics with square section tags. No parenthetical stage dir
 
     return '''
 Напиши завършена оригинална българска рап песен.
-Структура: [Интро], [Куплет 1], [Припев], [Куплет 2], [Бридж], [Финален припев], [Аутро].
+Структура: [Intro], [Verse 1], [Chorus], [Verse 2], [Bridge], [Final Chorus], [Outro].
 Стил: $style.
 Настроение: $mood.
 Темпо: $bpm BPM.
@@ -660,10 +706,253 @@ $draft
     for (final song in songs.take(limit)) {
       final title = (song.title as String?)?.trim() ?? '';
       final theme = (song.theme as String?)?.trim() ?? '';
-      if (title.isEmpty && theme.isEmpty) continue;
-      lines.add('- ${title.isEmpty ? 'без заглавие' : title}'
-          '${theme.isEmpty ? '' : ': $theme'}');
+      final mood = (song.mood as String?)?.trim() ?? '';
+      final style = (song.style as String?)?.trim() ?? '';
+      if (title.isEmpty && theme.isEmpty && mood.isEmpty && style.isEmpty) {
+        continue;
+      }
+      final extras = <String>[
+        if (theme.isNotEmpty) theme,
+        if (mood.isNotEmpty) mood,
+        if (style.isNotEmpty) style,
+      ];
+      final label = title.isEmpty ? 'без заглавие' : title;
+      lines.add(extras.isEmpty ? '- $label' : '- $label: ${extras.join(', ')}');
     }
     return lines.join('\n');
+  }
+
+  static bool isSectionTagLine(String line) {
+    final trimmed = line.trim();
+    return trimmed.isNotEmpty &&
+        (RegExp(r'^\[[^\]]+\]$').hasMatch(trimmed) ||
+            _sectionHeading.hasMatch(trimmed));
+  }
+
+  static List<String> splitLyricLines(String lyrics) {
+    return lyrics.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+  }
+
+  static List<AnnotatedLyricLine> annotateLines(
+    String lyrics, {
+    String scheme = 'AABB',
+  }) {
+    final raw = splitLyricLines(lyrics);
+    final annotations = <AnnotatedLyricLine>[
+      for (var i = 0; i < raw.length; i++)
+        AnnotatedLyricLine(
+          index: i,
+          text: raw[i],
+          isSectionTag: isSectionTagLine(raw[i]),
+          isBlank: raw[i].trim().isEmpty,
+        ),
+    ];
+
+    var current = <int>[];
+    void flush() {
+      _markPairs(annotations, current, scheme);
+      current = <int>[];
+    }
+
+    for (final line in annotations) {
+      if (line.isSectionTag) {
+        flush();
+        continue;
+      }
+      if (line.isBlank) continue;
+      current.add(line.index);
+    }
+    flush();
+    return annotations;
+  }
+
+  static void _markPairs(
+    List<AnnotatedLyricLine> annotations,
+    List<int> indexes,
+    String scheme,
+  ) {
+    if (indexes.length < 2) return;
+    final pairs = <(int, int)>[];
+    if (scheme == 'ABAB') {
+      for (var i = 0; i + 3 < indexes.length; i += 4) {
+        pairs.add((indexes[i], indexes[i + 2]));
+        pairs.add((indexes[i + 1], indexes[i + 3]));
+      }
+    } else {
+      for (var i = 0; i + 1 < indexes.length; i += 2) {
+        pairs.add((indexes[i], indexes[i + 1]));
+      }
+    }
+    for (final pair in pairs) {
+      final left = annotations[pair.$1];
+      final right = annotations[pair.$2];
+      final score = rhymeScore(endWord(left.text), endWord(right.text));
+      final strength = score >= 3
+          ? RhymeStrength.strong
+          : score >= 2
+              ? RhymeStrength.ok
+              : RhymeStrength.weak;
+      var reason = 'богата рима';
+      if (score == 0) {
+        reason = 'не се римуват по ударение и окончание';
+      } else if (normalizeWord(endWord(left.text)) ==
+          normalizeWord(endWord(right.text))) {
+        reason = 'повтаря се същата дума';
+      } else if (score == 1) {
+        reason = isGrammaticalRhyme(endWord(left.text), endWord(right.text))
+            ? 'граматическа рима (едно и също окончание)'
+            : 'слаба/мързелива рима';
+      } else if (score == 2) {
+        reason = 'приемлива рима';
+      }
+      annotations[pair.$1] = left.copyWith(
+        strength: strength,
+        partnerIndex: pair.$2,
+        reason: reason,
+      );
+      annotations[pair.$2] = right.copyWith(
+        strength: strength,
+        partnerIndex: pair.$1,
+        reason: reason,
+      );
+    }
+  }
+
+  static String replaceLineAt(String lyrics, int lineIndex, String newLine) {
+    final lines = splitLyricLines(lyrics);
+    if (lineIndex < 0 || lineIndex >= lines.length) return lyrics;
+    lines[lineIndex] = newLine.trim();
+    return lines.join('\n');
+  }
+
+  static bool isValidLineRewrite({
+    required String originalLyrics,
+    required int lineIndex,
+    required String newLine,
+    String scheme = 'AABB',
+  }) {
+    final cleaned = newLine.trim();
+    if (cleaned.isEmpty || isSectionTagLine(cleaned)) return false;
+    final updated = replaceLineAt(originalLyrics, lineIndex, cleaned);
+    final annotated = annotateLines(updated, scheme: scheme);
+    if (lineIndex < 0 || lineIndex >= annotated.length) return false;
+    final line = annotated[lineIndex];
+    if (line.partnerIndex == null) return true;
+    return line.strength == RhymeStrength.ok ||
+        line.strength == RhymeStrength.strong;
+  }
+
+  static String buildLineRewriteInstruction({
+    required String lyrics,
+    required int lineIndex,
+    required String rhymeScheme,
+    required LyricLanguage language,
+  }) {
+    final lines = splitLyricLines(lyrics);
+    final current = (lineIndex >= 0 && lineIndex < lines.length)
+        ? lines[lineIndex].trim()
+        : '';
+    final annotated = annotateLines(lyrics, scheme: rhymeScheme);
+    final partner = (lineIndex >= 0 && lineIndex < annotated.length)
+        ? annotated[lineIndex].partnerIndex
+        : null;
+    final partnerText =
+        partner != null && partner >= 0 && partner < lines.length
+            ? lines[partner].trim()
+            : '';
+    if (language == LyricLanguage.english) {
+      final partnerBlock =
+          partnerText.isEmpty ? '' : 'It must rhyme with:\n$partnerText\n';
+      return 'Rewrite only this one lyric line. Keep the same meaning, '
+          'rhyme scheme $rhymeScheme and syllable count.\n'
+          'Line to replace:\n$current\n'
+          '$partnerBlock'
+          'Full lyrics for context:\n$lyrics\n'
+          'Return only the replacement line, no tags and no quotes.';
+    }
+    final partnerBlock =
+        partnerText.isEmpty ? '' : 'Трябва да се римува с:\n$partnerText\n';
+    return 'Препиши само този един ред. Запази смисъла, римната схема '
+        '$rhymeScheme и броя срички.\n'
+        'Ред за замяна:\n$current\n'
+        '$partnerBlock'
+        'Цялата песен за контекст:\n$lyrics\n'
+        'Върни само новия ред, без етикети и без кавички.';
+  }
+
+  static String toSunoTag(String raw) {
+    final t = raw.toLowerCase().trim();
+    final number = RegExp(r'(\d+)').firstMatch(t)?.group(1);
+    String base;
+    if (t.contains('pre-chorus') ||
+        t.contains('prechorus') ||
+        t.contains('предприпев')) {
+      base = 'Pre-Chorus';
+    } else if (t.contains('final chorus') || t.contains('финален')) {
+      base = 'Final Chorus';
+    } else if (t.contains('chorus') ||
+        t.contains('припев') ||
+        t.contains('hook')) {
+      base = 'Chorus';
+    } else if (t.contains('verse') || t.contains('куплет')) {
+      base = 'Verse';
+    } else if (t.contains('bridge') || t.contains('бридж')) {
+      base = 'Bridge';
+    } else if (t.contains('intro') || t.contains('интро')) {
+      base = 'Intro';
+    } else if (t.contains('outro') || t.contains('аутро')) {
+      base = 'Outro';
+    } else {
+      return raw.trim();
+    }
+    if (number != null &&
+        base != 'Final Chorus' &&
+        base != 'Intro' &&
+        base != 'Outro' &&
+        base != 'Pre-Chorus') {
+      return '$base $number';
+    }
+    return base;
+  }
+
+  static String normalizeSunoTags(String lyrics) {
+    return lyrics.replaceAllMapped(RegExp(r'\[([^\]]+)\]'), (match) {
+      return '[${toSunoTag(match.group(1)!)}]';
+    });
+  }
+
+  static String buildSunoStylePrompt({
+    required String style,
+    required String mood,
+    required int bpm,
+    String vocal = 'deep natural male rap vocal',
+    String instruments =
+        'tight drums, clean modern mix, controlled low end, reserved autotune',
+  }) {
+    return 'Genre: $style\n'
+        'Tempo: $bpm BPM\n'
+        'Vocal: $vocal\n'
+        'Mood: $mood\n'
+        'Instruments: $instruments';
+  }
+
+  static String buildSunoPackage({
+    required String lyrics,
+    required String stylePrompt,
+    String exclude = '',
+  }) {
+    final buffer = StringBuffer()
+      ..writeln('/* Style */')
+      ..writeln(stylePrompt.trim())
+      ..writeln()
+      ..writeln('/* Lyrics */')
+      ..writeln(normalizeSunoTags(lyrics).trim());
+    if (exclude.trim().isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('/* Exclude */')
+        ..writeln(exclude.trim());
+    }
+    return buffer.toString().trim();
   }
 }

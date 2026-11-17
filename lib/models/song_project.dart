@@ -13,6 +13,7 @@ class SongProject {
   final int bpm;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isDraft;
 
   const SongProject({
     required this.id,
@@ -29,6 +30,7 @@ class SongProject {
     required this.bpm,
     required this.createdAt,
     required this.updatedAt,
+    this.isDraft = false,
   });
 
   factory SongProject.create({
@@ -43,6 +45,7 @@ class SongProject {
     required String rhymeScheme,
     String outputType = 'Цяла песен',
     required int bpm,
+    bool isDraft = false,
   }) {
     final now = DateTime.now();
     return SongProject(
@@ -60,6 +63,7 @@ class SongProject {
       bpm: bpm.clamp(60, 220).toInt(),
       createdAt: now,
       updatedAt: now,
+      isDraft: isDraft,
     );
   }
 
@@ -76,6 +80,7 @@ class SongProject {
     String? outputType,
     int? bpm,
     DateTime? updatedAt,
+    bool? isDraft,
   }) {
     return SongProject(
       id: id,
@@ -92,6 +97,7 @@ class SongProject {
       bpm: bpm ?? this.bpm,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
+      isDraft: isDraft ?? this.isDraft,
     );
   }
 
@@ -110,6 +116,7 @@ class SongProject {
         'bpm': bpm,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
+        'isDraft': isDraft,
       };
 
   factory SongProject.fromJson(Map<String, dynamic> json) {
@@ -134,6 +141,7 @@ class SongProject {
       bpm: parsedBpm.clamp(60, 220).toInt(),
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? now,
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? now,
+      isDraft: json['isDraft'] == true,
     );
   }
 
@@ -208,7 +216,8 @@ class SongProject {
         ..writeln();
     }
 
-    buffer.writeln('Създадено с Iron Music 420 AI v2.6.2');
+    if (isDraft) buffer.writeln('Статус: чернова');
+    buffer.writeln('Създадено с Iron Music 420 AI v3.8.0');
     return buffer.toString().trim();
   }
 }

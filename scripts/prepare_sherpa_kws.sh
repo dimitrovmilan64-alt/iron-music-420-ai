@@ -99,20 +99,20 @@ candidates: list[tuple[str, list[str], float, float]] = []
 for hey_index, hey in enumerate(lexicon.get("HEY", []), start=1):
     for iron_index, iron in enumerate(lexicon.get("IRON", []), start=1):
         candidates.append(
-            (f"HEY_IRON_{hey_index}_{iron_index}", hey + iron, 2.0, 0.18)
+            (f"HEY_IRON_{hey_index}_{iron_index}", hey + iron, 2.5, 0.10)
         )
 
 # Bulgarian-accented «Хей Айрън» / «Хей Айрън» approximated with CMU phones.
 candidates.extend(
     [
-        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 2.0, 0.18),
-        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 2.0, 0.18),
-        ("HEY_IRON_ER", ["HH", "EY1", "AY1", "ER0", "N"], 2.0, 0.18),
+        ("HEY_IRON_BG", ["HH", "EY1", "AY1", "R", "AH0", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_STRESS", ["HH", "EY1", "AY1", "R", "AH1", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_FAST", ["HH", "EY1", "AY1", "R", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_EH", ["HH", "EH1", "Y", "AY1", "R", "AH0", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_EH_SHORT", ["HH", "EH1", "AY1", "R", "AH0", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_O", ["HH", "EY1", "AY1", "R", "AO0", "N"], 2.5, 0.10),
+        ("HEY_IRON_BG_OW", ["HH", "EY1", "AY1", "R", "OW0", "N"], 2.5, 0.10),
+        ("HEY_IRON_ER", ["HH", "EY1", "AY1", "ER0", "N"], 2.5, 0.10),
     ]
 )
 

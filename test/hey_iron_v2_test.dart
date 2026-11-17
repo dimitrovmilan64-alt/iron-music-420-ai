@@ -110,4 +110,55 @@ void main() {
     expect(result.stdout, contains('FeatureConfig;.sampleRate I'));
     expect(result.stdout, contains('OnlineModelConfig;.transducer'));
   });
+
+  test('listening starts on first frame and the mic has a single owner', () {
+    final engine = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/HeyIronEngine.kt',
+    ).readAsStringSync();
+    final bridge = File(
+      'android/app/src/main/kotlin/com/example/ironmusic420ai/HeyIronBridge.kt',
+    ).readAsStringSync();
+    final controller =
+        File('lib/services/hey_iron_controller.dart').readAsStringSync();
+    final main = File('lib/main.dart').readAsStringSync();
+    final settings = File('lib/pages/settings_page.dart').readAsStringSync();
+    final keywords = File('assets/hey_iron/keywords.txt').readAsStringSync();
+
+    expect(main, contains('handleAppResumed()'));
+    expect(main, contains('addPostFrameCallback'));
+    expect(bridge, contains('stopBackgroundService()'));
+    expect(bridge, contains('"stopEngine"'));
+    expect(bridge, contains('"testMic"'));
+    expect(bridge, contains('ensureMicPermission'));
+    expect(engine, contains('CountDownLatch'));
+    expect(engine, contains('fun testMic'));
+    expect(engine, contains('fun isListening'));
+    expect(engine, contains('keywordsThreshold = 0.10f'));
+    expect(engine, contains('overwriteKeywords = true'));
+    expect(controller, contains("invokeMethod('stopEngine')"));
+    expect(controller, contains('testMicrophone'));
+    expect(controller, contains('lastDetectionLabel'));
+    expect(settings, contains('Тест на микрофона'));
+    expect(settings, contains('hey.lastDetectionLabel'));
+    expect(keywords, contains('#0.10'));
+    expect(keywords, contains('HEY_IRON_1_1'));
+  });
+
+  test('recorded hey iron wav is detected by the bundled keyword spotter',
+      () async {
+    expect(File('test/fixtures/hey_iron.wav').existsSync(), isTrue);
+    expect(File('scripts/test_hey_iron_spotter.py').existsSync(), isTrue);
+    final result = await Process.run('python3', <String>[
+      'scripts/test_hey_iron_spotter.py',
+      '--wav',
+      'test/fixtures/hey_iron.wav',
+      '--allow-skip',
+    ]);
+    final output = '${result.stdout}\n${result.stderr}';
+    if (output.contains('SKIP:')) {
+      return;
+    }
+    expect(result.exitCode, 0, reason: output);
+    expect(output, contains('OK: detected'));
+  });
 }
