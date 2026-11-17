@@ -96,6 +96,8 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         captureIronSection(intent)
         heyIronBridge = HeyIronBridge(this)
+        IronDebugLog.init(this)
+        IronDebugLog.line("app", "configureFlutterEngine")
         heyIronBridge?.attach(flutterEngine.dartExecutor.binaryMessenger)
         deliverHeyIronDetection(intent)
         automationChannel = MethodChannel(
@@ -197,6 +199,7 @@ class MainActivity : FlutterActivity() {
         }
 
         pendingChatSpeechResult = result
+        IronDebugLog.line("stt", "start requested")
         if (
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -218,6 +221,7 @@ class MainActivity : FlutterActivity() {
         // release the microphone before Android SpeechRecognizer can
         // hear the start of the next utterance.
         heyIronBridge?.releaseMicrophone()
+        IronDebugLog.line("stt", "released Hey Iron mic for speech recognition")
         restoreIronVoiceAfterChatSpeech = IronVoiceService.isRunning
         if (restoreIronVoiceAfterChatSpeech) {
             startService(
@@ -435,6 +439,7 @@ class MainActivity : FlutterActivity() {
 
         try {
             recognizer.startListening(recognitionIntent)
+            IronDebugLog.line("stt", "SpeechRecognizer listening, lang=bg-BG")
             mainHandler.postDelayed(chatSpeechTimeout, 45_000L)
         } catch (error: Exception) {
             finishChatSpeech(
@@ -574,6 +579,10 @@ class MainActivity : FlutterActivity() {
         errorMessage: String? = null,
     ) {
         val pendingResult = pendingChatSpeechResult ?: return
+        IronDebugLog.line(
+            "stt",
+            "finish success=${errorCode == null} textLen=${text.orEmpty().trim().length} error=${errorCode ?: "-"}",
+        )
         pendingChatSpeechResult = null
         mainHandler.removeCallbacks(beginChatSpeechRecognition)
         mainHandler.removeCallbacks(chatSpeechTimeout)

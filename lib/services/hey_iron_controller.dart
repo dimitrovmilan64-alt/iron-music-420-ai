@@ -427,6 +427,15 @@ class HeyIronController extends ChangeNotifier {
     }
   }
 
+  Future<void> writeDebugLog(String tag, String message) async {
+    try {
+      await _channel.invokeMethod('debugLog', {
+        'tag': tag,
+        'message': message,
+      });
+    } catch (_) {}
+  }
+
   Future<void> yieldMicForSpeech() async {
     _holdingMicForSpeech = true;
     _stallTimer?.cancel();
@@ -507,6 +516,7 @@ class HeyIronController extends ChangeNotifier {
         notifyListeners();
         break;
       case 'micLevel':
+        watchdog.markHeartbeat();
         final rms = (event['rms'] as num?)?.toDouble() ?? 0;
         micLevel = rms;
         final now = DateTime.now();

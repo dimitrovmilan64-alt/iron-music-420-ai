@@ -133,15 +133,17 @@ void main() {
     expect(engine, contains('CountDownLatch'));
     expect(engine, contains('fun testMic'));
     expect(engine, contains('fun isListening'));
-    expect(engine, contains('keywordsThreshold = 0.10f'));
+    expect(engine, contains('keywordsThreshold = 0.05f'));
     expect(engine, contains('overwriteKeywords = true'));
     expect(controller, contains("invokeMethod('stopEngine')"));
     expect(controller, contains('testMicrophone'));
     expect(controller, contains('lastDetectionLabel'));
     expect(settings, contains('Тест на микрофона'));
     expect(settings, contains('hey.lastDetectionLabel'));
-    expect(keywords, contains('#0.10'));
+    expect(keywords, contains('#0.05'));
     expect(keywords, contains('HEY_IRON_1_1'));
+    expect(keywords, contains('HI_IRON'));
+    expect(keywords, contains('AY_IRON'));
   });
 
   test('recorded hey iron wav is detected by the bundled keyword spotter',

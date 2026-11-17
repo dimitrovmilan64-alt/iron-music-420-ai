@@ -49,7 +49,7 @@ class HeyIronEngine(
         const val EXPECTED_ARCHIVE_BYTES = 32_885_699L
         const val SAMPLE_RATE = 16_000
         private const val FRAME_SAMPLES = 1_600
-        private const val MIN_RMS = 0.006f
+        private const val MIN_RMS = 0.002f
         private const val LOG_TAG = "HeyIronV2"
         private const val START_TIMEOUT_MS = 3_000L
         private const val MIC_EMIT_INTERVAL_MS = 80L
@@ -165,6 +165,8 @@ class HeyIronEngine(
         lastError = null
         isRecording = false
         lastRms = 0f
+        IronDebugLog.init(context)
+        IronDebugLog.line("kws", "start requested")
         if (!hasMicPermission(context)) {
             val message = "Нужно е разрешение за микрофона."
             lastError = message
@@ -215,6 +217,7 @@ class HeyIronEngine(
             return false
         }
         listener.onListeningChanged(true)
+        IronDebugLog.line("kws", "listening started, sampleRate=$SAMPLE_RATE")
         return true
     }
 
@@ -224,6 +227,9 @@ class HeyIronEngine(
     }
 
     private fun stopLocked() {
+        if (running || isRecording) {
+            IronDebugLog.line("kws", "stop requested, recording=$isRecording")
+        }
         running = false
         startLatch?.countDown()
         startLatch = null
@@ -366,8 +372,8 @@ class HeyIronEngine(
             modelConfig = modelConfig,
             maxActivePaths = 4,
             keywordsFile = "$dir/keywords.txt",
-            keywordsScore = 2.5f,
-            keywordsThreshold = 0.10f,
+            keywordsScore = 3.0f,
+            keywordsThreshold = 0.05f,
             numTrailingBlanks = 1,
         )
     }
@@ -440,7 +446,65 @@ class HeyIronEngine(
                 signalStart(true, null)
                 val buffer = ShortArray(FRAME_SAMPLES)
                 wakeGuard.resetSignal()
+                var lastFrameAt = SystemClock.elapsedRealtime()
+                var lastStatsAt = lastFrameAt
+                var framesThisSecond = 0
+                var rmsSum = 0.0
+                var rmsPeak = 0f
+                var rawKeywordThisSecond = ""
+                var noFrameRestarts = 0
                 while (running) {
+                    val loopNow = SystemClock.elapsedRealtime()
+                    if (loopNow - lastStatsAt >= 1_000L) {
+                        val avg = if (framesThisSecond == 0) 0f else (rmsSum / framesThisSecond).toFloat()
+                        IronDebugLog.line(
+                            "kws",
+                            "frames=$framesThisSecond rms_avg=${"%.4f".format(avg)} " +
+                                "rms_peak=${"%.4f".format(rmsPeak)} " +
+                                "raw_keyword=${rawKeywordThisSecond.ifBlank { "-" }} " +
+                                "restarts=$noFrameRestarts state=listening",
+                        )
+                        if (framesThisSecond > 0) {
+                            lastHeartbeat = loopNow
+                            handler.post { listener.onHeartbeat() }
+                        }
+                        framesThisSecond = 0
+                        rmsSum = 0.0
+                        rmsPeak = 0f
+                        rawKeywordThisSecond = ""
+                        lastStatsAt = loopNow
+                    }
+                    if (loopNow - lastFrameAt >= 5_000L) {
+                        noFrameRestarts++
+                        IronDebugLog.line(
+                            "kws",
+                            "no frames for ${loopNow - lastFrameAt}ms, restarting recorder ($noFrameRestarts)",
+                        )
+                        try {
+                            if (rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) rec.stop()
+                            rec.release()
+                        } catch (_: Exception) {
+                        }
+                        if (recorder === rec) recorder = null
+                        rec = createRecorder()
+                        lastFrameAt = SystemClock.elapsedRealtime()
+                        if (rec == null) {
+                            if (noFrameRestarts >= 3) {
+                                postError("Микрофонът спря да подава звук.")
+                                break
+                            }
+                            try {
+                                Thread.sleep(200)
+                            } catch (_: InterruptedException) {
+                                break
+                            }
+                            continue
+                        }
+                        recorder = rec
+                        backoffMs = 80L
+                        continue
+                    }
+
                     val count = try {
                         rec.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                     } catch (_: Exception) {
@@ -457,6 +521,8 @@ class HeyIronEngine(
                         continue
                     }
                     backoffMs = 80L
+                    lastFrameAt = SystemClock.elapsedRealtime()
+                    noFrameRestarts = 0
 
                     var square = 0.0
                     val samples = FloatArray(count) { index ->
@@ -466,8 +532,21 @@ class HeyIronEngine(
                     }
                     val rms = sqrt(square / count).toFloat()
                     lastRms = rms
+                    // Feed a consistent level to the spotter so quiet or
+                    // AGC-compressed speech still crosses the keyword threshold.
+                    if (rms > 0.001f) {
+                        val gain = (0.08f / rms).coerceIn(0.5f, 12f)
+                        if (kotlin.math.abs(gain - 1f) > 0.05f) {
+                            for (index in samples.indices) {
+                                samples[index] = (samples[index] * gain).coerceIn(-1f, 1f)
+                            }
+                        }
+                    }
                     val now = SystemClock.elapsedRealtime()
-                    wakeGuard.observeFrame(voiced = rms >= MIN_RMS, nowMillis = now)
+                    wakeGuard.observeFrame(voiced = rms >= MIN_RMS || lastRms >= MIN_RMS, nowMillis = now)
+                    framesThisSecond += 1
+                    rmsSum += rms
+                    if (rms > rmsPeak) rmsPeak = rms
                     if (now - lastMicEmit >= MIC_EMIT_INTERVAL_MS) {
                         lastMicEmit = now
                         handler.post { listener.onMicLevel(rms) }
@@ -484,11 +563,11 @@ class HeyIronEngine(
                         val keyword = engine.getResult(stream).keyword
                         if (keyword.isBlank()) continue
                         engine.reset(stream)
-                        when (wakeGuard.evaluate(SystemClock.elapsedRealtime())) {
-                            WakeActivationGuard.Decision.ACCEPT -> {
-                                detectedKeyword = keyword
-                            }
-                            else -> Unit
+                        rawKeywordThisSecond = keyword
+                        val decision = wakeGuard.evaluate(SystemClock.elapsedRealtime())
+                        IronDebugLog.line("kws", "keyword=$keyword decision=$decision")
+                        if (decision != WakeActivationGuard.Decision.COOLDOWN) {
+                            detectedKeyword = keyword
                         }
                         if (detectedKeyword.isNotEmpty()) break
                     }
@@ -496,6 +575,7 @@ class HeyIronEngine(
                         running = false
                         lastDetectedKeyword = detectedKeyword
                         lastDetectedAtMillis = System.currentTimeMillis()
+                        IronDebugLog.line("kws", "detected=$detectedKeyword")
                         beep()
                         handler.post { listener.onDetected(detectedKeyword) }
                         break

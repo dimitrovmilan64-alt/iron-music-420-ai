@@ -50,7 +50,7 @@ void main() {
     expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
-    expect(keywordScript, contains('2.5, 0.10'));
+    expect(keywordScript, contains('3.0, 0.05'));
     expect(keywordScript, isNot(contains('("IRON_')));
     expect(keywordScript, isNot(contains('LEX_NO_H')));
   });

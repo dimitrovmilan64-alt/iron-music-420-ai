@@ -368,6 +368,7 @@ class _ChatPageState extends State<ChatPage>
       FocusManager.instance.primaryFocus?.unfocus();
       if (!mounted) return;
       await widget.heyIron?.yieldMicForSpeech();
+      unawaited(widget.heyIron?.writeDebugLog('voice', 'yielded mic for STT'));
       if (!mounted) return;
 
       setState(() => _isListening = true);
@@ -396,6 +397,8 @@ class _ChatPageState extends State<ChatPage>
 
       if (VoiceUtterance.isCancelCommand(recognized)) {
         if (_isLoading) {
+          unawaited(widget.heyIron
+              ?.writeDebugLog('voice', 'cancel command from STT'));
           await _cancelInFlight();
         }
         if (mounted) {
@@ -416,6 +419,8 @@ class _ChatPageState extends State<ChatPage>
             TextPosition(offset: _messageController.text.length),
           );
         });
+        unawaited(widget.heyIron
+            ?.writeDebugLog('voice', 'fragment transcript rejected'));
         _showMessage(VoiceUtterance.fragmentRepeatMessage);
         return;
       }
@@ -745,6 +750,7 @@ class _ChatPageState extends State<ChatPage>
       }
       if (error.message == GeminiException.timeoutMessage ||
           error.message == VoiceUtterance.timeoutMessage) {
+        unawaited(widget.heyIron?.writeDebugLog('chat', 'timeout after 25s'));
         _restorePromptForRetry(text);
       }
       await _addLocalNotice(error.message);

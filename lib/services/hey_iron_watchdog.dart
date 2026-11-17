@@ -2,7 +2,7 @@
 /// feature after too many incidents on a weak phone.
 class HeyIronWatchdog {
   static const int maxFailures = 3;
-  static const Duration stallTimeout = Duration(seconds: 8);
+  static const Duration stallTimeout = Duration(seconds: 15);
   static const Duration failureWindow = Duration(hours: 24);
 
   int failureCount;

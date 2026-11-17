@@ -25,7 +25,7 @@ void main() {
     final start = DateTime.now();
     watchdog.markStarted(now: start);
     expect(watchdog.isStalled, isFalse);
-    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 9));
+    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 16));
     expect(watchdog.isStalled, isTrue);
     watchdog.markCleanStop();
     expect(watchdog.isStalled, isFalse);
@@ -44,12 +44,12 @@ void main() {
     final watchdog = HeyIronWatchdog();
     final start = DateTime.now();
     watchdog.markStarted(now: start);
-    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 9));
+    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 16));
     expect(watchdog.canAutoRestartOnStall, isTrue);
     watchdog.markStallRestart(now: start);
     expect(watchdog.stallRestartCount, 1);
     expect(watchdog.canAutoRestartOnStall, isFalse);
-    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 9));
+    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 16));
     expect(watchdog.isStalled, isTrue);
     expect(watchdog.canAutoRestartOnStall, isFalse);
     watchdog.markHeartbeat(now: start);

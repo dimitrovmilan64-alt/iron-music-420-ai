@@ -80,6 +80,8 @@ class AppErrorLog {
       ..writeln('Iron Music 420 AI — доклад за проблем')
       ..writeln('Версия: ${redact(versionLabel)}')
       ..writeln('Устройство: ${redact(deviceInfo)}')
+      ..writeln(
+          'Лог на Хей Айрън: Android/data/com.example.ironmusic420ai/files/iron_debug.log')
       ..writeln('Време: ${_format(DateTime.now())}')
       ..writeln()
       ..writeln('Настройки (без ключове):');

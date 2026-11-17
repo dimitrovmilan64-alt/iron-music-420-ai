@@ -29,16 +29,24 @@ class HeyIronBridge(
         const val EVENT_CHANNEL = "iron_music_420/hey_iron_events"
         private const val LOG_TAG = "HeyIronV2"
         const val MIC_PERMISSION_REQUEST = 4204
-        private val KEYWORDS = """
-            HH EY1 AY1 ER0 N :2.5 #0.10 @HEY_IRON_1_1
-            HH EY1 AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG
-            HH EY1 AY1 R AH1 N :2.5 #0.10 @HEY_IRON_BG_STRESS
-            HH EY1 AY1 R N :2.5 #0.10 @HEY_IRON_BG_FAST
-            HH EH1 Y AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG_EH
-            HH EH1 AY1 R AH0 N :2.5 #0.10 @HEY_IRON_BG_EH_SHORT
-            HH EY1 AY1 R AO0 N :2.5 #0.10 @HEY_IRON_BG_O
-            HH EY1 AY1 R OW0 N :2.5 #0.10 @HEY_IRON_BG_OW
-        """.trimIndent()
+                private val KEYWORDS = """
+            HH EY1 AY1 ER0 N :3.0 #0.05 @HEY_IRON_1_1
+            HH EY1 AY1 R AH0 N :3.0 #0.05 @HEY_IRON_BG
+            HH EY1 AY1 R AH1 N :3.0 #0.05 @HEY_IRON_BG_STRESS
+            HH EY1 AY1 R N :3.0 #0.05 @HEY_IRON_BG_FAST
+            HH EH1 Y AY1 R AH0 N :3.0 #0.05 @HEY_IRON_BG_EH
+            HH EH1 AY1 R AH0 N :3.0 #0.05 @HEY_IRON_BG_EH_SHORT
+            HH EY1 AY1 R AO0 N :3.0 #0.05 @HEY_IRON_BG_O
+            HH EY1 AY1 R OW0 N :3.0 #0.05 @HEY_IRON_BG_OW
+            HH AY1 AY1 ER0 N :3.0 #0.05 @HI_IRON
+            HH AY1 R AH0 N :3.0 #0.05 @HI_IRON_BG
+            HH AY1 AY1 R AH0 N :3.0 #0.05 @HI_IRON_BG2
+            EY1 AY1 ER0 N :3.0 #0.05 @AY_IRON
+            AY1 AY1 ER0 N :3.0 #0.05 @AY_IRON_SHORT
+            AY1 R AH0 N :3.0 #0.05 @AY_IRON_BG
+            EY1 AY1 R AH0 N :3.0 #0.05 @AY_IRON_OPEN
+            HH EY1 R AH0 N :3.0 #0.05 @HEY_IRON_REDUCED
+""".trimIndent()
 
         /**
          * Resolves an archive entry into [dest], flattening to the basename so the
@@ -81,6 +89,7 @@ class HeyIronBridge(
     private var pendingDetectedKeyword: String? = null
 
     fun attach(messenger: BinaryMessenger) {
+        IronDebugLog.init(activity)
         methodChannel = MethodChannel(messenger, METHOD_CHANNEL).also {
             it.setMethodCallHandler(this)
         }
@@ -207,6 +216,13 @@ class HeyIronBridge(
             "deviceInfo" -> result.success(
                 "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
             )
+            "debugLog" -> {
+                IronDebugLog.init(activity)
+                val tag = call.argument<String>("tag") ?: "dart"
+                val message = call.argument<String>("message") ?: ""
+                if (message.isNotBlank()) IronDebugLog.line(tag, message)
+                result.success(true)
+            }
             "setBackground" -> result.success(true)
             else -> result.notImplemented()
         }
