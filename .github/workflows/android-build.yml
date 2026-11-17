@@ -115,6 +115,9 @@ jobs:
       - name: Verify APK 16KB native libs
         run: python3 scripts/check_hey_iron_native.py --apk build/app/outputs/flutter-apk/app-release.apk
 
+      - name: Verify APK JNI fields for Hey Iron
+        run: python3 scripts/check_hey_iron_jni_fields.py --apk build/app/outputs/flutter-apk/app-release.apk --jni-dir scripts/vendor/sherpa-onnx-1.13.4-jni
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

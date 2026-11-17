@@ -45,6 +45,19 @@ void main() {
     expect(gradle, contains('keepSherpaNative'));
     expect(controller, contains('backgroundExperimental'));
     expect(controller, contains('prepareModel'));
+    expect(controller, contains('Подготвям вградения офлайн модел'));
+    expect(controller, isNot(contains('Трябва да се изтегли офлайн модел')));
+    final settings = File('lib/pages/settings_page.dart').readAsStringSync();
+    expect(settings, contains('Моделът е вграден в приложението'));
+    expect(settings, isNot(contains('се изтегля офлайн модел')));
+    expect(settings, isNot(contains('31.4')));
+    final proguard = File('android/app/proguard-rules.pro').readAsStringSync();
+    expect(proguard, contains('-keep class com.k2fsa.sherpa.onnx.** { *; }'));
+    expect(proguard,
+        contains('-keepclassmembers class com.k2fsa.sherpa.onnx.** { *; }'));
+    final workflow =
+        File('.github/workflows/android-build.yml').readAsStringSync();
+    expect(workflow, contains('check_hey_iron_jni_fields.py'));
     expect(watchdog, contains('maxFailures = 3'));
     final keywords = File('assets/hey_iron/keywords.txt').readAsStringSync();
     expect(keywords, contains('HEY_IRON'));
@@ -68,6 +81,13 @@ void main() {
 
   test('bundled keyword files and 16KB checker are present', () {
     expect(File('scripts/check_hey_iron_native.py').existsSync(), isTrue);
+    expect(File('scripts/check_hey_iron_jni_fields.py').existsSync(), isTrue);
+    expect(File('android/app/proguard-rules.pro').existsSync(), isTrue);
+    expect(
+      File('scripts/vendor/sherpa-onnx-1.13.4-jni/keyword-spotter.cc')
+          .existsSync(),
+      isTrue,
+    );
     expect(File('assets/hey_iron/keywords.txt').existsSync(), isTrue);
     final checker = File('scripts/check_hey_iron_native.py').readAsStringSync();
     expect(checker, contains('0x4000'));
@@ -77,5 +97,17 @@ void main() {
     if (androidKeywords.existsSync()) {
       expect(androidKeywords.readAsStringSync(), contains('HEY_IRON_BG'));
     }
+  });
+
+  test('JNI field checker lists maxActivePaths from pinned sherpa sources',
+      () async {
+    final result = await Process.run('python3', <String>[
+      'scripts/check_hey_iron_jni_fields.py',
+      '--print-expected',
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stderr}');
+    expect(result.stdout, contains('KeywordSpotterConfig;.maxActivePaths I'));
+    expect(result.stdout, contains('FeatureConfig;.sampleRate I'));
+    expect(result.stdout, contains('OnlineModelConfig;.transducer'));
   });
 }

@@ -272,7 +272,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                             ),
                             subtitle: Text(
-                              '${hey.statusLabel}. При първо включване се изтегля офлайн модел от около ${HeyIronController.formatSize(HeyIronController.modelBytes)}. Слушането е само докато приложението е отворено.',
+                              '${hey.statusLabel}. Моделът е вграден в приложението (~5 MB). Слушането е само докато приложението е отворено, освен ако включиш слушане на заден план.',
                               style: const TextStyle(
                                   color: Colors.white60, height: 1.35),
                             ),

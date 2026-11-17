@@ -110,7 +110,7 @@ class HeyIronController extends ChangeNotifier {
     if (enabled) {
       message = modelReady
           ? 'Моделът е готов. Слушането започва, когато екранът е активен.'
-          : 'Трябва да се изтегли офлайн модел (${formatSize(modelBytes)}).';
+          : 'Подготвям вградения офлайн модел.';
       phase = modelReady ? HeyIronPhase.ready : HeyIronPhase.off;
     } else {
       phase = HeyIronPhase.off;

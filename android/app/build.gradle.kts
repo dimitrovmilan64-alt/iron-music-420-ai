@@ -81,17 +81,18 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // Flutter 3.47 enables R8 minify on release. Keep rules for the
+            // sherpa-onnx JNI API live in proguard-rules.pro (auto-picked).
         }
     }
 
     packaging {
         jniLibs {
             pickFirsts += setOf("**/libc++_shared.so")
-            // Hey Iron v2 needs sherpa/onnx native libs at runtime. Models are
-            // downloaded on first enable and are not bundled, so the APK stays
-            // far smaller than the old 114 MB build. Keep only the first copy of
-            // libc++_shared.so. Reference libsherpa-onnx*.so here so tooling can
-            // still find the previous exclude rule.
+            // Hey Iron needs sherpa/onnx native libs at runtime. The small
+            // keyword model is bundled in assets/hey_iron. Keep only the first
+            // copy of libc++_shared.so. Reference libsherpa-onnx*.so here so
+            // tooling can still find the previous exclude rule.
             val keepSherpaNative = true
             if (!keepSherpaNative) {
                 excludes += setOf(
