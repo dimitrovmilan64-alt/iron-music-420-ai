@@ -480,15 +480,21 @@ class HeyIronEngine(
                             "kws",
                             "no frames for ${loopNow - lastFrameAt}ms, restarting recorder ($noFrameRestarts)",
                         )
+                        val existing = rec
                         try {
-                            if (rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) rec.stop()
-                            rec.release()
+                            if (existing != null) {
+                                if (existing.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                                    existing.stop()
+                                }
+                                existing.release()
+                            }
                         } catch (_: Exception) {
                         }
-                        if (recorder === rec) recorder = null
-                        rec = createRecorder()
+                        if (recorder === existing) recorder = null
+                        val replacement = createRecorder()
+                        rec = replacement
                         lastFrameAt = SystemClock.elapsedRealtime()
-                        if (rec == null) {
+                        if (replacement == null) {
                             if (noFrameRestarts >= 3) {
                                 postError("Микрофонът спря да подава звук.")
                                 break
@@ -500,13 +506,14 @@ class HeyIronEngine(
                             }
                             continue
                         }
-                        recorder = rec
+                        recorder = replacement
                         backoffMs = 80L
                         continue
                     }
 
+                    val currentRecorder = rec ?: break
                     val count = try {
-                        rec.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                        currentRecorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                     } catch (_: Exception) {
                         -1
                     }
