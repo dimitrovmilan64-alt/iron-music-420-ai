@@ -27,6 +27,7 @@ class HeyIronController extends ChangeNotifier {
   static const _prefEnabled = 'hey_iron_v2_enabled';
   static const _prefBackground = 'hey_iron_v2_background';
   static const _prefWatchdog = 'hey_iron_v2_watchdog';
+  static const _prefBackgroundApi36Off = 'hey_iron_v2_background_api36_off';
 
   HeyIronWatchdog watchdog = HeyIronWatchdog();
   HeyIronPhase phase = HeyIronPhase.off;
@@ -45,7 +46,10 @@ class HeyIronController extends ChangeNotifier {
   String micTestMessage = '';
   bool micTestBusy = false;
   bool _stopping = false;
+  bool _holdingMicForSpeech = false;
+  bool _restartingAfterStall = false;
   DateTime? _lastMicNotifyAt;
+  int? androidSdk;
 
   String get statusLabel {
     switch (phase) {
@@ -119,6 +123,9 @@ class HeyIronController extends ChangeNotifier {
     }
     watchdog.recoverFromPreviousSession();
     await _persistWatchdog();
+    await _refreshAndroidSdk();
+    final backgroundDisabledNotice =
+        await _maybeDisableBackgroundOnApi36(prefs);
 
     _eventsSub ??= _events.receiveBroadcastStream().listen(_onNativeEvent);
 
@@ -148,6 +155,9 @@ class HeyIronController extends ChangeNotifier {
       phase = HeyIronPhase.off;
       message =
           '„Хей Айрън“ е изключен. Работи само докато приложението е отворено.';
+    }
+    if (backgroundDisabledNotice != null) {
+      message = backgroundDisabledNotice;
     }
     notifyListeners();
   }
@@ -384,12 +394,86 @@ class HeyIronController extends ChangeNotifier {
   void _armStallTimer() {
     _stallTimer?.cancel();
     _stallTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (_holdingMicForSpeech || _restartingAfterStall || _stopping) {
+        return;
+      }
+      if (watchdog.canAutoRestartOnStall) {
+        watchdog.markStallRestart();
+        await _persistWatchdog();
+        await _restartAfterStall();
+        return;
+      }
       if (watchdog.isStalled) {
         await _fail(
           'Слушането спря да отговаря (подозрение за забиване). Функцията е поставена на пауза.',
         );
       }
     });
+  }
+
+  Future<void> _restartAfterStall() async {
+    if (_restartingAfterStall) return;
+    _restartingAfterStall = true;
+    message = 'Слушането засече забиване. Рестартирам микрофона още веднъж…';
+    notifyListeners();
+    try {
+      await _channel.invokeMethod('stop');
+      if (!enabled || watchdog.isTripped) return;
+      await startListening();
+    } catch (error) {
+      await _fail('Слушането не можа да се рестартира: $error');
+    } finally {
+      _restartingAfterStall = false;
+    }
+  }
+
+  Future<void> yieldMicForSpeech() async {
+    _holdingMicForSpeech = true;
+    _stallTimer?.cancel();
+    watchdog.markCleanStop();
+    try {
+      await _channel.invokeMethod('stop');
+    } catch (_) {}
+    micLevel = 0;
+    if (enabled && modelReady) {
+      phase = HeyIronPhase.ready;
+      message = 'Отстъпвам микрофона за разпознаване на реч.';
+    }
+    notifyListeners();
+  }
+
+  Future<void> resumeAfterSpeech() async {
+    _holdingMicForSpeech = false;
+    if (!enabled || watchdog.isTripped) return;
+    await startListening();
+  }
+
+  Future<void> _refreshAndroidSdk() async {
+    try {
+      final info = await _channel.invokeMethod<String>('deviceInfo');
+      final match = RegExp(r'API\s+(\d+)').firstMatch(info ?? '');
+      if (match != null) {
+        androidSdk = int.tryParse(match.group(1)!);
+      }
+    } catch (_) {
+      // Tests and older bridges may not implement deviceInfo.
+    }
+  }
+
+  Future<String?> _maybeDisableBackgroundOnApi36(
+    SharedPreferences prefs,
+  ) async {
+    final sdk = androidSdk ?? 0;
+    if (sdk < 36) return null;
+    if (prefs.getBool(_prefBackgroundApi36Off) == true) return null;
+    await prefs.setBool(_prefBackgroundApi36Off, true);
+    if (!backgroundExperimental) return null;
+    backgroundExperimental = false;
+    await prefs.setBool(_prefBackground, false);
+    try {
+      await _channel.invokeMethod('setBackground', {'enabled': false});
+    } catch (_) {}
+    return 'Фоновото слушане е изключено на Android 16, защото микрофонът се блокира. „Хей Айрън“ работи, докато приложението е отворено.';
   }
 
   @visibleForTesting

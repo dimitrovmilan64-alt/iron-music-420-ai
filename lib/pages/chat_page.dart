@@ -13,6 +13,7 @@ import '../services/iron_voice_flags.dart';
 import '../services/iron_tts.dart';
 import '../services/local_store.dart';
 import '../services/lyric_craft.dart';
+import '../services/voice_utterance.dart';
 import '../widgets/voice_settings_panel.dart';
 import '../ui/common_widgets.dart';
 
@@ -66,6 +67,8 @@ class _ChatPageState extends State<ChatPage>
   bool _voiceToggleBusy = false;
   bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
+  bool _listenLocked = false;
+  int _requestSeq = 0;
 
   @override
   void initState() {
@@ -156,7 +159,7 @@ class _ChatPageState extends State<ChatPage>
     if (mounted) setState(() {});
   }
 
-  bool _currentListeningLocked() => _isListening || _isLoading;
+  bool _currentListeningLocked() => _isListening || _listenLocked;
 
   @override
   void didUpdateWidget(ChatPage oldWidget) {
@@ -352,48 +355,113 @@ class _ChatPageState extends State<ChatPage>
   }
 
   Future<void> _toggleListening() async {
-    if (_isLoading) return;
+    if (_listenLocked) return;
 
     if (_isListening) {
       await _automation.stopNativeSpeechRecognition();
       return;
     }
 
-    await _tts.stop();
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (!mounted) return;
-    await widget.heyIron?.stopListening(clean: false);
-    if (!mounted) return;
+    _listenLocked = true;
+    try {
+      await _tts.stop();
+      FocusManager.instance.primaryFocus?.unfocus();
+      if (!mounted) return;
+      await widget.heyIron?.yieldMicForSpeech();
+      if (!mounted) return;
 
-    setState(() => _isListening = true);
-    _syncCoreAnimation();
-    final result = await _automation.startNativeSpeechRecognition();
-    if (!mounted) return;
+      setState(() => _isListening = true);
+      _syncCoreAnimation();
+      final result = await _automation.startNativeSpeechRecognition();
+      if (!mounted) return;
 
-    setState(() => _isListening = false);
-    _syncCoreAnimation();
-    if (widget.heyIron?.enabled == true) {
-      await widget.heyIron!.startListening();
-    }
-    if (!result.success) {
-      if (result.message.trim().isNotEmpty) {
-        _showMessage(result.message.trim());
+      setState(() => _isListening = false);
+      _syncCoreAnimation();
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+      if (widget.heyIron?.enabled == true) {
+        await widget.heyIron!.resumeAfterSpeech();
       }
+      if (!result.success) {
+        if (result.message.trim().isNotEmpty) {
+          _showMessage(result.message.trim());
+        }
+        return;
+      }
+
+      final recognized = result.text.trim();
+      if (recognized.isEmpty) {
+        _showMessage('Не чух думи. Натисни микрофона и говори след сигнала.');
+        return;
+      }
+
+      if (VoiceUtterance.isCancelCommand(recognized)) {
+        if (_isLoading) {
+          await _cancelInFlight();
+        }
+        if (mounted) {
+          _messageController.clear();
+        }
+        return;
+      }
+
+      if (_isLoading) {
+        _showMessage(VoiceUtterance.cancelHintMessage);
+        return;
+      }
+
+      if (VoiceUtterance.isFragment(recognized)) {
+        setState(() {
+          _messageController.text = recognized;
+          _messageController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _messageController.text.length),
+          );
+        });
+        _showMessage(VoiceUtterance.fragmentRepeatMessage);
+        return;
+      }
+
+      setState(() {
+        _messageController.text = recognized;
+        _messageController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _messageController.text.length),
+        );
+      });
+      await _sendMessage(fromVoice: true);
+    } finally {
+      _listenLocked = false;
+    }
+  }
+
+  Future<void> _cancelInFlight() async {
+    _requestSeq++;
+    _gemini.cancelActive();
+    try {
+      await _tts.stop();
+    } catch (_) {}
+    if (mounted && _isLoading) {
+      await _addLocalNotice(VoiceUtterance.cancelledMessage);
+      setState(() {
+        _isLoading = false;
+        _loadingStatus = '';
+      });
+      _syncCoreAnimation();
+    }
+  }
+
+  Future<void> _composerAction() async {
+    final text = _messageController.text.trim();
+    if (_isLoading) {
+      if (text.isEmpty || VoiceUtterance.isCancelCommand(text)) {
+        _messageController.clear();
+      }
+      await _cancelInFlight();
       return;
     }
-
-    final recognized = result.text.trim();
-    if (recognized.isEmpty) {
-      _showMessage('Не чух думи. Натисни микрофона и говори след сигнала.');
+    if (VoiceUtterance.isCancelCommand(text)) {
+      _messageController.clear();
+      _showMessage('Няма отговор, който да се спре.');
       return;
     }
-
-    setState(() {
-      _messageController.text = recognized;
-      _messageController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _messageController.text.length),
-      );
-    });
     await _sendMessage();
   }
 
@@ -538,9 +606,18 @@ class _ChatPageState extends State<ChatPage>
     _showMessage('Groq ключът е премахнат.');
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendMessage({bool fromVoice = false}) async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading) return;
+    if (VoiceUtterance.isCancelCommand(text)) {
+      _messageController.clear();
+      _showMessage('Няма отговор, който да се спре.');
+      return;
+    }
+    if (fromVoice && VoiceUtterance.isFragment(text)) {
+      _showMessage(VoiceUtterance.fragmentRepeatMessage);
+      return;
+    }
 
     if (_isListening) {
       await _automation.cancelNativeSpeechRecognition();
@@ -571,6 +648,7 @@ class _ChatPageState extends State<ChatPage>
       createdAt: DateTime.now(),
     );
 
+    final requestSeq = ++_requestSeq;
     setState(() {
       _isListening = false;
       _messages.add(userMessage);
@@ -620,7 +698,7 @@ class _ChatPageState extends State<ChatPage>
           history: _messages,
         );
       }
-      if (!mounted) return;
+      if (!mounted || requestSeq != _requestSeq) return;
 
       final aiMessage = ChatMessage(
         text: reply,
@@ -647,9 +725,15 @@ class _ChatPageState extends State<ChatPage>
       if (wantsStudioTransfer) {
         await _sendTextToStudio(reply);
       }
-      await _speak(reply);
+      // Voice replies being muted must not block or skip the text reply.
+      if (requestSeq == _requestSeq) {
+        await _speak(reply);
+      }
     } on GeminiException catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestSeq != _requestSeq) return;
+      if (error.cancelled) {
+        return;
+      }
       AppErrorLog.instance.record(
         source: 'Gemini',
         message: error.message,
@@ -659,9 +743,13 @@ class _ChatPageState extends State<ChatPage>
         await _saveOfflineDraft(text);
         return;
       }
+      if (error.message == GeminiException.timeoutMessage ||
+          error.message == VoiceUtterance.timeoutMessage) {
+        _restorePromptForRetry(text);
+      }
       await _addLocalNotice(error.message);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestSeq != _requestSeq) return;
       AppErrorLog.instance.record(source: 'Chat', message: error.toString());
       if (LyricCraft.isLyricRequest(text) && isOfflineError(error)) {
         await _saveOfflineDraft(text);
@@ -669,7 +757,7 @@ class _ChatPageState extends State<ChatPage>
       }
       await _addLocalNotice('Неочаквана грешка при връзката с AI.');
     } finally {
-      if (mounted) {
+      if (mounted && requestSeq == _requestSeq) {
         setState(() {
           _isLoading = false;
           _loadingStatus = '';
@@ -679,6 +767,16 @@ class _ChatPageState extends State<ChatPage>
       }
       unawaited(widget.heyIron?.recoverFromTransientError());
     }
+  }
+
+  void _restorePromptForRetry(String text) {
+    if (!mounted) return;
+    final current = _messageController.text.trim();
+    if (current.isNotEmpty) return;
+    _messageController.text = text;
+    _messageController.selection = TextSelection.fromPosition(
+      TextPosition(offset: text.length),
+    );
   }
 
   Future<void> _addLocalNotice(String text) async {
@@ -1228,15 +1326,13 @@ class _ChatPageState extends State<ChatPage>
                                 : 'Пиши на Iron…',
                             hintStyle: const TextStyle(color: Colors.white38),
                           ),
-                          onSubmitted: (_) {
-                            if (!_isLoading) _sendMessage();
-                          },
+                          onSubmitted: (_) => _composerAction(),
                         ),
                       ),
                     ),
                     IconButton(
                       tooltip: 'Микрофон',
-                      onPressed: _isLoading ? null : _toggleListening,
+                      onPressed: _toggleListening,
                       icon: Icon(
                         _isListening
                             ? Icons.stop_circle_rounded
@@ -1245,9 +1341,13 @@ class _ChatPageState extends State<ChatPage>
                       ),
                     ),
                     IconButton.filled(
-                      tooltip: 'Изпрати',
-                      onPressed: _isLoading ? null : _sendMessage,
-                      icon: const Icon(Icons.arrow_upward_rounded),
+                      tooltip: _isLoading ? 'Стоп' : 'Изпрати',
+                      onPressed: _composerAction,
+                      icon: Icon(
+                        _isLoading
+                            ? Icons.stop_rounded
+                            : Icons.arrow_upward_rounded,
+                      ),
                     ),
                   ],
                 ),

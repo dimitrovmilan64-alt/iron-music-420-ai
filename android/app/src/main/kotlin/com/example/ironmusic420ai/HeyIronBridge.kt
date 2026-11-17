@@ -289,6 +289,14 @@ class HeyIronBridge(
         activity.runOnUiThread { sink.success(payload) }
     }
 
+    fun releaseMicrophone() {
+        engine.stop()
+        stopBackgroundService()
+    }
+
+    fun isMicrophoneInUse(): Boolean =
+        engine.isRunning() || engine.isRecording || HeyIronForegroundService.isActive
+
     private fun startBackgroundService() {
         val intent = Intent(activity, HeyIronForegroundService::class.java)
         ContextCompat.startForegroundService(activity, intent)

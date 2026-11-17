@@ -19,6 +19,10 @@ class HeyIronForegroundService : Service(), HeyIronEngine.Listener {
     companion object {
         private const val CHANNEL_ID = "hey_iron_v2_bg"
         private const val NOTIFICATION_ID = 2421
+
+        @Volatile
+        var isActive: Boolean = false
+            private set
     }
 
     private var engine: HeyIronEngine? = null
@@ -26,6 +30,7 @@ class HeyIronForegroundService : Service(), HeyIronEngine.Listener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isActive = true
         startAsForeground()
         if (engine == null) {
             engine = HeyIronEngine(this, this)
@@ -40,6 +45,7 @@ class HeyIronForegroundService : Service(), HeyIronEngine.Listener {
     }
 
     override fun onDestroy() {
+        isActive = false
         engine?.stop()
         engine = null
         super.onDestroy()

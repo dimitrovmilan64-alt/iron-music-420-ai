@@ -356,7 +356,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                             ),
                             subtitle: const Text(
-                              'Експериментално. Може да натовари слаби телефони. Изключено е по подразбиране.',
+                              'Експериментално и често блокира микрофона на Android 16. Изключено е по подразбиране. „Хей Айрън“ работи, докато приложението е отворено.',
                               style: TextStyle(
                                   color: Colors.white60, height: 1.35),
                             ),

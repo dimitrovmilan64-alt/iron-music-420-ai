@@ -10,8 +10,28 @@ import 'lyric_craft.dart';
 class GeminiException implements Exception {
   final String message;
   final int? statusCode;
+  final bool cancelled;
 
-  const GeminiException(this.message, {this.statusCode});
+  const GeminiException(
+    this.message, {
+    this.statusCode,
+    this.cancelled = false,
+  });
+
+  static const timeoutMessage =
+      'Няма отговор до 25 секунди. Провери връзката и опитай отново.';
+
+  static const cancelledMessage = 'Отговорът е спрян.';
+
+  const GeminiException.timeout()
+      : message = timeoutMessage,
+        statusCode = null,
+        cancelled = false;
+
+  const GeminiException.cancelled()
+      : message = cancelledMessage,
+        statusCode = null,
+        cancelled = true;
 
   @override
   String toString() => message;
@@ -104,6 +124,7 @@ class GeminiService {
 
   static const Duration lyricCallTimeout = Duration(seconds: 18);
   static const Duration chatCallTimeout = Duration(seconds: 20);
+  static const Duration chatOverallTimeout = Duration(seconds: 25);
 
   final Set<String> _unavailableModels = <String>{};
   LyricGenerationStats? lastLyricStats;
@@ -112,6 +133,9 @@ class GeminiService {
   String? _activeModel;
   String? _activeGeminiModel;
   String? _modelForKeyFingerprint;
+  int _generation = 0;
+  int? _activeGeneration;
+  Completer<void>? _cancelGate;
 
   GeminiService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -125,6 +149,56 @@ class GeminiService {
     _activeModel = null;
     _activeGeminiModel = null;
     _modelForKeyFingerprint = null;
+  }
+
+  bool get hasActiveGeneration => _activeGeneration != null;
+
+  int _beginGeneration() {
+    final id = ++_generation;
+    _activeGeneration = id;
+    _cancelGate = Completer<void>();
+    return id;
+  }
+
+  void cancelActive() {
+    _activeGeneration = null;
+    final gate = _cancelGate;
+    if (gate != null && !gate.isCompleted) {
+      gate.complete();
+    }
+  }
+
+  void _finishGeneration(int id) {
+    if (_activeGeneration == id) {
+      _activeGeneration = null;
+    }
+  }
+
+  void _throwIfCancelled([int? id]) {
+    // Lyric and other calls may run without a cancellable session.
+    if (_activeGeneration == null && id == null) return;
+    if (_activeGeneration == null || (id != null && _activeGeneration != id)) {
+      throw const GeminiException.cancelled();
+    }
+  }
+
+  Future<T> _cancellable<T>(int id, Future<T> work) {
+    if (_activeGeneration == null) return work;
+    _throwIfCancelled(id);
+    final gate = _cancelGate;
+    if (gate == null) return work;
+    final done = Completer<T>();
+    work.then((value) {
+      if (!done.isCompleted) done.complete(value);
+    }, onError: (Object error, StackTrace stack) {
+      if (!done.isCompleted) done.completeError(error, stack);
+    });
+    gate.future.then((_) {
+      if (!done.isCompleted) {
+        done.completeError(const GeminiException.cancelled());
+      }
+    });
+    return done.future;
   }
 
   Future<String> generateChat({
@@ -158,17 +232,25 @@ class GeminiService {
         )
         .toList(growable: false);
 
-    return _generateWithFallback(
-      geminiApiKey: apiKey,
-      systemPrompt: systemPrompt,
-      messages: messages,
-      maxOutputTokens: 3600,
-      temperature: 0.82,
-      timeout: chatCallTimeout,
-      skipModelDiscovery: true,
-      thinkingLevel: 'low',
-      preferredModels: _preferredModels,
-    );
+    final id = _beginGeneration();
+    try {
+      return await _generateWithFallback(
+        geminiApiKey: apiKey,
+        systemPrompt: systemPrompt,
+        messages: messages,
+        maxOutputTokens: 3600,
+        temperature: 0.82,
+        timeout: chatCallTimeout,
+        skipModelDiscovery: true,
+        thinkingLevel: 'low',
+        preferredModels: _preferredModels,
+      ).timeout(chatOverallTimeout);
+    } on TimeoutException {
+      cancelActive();
+      throw const GeminiException.timeout();
+    } finally {
+      _finishGeneration(id);
+    }
   }
 
   Future<String> generateRap({
@@ -297,6 +379,7 @@ class GeminiService {
     bool skipModelDiscovery = false,
     String? thinkingLevel,
   }) async {
+    _throwIfCancelled();
     final cleanGeminiKey = geminiApiKey.trim();
     final backup = AiProviderConfig.current;
     GeminiException? geminiError;
@@ -423,39 +506,47 @@ class GeminiService {
       for (var attempt = 0; attempt < 2; attempt++) {
         http.Response response;
 
+        _throwIfCancelled();
         try {
-          response = await _client
-              .post(
-                uri,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-goog-api-key': apiKey,
-                },
-                body: jsonEncode({
-                  'systemInstruction': {
-                    'parts': [
-                      {'text': systemPrompt},
-                    ],
+          response = await _cancellable(
+            _activeGeneration ?? _generation,
+            _client
+                .post(
+                  uri,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey,
                   },
-                  'contents': messages
-                      .map(
-                        (message) => {
-                          'role':
-                              message.role == 'assistant' ? 'model' : 'user',
-                          'parts': [
-                            {'text': message.text},
-                          ],
-                        },
-                      )
-                      .toList(growable: false),
-                  'generationConfig': generationConfig,
-                }),
-              )
-              .timeout(timeout);
+                  body: jsonEncode({
+                    'systemInstruction': {
+                      'parts': [
+                        {'text': systemPrompt},
+                      ],
+                    },
+                    'contents': messages
+                        .map(
+                          (message) => {
+                            'role':
+                                message.role == 'assistant' ? 'model' : 'user',
+                            'parts': [
+                              {'text': message.text},
+                            ],
+                          },
+                        )
+                        .toList(growable: false),
+                    'generationConfig': generationConfig,
+                  }),
+                )
+                .timeout(timeout),
+          );
         } on TimeoutException {
           lastError = const GeminiException(
             'Gemini не отговори навреме. Пробвам друг модел.',
           );
+          break;
+        } on GeminiException catch (error) {
+          if (error.cancelled) rethrow;
+          lastError = error;
           break;
         } catch (_) {
           lastError = const GeminiException(
@@ -642,21 +733,29 @@ class GeminiService {
       var modelMissing = false;
       for (var attempt = 0; attempt < 2; attempt++) {
         http.Response response;
+        _throwIfCancelled();
         try {
-          response = await _client
-              .post(
-                uri,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ${config.backupApiKey.trim()}',
-                },
-                body: jsonEncode(payload),
-              )
-              .timeout(timeout);
+          response = await _cancellable(
+            _activeGeneration ?? _generation,
+            _client
+                .post(
+                  uri,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ${config.backupApiKey.trim()}',
+                  },
+                  body: jsonEncode(payload),
+                )
+                .timeout(timeout),
+          );
         } on TimeoutException {
           lastError = const GeminiException(
             'Резервният AI не отговори навреме. Пробвам друг модел.',
           );
+          break;
+        } on GeminiException catch (error) {
+          if (error.cancelled) rethrow;
+          lastError = error;
           break;
         } catch (_) {
           lastError = const GeminiException(

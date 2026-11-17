@@ -120,4 +120,46 @@ void main() {
     expect(controller.phase, HeyIronPhase.listening);
     expect(controller.statusLabel.toLowerCase(), contains('слуша'));
   });
+
+  test('yielding the mic for speech stops Hey Iron until resume', () async {
+    final controller = HeyIronController();
+    await controller.initialize();
+    await controller.startListening();
+    calls.clear();
+    await controller.yieldMicForSpeech();
+    expect(calls, contains('stop'));
+    expect(controller.phase, HeyIronPhase.ready);
+    await controller.resumeAfterSpeech();
+    expect(calls, contains('start'));
+    expect(controller.phase, HeyIronPhase.listening);
+  });
+
+  test('Android 16 turns experimental background listening off once', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      if (call.method == 'deviceInfo') {
+        return 'realme RMX5051, Android 16 (API 36)';
+      }
+      if (call.method == 'status') {
+        return <String, Object?>{'modelReady': true, 'listening': false};
+      }
+      if (call.method == 'start') {
+        return <String, Object?>{'ok': true, 'error': null};
+      }
+      return true;
+    });
+    SharedPreferences.setMockInitialValues({
+      'hey_iron_v2_enabled': true,
+      'hey_iron_v2_background': true,
+    });
+    final controller = HeyIronController();
+    await controller.initialize();
+    expect(controller.androidSdk, 36);
+    expect(controller.backgroundExperimental, isFalse);
+    expect(
+      controller.message,
+      contains('Фоновото слушане е изключено на Android 16'),
+    );
+  });
 }

@@ -39,4 +39,21 @@ void main() {
     expect(watchdog.isTripped, isFalse);
     expect(watchdog.failureCount, 0);
   });
+
+  test('a stall can auto-restart once, then stays stalled', () {
+    final watchdog = HeyIronWatchdog();
+    final start = DateTime.now();
+    watchdog.markStarted(now: start);
+    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 9));
+    expect(watchdog.canAutoRestartOnStall, isTrue);
+    watchdog.markStallRestart(now: start);
+    expect(watchdog.stallRestartCount, 1);
+    expect(watchdog.canAutoRestartOnStall, isFalse);
+    watchdog.lastHeartbeatAt = start.subtract(const Duration(seconds: 9));
+    expect(watchdog.isStalled, isTrue);
+    expect(watchdog.canAutoRestartOnStall, isFalse);
+    watchdog.markHeartbeat(now: start);
+    expect(watchdog.stallRestartCount, 0);
+    expect(watchdog.isStalled, isFalse);
+  });
 }

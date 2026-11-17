@@ -214,6 +214,10 @@ class MainActivity : FlutterActivity() {
     private fun prepareChatSpeechRecognition() {
         chatSpeechAttemptTracker.resetOperation()
         chatSpeechReleaseChecks = 0
+        // The wake-word engine and the experimental FGS must fully
+        // release the microphone before Android SpeechRecognizer can
+        // hear the start of the next utterance.
+        heyIronBridge?.releaseMicrophone()
         restoreIronVoiceAfterChatSpeech = IronVoiceService.isRunning
         if (restoreIronVoiceAfterChatSpeech) {
             startService(
@@ -223,9 +227,15 @@ class MainActivity : FlutterActivity() {
             )
         }
 
-        val releaseDelay = if (restoreIronVoiceAfterChatSpeech) 100L else 80L
+        val releaseDelay = if (isChatSpeechMicBusy()) 80L else 40L
         mainHandler.removeCallbacks(beginChatSpeechRecognition)
         mainHandler.postDelayed(beginChatSpeechRecognition, releaseDelay)
+    }
+
+    private fun isChatSpeechMicBusy(): Boolean {
+        if (IronVoiceService.isMicrophoneCaptureActive()) return true
+        if (HeyIronForegroundService.isActive) return true
+        return heyIronBridge?.isMicrophoneInUse() == true
     }
 
     private fun launchChatSpeechRecognizerWhenReady() {
@@ -238,7 +248,7 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        if (IronVoiceService.isMicrophoneCaptureActive()) {
+        if (isChatSpeechMicBusy()) {
             if (chatSpeechReleaseChecks < MAX_CHAT_SPEECH_RELEASE_CHECKS) {
                 chatSpeechReleaseChecks++
                 mainHandler.postDelayed(

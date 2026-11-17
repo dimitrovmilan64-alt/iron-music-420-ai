@@ -10,6 +10,7 @@ class HeyIronWatchdog {
   bool uncleanShutdown;
   DateTime? lastHeartbeatAt;
   bool sessionOpen;
+  int stallRestartCount;
 
   HeyIronWatchdog({
     this.failureCount = 0,
@@ -17,7 +18,10 @@ class HeyIronWatchdog {
     this.uncleanShutdown = false,
     this.lastHeartbeatAt,
     this.sessionOpen = false,
+    this.stallRestartCount = 0,
   });
+
+  bool get canAutoRestartOnStall => isStalled && stallRestartCount == 0;
 
   bool get isTripped {
     if (failureCount < maxFailures) return false;
@@ -42,11 +46,19 @@ class HeyIronWatchdog {
 
   void markHeartbeat({DateTime? now}) {
     lastHeartbeatAt = now ?? DateTime.now();
+    stallRestartCount = 0;
+  }
+
+  void markStallRestart({DateTime? now}) {
+    stallRestartCount += 1;
+    lastHeartbeatAt = now ?? DateTime.now();
+    sessionOpen = true;
   }
 
   void markCleanStop() {
     uncleanShutdown = false;
     sessionOpen = false;
+    stallRestartCount = 0;
   }
 
   void recordFailure({DateTime? now}) {
@@ -74,6 +86,7 @@ class HeyIronWatchdog {
     uncleanShutdown = false;
     lastHeartbeatAt = null;
     sessionOpen = false;
+    stallRestartCount = 0;
   }
 
   Map<String, Object?> toMap() => {
