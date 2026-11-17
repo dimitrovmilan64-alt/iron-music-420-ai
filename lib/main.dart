@@ -264,30 +264,30 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         child: Padding(
           padding: EdgeInsets.only(bottom: view.bottom),
           child: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome_rounded),
-            label: 'Хей Айрън',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.mic_external_on_outlined),
-            selectedIcon: Icon(Icons.mic_external_on),
-            label: 'Студио',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.library_music_outlined),
-            selectedIcon: Icon(Icons.library_music),
-            label: 'Песни',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.tune_outlined),
-            selectedIcon: Icon(Icons.tune_rounded),
-            label: 'Настройки',
-          ),
-        ],
+            selectedIndex: _currentIndex,
+            onDestinationSelected: _selectTab,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.auto_awesome_outlined),
+                selectedIcon: Icon(Icons.auto_awesome_rounded),
+                label: 'Хей Айрън',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.mic_external_on_outlined),
+                selectedIcon: Icon(Icons.mic_external_on),
+                label: 'Студио',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.library_music_outlined),
+                selectedIcon: Icon(Icons.library_music),
+                label: 'Песни',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.tune_outlined),
+                selectedIcon: Icon(Icons.tune_rounded),
+                label: 'Настройки',
+              ),
+            ],
           ),
         ),
       ),

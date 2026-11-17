@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ironmusic420ai/services/hey_iron_controller.dart';
 
 void main() {
-  test('Hey Iron v2 stays out of the APK bundle and uses a safe engine', () {
+  test('Hey Iron v2 bundles a small keyword model and uses a safe engine', () {
     final engine = File(
       'android/app/src/main/kotlin/com/example/ironmusic420ai/HeyIronEngine.kt',
     ).readAsStringSync();
@@ -37,14 +37,18 @@ void main() {
     expect(manifest, contains('android:stopWithTask="true"'));
     expect(manifest, contains('EnableImpeller'));
     expect(manifest, contains('android:value="false"'));
-    expect(script, contains('skipping keyword model download'));
-    expect(script, contains('Never bundle them in the APK'));
+    expect(script, contains('small Hey Iron keyword model'));
+    expect(script, contains('assets/hey_iron'));
+    expect(script, contains('check_hey_iron_native.py'));
+    expect(engine, contains('installBundledModel'));
+    expect(bridge, contains('prepareModel'));
     expect(gradle, contains('keepSherpaNative'));
     expect(controller, contains('backgroundExperimental'));
-    expect(controller, contains('downloadModel'));
+    expect(controller, contains('prepareModel'));
     expect(watchdog, contains('maxFailures = 3'));
-    expect(File('assets/hey_iron/keywords.txt').readAsStringSync(),
-        contains('HEY_IRON_BG'));
+    final keywords = File('assets/hey_iron/keywords.txt').readAsStringSync();
+    expect(keywords, contains('HEY_IRON'));
+    expect(keywords, contains('HEY_IRON_BG'));
     expect(bridge, contains('fun resolvedArchiveFile'));
     expect(bridge, contains('canonicalFile'));
     expect(bridge, contains('parts.any { it == ".." }'));
@@ -60,5 +64,18 @@ void main() {
     expect(controller.statusLabel, isNot('Грешка'));
     expect(controller.statusLabel, startsWith('Хей Айрън:'));
     expect(controller.statusLabel, contains('Слушането спря'));
+  });
+
+  test('bundled keyword files and 16KB checker are present', () {
+    expect(File('scripts/check_hey_iron_native.py').existsSync(), isTrue);
+    expect(File('assets/hey_iron/keywords.txt').existsSync(), isTrue);
+    final checker = File('scripts/check_hey_iron_native.py').readAsStringSync();
+    expect(checker, contains('0x4000'));
+    expect(checker, contains('keywords.txt'));
+    final androidKeywords =
+        File('android/app/src/main/assets/hey_iron/keywords.txt');
+    if (androidKeywords.existsSync()) {
+      expect(androidKeywords.readAsStringSync(), contains('HEY_IRON_BG'));
+    }
   });
 }

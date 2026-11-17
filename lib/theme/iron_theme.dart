@@ -179,7 +179,8 @@ ThemeData ironTheme() {
       filled: true,
       fillColor: ironSurface,
       hintStyle: const TextStyle(color: Colors.white38),
-      labelStyle: const TextStyle(color: ironMuted, fontWeight: FontWeight.w600),
+      labelStyle:
+          const TextStyle(color: ironMuted, fontWeight: FontWeight.w600),
       floatingLabelStyle: const TextStyle(
         color: ironGreenSoft,
         fontWeight: FontWeight.w700,
@@ -231,7 +232,9 @@ ThemeData ironTheme() {
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected) ? ironGreen : Colors.white70;
+        return states.contains(WidgetState.selected)
+            ? ironGreen
+            : Colors.white70;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         return states.contains(WidgetState.selected)

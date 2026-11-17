@@ -191,6 +191,23 @@ class HeyIronController extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic> _asResult(dynamic value) {
+    if (value is Map) {
+      return {
+        for (final entry in value.entries) entry.key.toString(): entry.value,
+      };
+    }
+    if (value == true) return const {'ok': true};
+    return const {'ok': false};
+  }
+
+  bool get isModelLoadError {
+    final lower = message.toLowerCase();
+    return lower.contains('модел') ||
+        lower.contains('файл') ||
+        lower.contains('вграден');
+  }
+
   Future<bool> _ensureModel({bool autoStart = true}) async {
     try {
       final info = await _channel.invokeMethod<Map<Object?, Object?>>('status');
@@ -202,22 +219,25 @@ class HeyIronController extends ChangeNotifier {
 
     phase = HeyIronPhase.downloading;
     downloadProgress = 0;
-    message =
-        'Изтегляне на офлайн модела (${formatSize(modelBytes)}). Нужен е интернет само сега.';
+    message = 'Подготвям офлайн модела за „Хей Айрън“…';
     notifyListeners();
     try {
-      final ok = await _channel.invokeMethod<bool>('downloadModel');
-      modelReady = ok == true;
+      final result = _asResult(await _channel.invokeMethod('prepareModel'));
+      modelReady = result['ok'] == true;
       if (!modelReady) {
-        await _fail('Изтеглянето на модела не успя.');
+        await _fail(
+          result['error']?.toString() ?? 'Моделът не можа да се подготви.',
+        );
         return false;
       }
       phase = HeyIronPhase.ready;
-      message = 'Моделът е готов.';
+      message = result['source'] == 'download'
+          ? 'Моделът е изтеглен и е готов.'
+          : 'Моделът е готов.';
       notifyListeners();
       return true;
     } on PlatformException catch (error) {
-      await _fail(error.message ?? 'Изтеглянето на модела не успя.');
+      await _fail(error.message ?? 'Моделът не можа да се подготви.');
       return false;
     }
   }
@@ -231,9 +251,17 @@ class HeyIronController extends ChangeNotifier {
     try {
       watchdog.markStarted();
       await _persistWatchdog();
-      await _channel.invokeMethod('start', {
-        'background': backgroundExperimental,
-      });
+      final result = _asResult(
+        await _channel.invokeMethod('start', {
+          'background': backgroundExperimental,
+        }),
+      );
+      if (result['ok'] != true) {
+        await _fail(
+          result['error']?.toString() ?? 'Слушането не можа да стартира.',
+        );
+        return;
+      }
       phase = HeyIronPhase.listening;
       message = backgroundExperimental
           ? 'Слуша за „Хей Айрън“. Фоновият режим е експериментален и може да натовари слаби телефони.'
@@ -354,12 +382,30 @@ class HeyIronController extends ChangeNotifier {
     if (_recovering) return;
     if (!enabled || watchdog.isTripped) return;
     if (phase != HeyIronPhase.error) return;
+    if (isModelLoadError) return;
     _recovering = true;
     try {
       await startListening();
     } finally {
       _recovering = false;
     }
+  }
+
+  /// User-initiated retry: reinstall the bundled model and start listening.
+  Future<void> retrySetup() async {
+    if (watchdog.isTripped) {
+      await resetWatchdog();
+    }
+    enabled = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefEnabled, true);
+    modelReady = false;
+    phase = HeyIronPhase.off;
+    message = 'Подготвям модела отново…';
+    notifyListeners();
+    final ready = await _ensureModel();
+    if (!ready) return;
+    await startListening();
   }
 
   @override

@@ -74,7 +74,8 @@ void main() {
     expect(activity, contains('RecognitionAttemptTracker()'));
     expect(activity, contains('isCurrentChatSpeechAttempt'));
     expect(activity, contains('chatSpeechRecognizer === recognizer'));
-    expect(activity, contains('chatSpeechAttemptTracker.isCurrent(generation)'));
+    expect(
+        activity, contains('chatSpeechAttemptTracker.isCurrent(generation)'));
   });
 
   test('pending speech can stop and activity always releases recognizer', () {

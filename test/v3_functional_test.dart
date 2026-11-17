@@ -88,7 +88,8 @@ Finder _pageScroll() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('onboarding completes and reaches the main shell', (tester) async {
+  testWidgets('onboarding completes and reaches the main shell',
+      (tester) async {
     final store = await _store(onboardingComplete: false);
     await tester.pumpWidget(IronMusic420App(store: store));
     await tester.pump(const Duration(milliseconds: 400));
@@ -127,7 +128,8 @@ void main() {
     expect(find.text('Ето припев за града.'), findsOneWidget);
   });
 
-  testWidgets('studio generation fills style and exclude fields', (tester) async {
+  testWidgets('studio generation fills style and exclude fields',
+      (tester) async {
     final store = await _store();
     _phoneSurface(tester);
     await store.setApiKey('AIza-test');
@@ -138,7 +140,8 @@ void main() {
     await tester.pumpWidget(_app(RapStudioPage(store: store, gemini: service)));
     await tester.pump(const Duration(milliseconds: 400));
 
-    await tester.enterText(find.widgetWithText(TextField, 'Пиши тук…'), 'улица и нощ');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Пиши тук…'), 'улица и нощ');
     await tester.pump();
 
     await tester.scrollUntilVisible(
@@ -187,7 +190,9 @@ void main() {
       (tester) async {
     final store = await _store();
     _phoneSurface(tester);
-    await store.saveRapState(draft: '[Chorus]\nПрипев за запис', result: '[Chorus]\nПрипев за запис');
+    await store.saveRapState(
+        draft: '[Chorus]\nПрипев за запис',
+        result: '[Chorus]\nПрипев за запис');
     await tester.pumpWidget(_app(RapStudioPage(store: store)));
     await tester.pump(const Duration(milliseconds: 400));
 
@@ -225,7 +230,8 @@ void main() {
       (tester) async {
     final store = await _store();
     _phoneSurface(tester);
-    await tester.pumpWidget(_app(SettingsPage(store: store, heyIron: HeyIronController())));
+    await tester.pumpWidget(
+        _app(SettingsPage(store: store, heyIron: HeyIronController())));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Запази AI доставчиците'), findsOneWidget);

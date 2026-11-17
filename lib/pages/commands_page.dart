@@ -141,153 +141,153 @@ class _CommandsToolsBodyState extends State<CommandsToolsBody>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          IronCard(
-            bright: _youtubeAutoPlayEnabled,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(
+        IronCard(
+          bright: _youtubeAutoPlayEnabled,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _youtubeAutoPlayEnabled
+                        ? Icons.play_circle_fill_rounded
+                        : Icons.play_circle_outline_rounded,
+                    color: _youtubeAutoPlayEnabled
+                        ? ironGreen
+                        : Colors.orangeAccent,
+                    size: 30,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
                       _youtubeAutoPlayEnabled
-                          ? Icons.play_circle_fill_rounded
-                          : Icons.play_circle_outline_rounded,
-                      color: _youtubeAutoPlayEnabled
-                          ? ironGreen
-                          : Colors.orangeAccent,
-                      size: 30,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _youtubeAutoPlayEnabled
-                            ? 'Автоматичното пускане е включено'
-                            : 'Автоматично пускане в YouTube',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                        ),
+                          ? 'Автоматичното пускане е включено'
+                          : 'Автоматично пускане в YouTube',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'След твоя гласова команда Iron вижда само резултатите в YouTube за до 15 секунди и натиска първия подходящ клип. Не чете други приложения и не запазва съдържанието на екрана.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    height: 1.4,
                   ),
-                ),
-                const SizedBox(height: 14),
-                IronButton(
-                  text: _youtubeAutoPlayEnabled
-                      ? 'ОТВОРИ НАСТРОЙКАТА'
-                      : 'ВКЛЮЧИ В ДОСТЪПНОСТ',
-                  icon: Icons.accessibility_new_rounded,
-                  secondary: _youtubeAutoPlayEnabled,
-                  onPressed: _busy ? null : _openYoutubeAutoPlaySettings,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Бързи действия',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _primaryActions.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.55,
-            ),
-            itemBuilder: (context, index) {
-              final item = _primaryActions[index];
-              final icon = item.action == 'flash_toggle' && _flashlightOn
-                  ? Icons.flashlight_off_outlined
-                  : item.icon;
-              return _ToolTile(
-                icon: icon,
-                title: item.title,
-                onTap: _busy ? null : () => _run(item.action),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          IronCard(
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              title: const Text(
-                'Още действия',
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'След твоя гласова команда Iron вижда само резултатите в YouTube за до 15 секунди и натиска първия подходящ клип. Не чете други приложения и не запазва съдържанието на екрана.',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+                  color: Colors.white70,
+                  height: 1.4,
                 ),
               ),
-              iconColor: ironGreen,
-              collapsedIconColor: ironGreen,
-              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              children: [
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _moreActions.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: 1.75,
-                  ),
-                  itemBuilder: (context, index) {
-                    final item = _moreActions[index];
-                    return _ToolTile(
-                      icon: item.icon,
-                      title: item.title,
-                      compact: true,
-                      onTap: _busy ? null : () => _run(item.action),
-                    );
-                  },
-                ),
-              ],
-            ),
+              const SizedBox(height: 14),
+              IronButton(
+                text: _youtubeAutoPlayEnabled
+                    ? 'ОТВОРИ НАСТРОЙКАТА'
+                    : 'ВКЛЮЧИ В ДОСТЪПНОСТ',
+                icon: Icons.accessibility_new_rounded,
+                secondary: _youtubeAutoPlayEnabled,
+                onPressed: _busy ? null : _openYoutubeAutoPlaySettings,
+              ),
+            ],
           ),
-          IronCard(
-            child: Row(
-              children: [
-                Icon(
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Бързи действия',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _primaryActions.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.55,
+          ),
+          itemBuilder: (context, index) {
+            final item = _primaryActions[index];
+            final icon = item.action == 'flash_toggle' && _flashlightOn
+                ? Icons.flashlight_off_outlined
+                : item.icon;
+            return _ToolTile(
+              icon: icon,
+              title: item.title,
+              onTap: _busy ? null : () => _run(item.action),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        IronCard(
+          padding: EdgeInsets.zero,
+          child: ExpansionTile(
+            title: const Text(
+              'Още действия',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            iconColor: ironGreen,
+            collapsedIconColor: ironGreen,
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            children: [
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _moreActions.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.75,
+                ),
+                itemBuilder: (context, index) {
+                  final item = _moreActions[index];
+                  return _ToolTile(
+                    icon: item.icon,
+                    title: item.title,
+                    compact: true,
+                    onTap: _busy ? null : () => _run(item.action),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        IronCard(
+          child: Row(
+            children: [
+              Icon(
+                widget.store.hasAnyAiProvider
+                    ? Icons.auto_awesome_rounded
+                    : Icons.key_off_outlined,
+                color: widget.store.hasAnyAiProvider
+                    ? ironGreen
+                    : Colors.orangeAccent,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
                   widget.store.hasAnyAiProvider
-                      ? Icons.auto_awesome_rounded
-                      : Icons.key_off_outlined,
-                  color: widget.store.hasAnyAiProvider
-                      ? ironGreen
-                      : Colors.orangeAccent,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    widget.store.hasAnyAiProvider
-                        ? 'Хей Айрън е готов. За разговор и сложни заявки говори или пиши в чата.'
-                        : 'Запази Gemini API ключ в Хей Айрън, за да работят свободните заявки.',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      height: 1.35,
-                    ),
+                      ? 'Хей Айрън е готов. За разговор и сложни заявки говори или пиши в чата.'
+                      : 'Запази Gemini API ключ в Хей Айрън, за да работят свободните заявки.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    height: 1.35,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
       ],
     );
   }

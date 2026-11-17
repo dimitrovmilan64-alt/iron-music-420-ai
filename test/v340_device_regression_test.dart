@@ -50,7 +50,7 @@ void main() {
     expect(service, contains('wake_health frames='));
     expect(service, isNot(contains('queueRecognizedPhrase')));
     expect(service, isNot(contains('Iron опитва микрофона отново')));
-    expect(keywordScript, contains('6.5, 0.03'));
+    expect(keywordScript, contains('2.0, 0.18'));
     expect(keywordScript, isNot(contains('("IRON_')));
     expect(keywordScript, isNot(contains('LEX_NO_H')));
   });
@@ -64,7 +64,8 @@ void main() {
     ).readAsStringSync();
 
     expect(parser, contains('action = "youtube_search"'));
-    expect(service, contains('MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH'));
+    expect(
+        service, contains('MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH'));
     expect(service, contains('MediaStore.EXTRA_MEDIA_FOCUS'));
     expect(service, contains('MediaStore.EXTRA_MEDIA_TITLE'));
     expect(service, contains('SearchManager.QUERY'));
@@ -89,7 +90,8 @@ void main() {
       manifest,
       contains('android.permission.BIND_ACCESSIBILITY_SERVICE'),
     );
-    expect(config, contains('android:packageNames="com.google.android.youtube"'));
+    expect(
+        config, contains('android:packageNames="com.google.android.youtube"'));
     expect(config, contains('android:canRetrieveWindowContent="true"'));
     expect(config, isNot(contains('canPerformGestures')));
     expect(autoPlay, contains('REQUEST_LIFETIME_MS = 15_000L'));

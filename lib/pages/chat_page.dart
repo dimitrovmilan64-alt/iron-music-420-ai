@@ -1107,7 +1107,7 @@ class _ChatPageState extends State<ChatPage>
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
-                  return const _ThinkingIndicator();
+                  return _ThinkingIndicator(status: _loadingStatus);
                 }
                 final message = _messages[index];
                 return _ChatBubble(
@@ -1211,7 +1211,9 @@ class _ChatPageState extends State<ChatPage>
 }
 
 class _ThinkingIndicator extends StatefulWidget {
-  const _ThinkingIndicator();
+  final String status;
+
+  const _ThinkingIndicator({this.status = ''});
 
   @override
   State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
@@ -1271,9 +1273,9 @@ class _ThinkingIndicatorState extends State<_ThinkingIndicator>
               },
             ),
             const SizedBox(width: 10),
-            const Text(
-              'Iron мисли…',
-              style: TextStyle(
+            Text(
+              widget.status.isEmpty ? 'Iron мисли…' : widget.status,
+              style: const TextStyle(
                 color: ironGreen,
                 fontWeight: FontWeight.w600,
               ),

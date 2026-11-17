@@ -24,9 +24,8 @@ class AiProviderConfig {
     _current = AiProviderConfig(
       backupApiKey: backupApiKey.trim(),
       backupBaseUrl: normalizeBaseUrl(backupBaseUrl),
-      backupModel: backupModel.trim().isEmpty
-          ? defaultBackupModel
-          : backupModel.trim(),
+      backupModel:
+          backupModel.trim().isEmpty ? defaultBackupModel : backupModel.trim(),
     );
   }
 

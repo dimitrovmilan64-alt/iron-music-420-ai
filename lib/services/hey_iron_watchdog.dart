@@ -51,8 +51,7 @@ class HeyIronWatchdog {
 
   void recordFailure({DateTime? now}) {
     final t = now ?? DateTime.now();
-    if (lastFailureAt != null &&
-        t.difference(lastFailureAt!) > failureWindow) {
+    if (lastFailureAt != null && t.difference(lastFailureAt!) > failureWindow) {
       failureCount = 0;
     }
     failureCount += 1;
@@ -87,9 +86,8 @@ class HeyIronWatchdog {
     final last = map['lastFailureAt'];
     return HeyIronWatchdog(
       failureCount: (map['failureCount'] as int?) ?? 0,
-      lastFailureAt: last is int
-          ? DateTime.fromMillisecondsSinceEpoch(last)
-          : null,
+      lastFailureAt:
+          last is int ? DateTime.fromMillisecondsSinceEpoch(last) : null,
       uncleanShutdown: (map['uncleanShutdown'] as bool?) ?? false,
     );
   }

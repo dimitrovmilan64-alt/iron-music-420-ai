@@ -357,7 +357,8 @@ class _SongsPageState extends State<SongsPage> {
                 decoration: InputDecoration(
                   hintText: 'Търси песен',
                   prefixIcon: const Icon(Icons.search, color: ironGreen),
-                  suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                  suffixIconConstraints:
+                      const BoxConstraints(minWidth: 0, minHeight: 0),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -375,7 +376,8 @@ class _SongsPageState extends State<SongsPage> {
                         onPressed: _openStyleFilter,
                         icon: Icon(
                           Icons.tune,
-                          color: _styleFilter.isEmpty ? Colors.white38 : ironGreen,
+                          color:
+                              _styleFilter.isEmpty ? Colors.white38 : ironGreen,
                         ),
                       ),
                     ],
@@ -544,7 +546,8 @@ class _SongProjectCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.22),
                 borderRadius: BorderRadius.circular(13),
-                border: const Border.fromBorderSide(BorderSide(color: ironOutline, width: 1)),
+                border: const Border.fromBorderSide(
+                    BorderSide(color: ironOutline, width: 1)),
               ),
               child: Text(
                 preview,

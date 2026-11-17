@@ -36,27 +36,68 @@ class HeyIronEngine(
 
     companion object {
         const val MODEL_DIR_NAME = "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
+        const val ASSET_MODEL_DIR = "hey_iron"
         const val MODEL_URL =
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2"
         const val EXPECTED_ARCHIVE_BYTES = 32_885_699L
-        private const val SAMPLE_RATE = 16_000
+        const val SAMPLE_RATE = 16_000
         private const val FRAME_SAMPLES = 1_600
         private const val MIN_RMS = 0.006f
         private const val LOG_TAG = "HeyIronV2"
+
+        val REQUIRED_FILES = listOf(
+            "encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx",
+            "decoder-epoch-13-avg-2-chunk-16-left-64.onnx",
+            "joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx",
+            "tokens.txt",
+            "keywords.txt",
+        )
 
         fun modelDir(context: Context): File =
             File(File(context.filesDir, "hey_iron"), MODEL_DIR_NAME)
 
         fun isModelReady(context: Context): Boolean {
             val dir = modelDir(context)
-            val required = listOf(
-                "encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx",
-                "decoder-epoch-13-avg-2-chunk-16-left-64.onnx",
-                "joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx",
-                "tokens.txt",
-                "keywords.txt",
-            )
-            return required.all { File(dir, it).isFile && File(dir, it).length() > 0L }
+            return REQUIRED_FILES.all { File(dir, it).isFile && File(dir, it).length() > 0L }
+        }
+
+        /**
+         * Copies the small bundled keyword model from APK assets into the app
+         * files directory. Returns null on success, or a Bulgarian error.
+         */
+        fun installBundledModel(context: Context, overwriteKeywords: Boolean = true): String? {
+            val dest = modelDir(context)
+            try {
+                dest.mkdirs()
+            } catch (error: Exception) {
+                return "Не можах да създам папката за модела: ${error.message}"
+            }
+            for (name in REQUIRED_FILES) {
+                val out = File(dest, name)
+                val already = out.isFile && out.length() > 0L
+                if (already && (name != "keywords.txt" || !overwriteKeywords)) {
+                    continue
+                }
+                try {
+                    context.assets.open("$ASSET_MODEL_DIR/$name").use { input ->
+                        out.outputStream().use { input.copyTo(it) }
+                    }
+                } catch (error: Exception) {
+                    return "Вграденият файл „$name“ липсва или не можа да се копира: ${error.message}"
+                }
+                if (!out.isFile || out.length() == 0L) {
+                    return "Файлът „$name“ е празен след копирането от приложението."
+                }
+            }
+            return if (isModelReady(context)) {
+                null
+            } else {
+                val missing = REQUIRED_FILES.filter {
+                    val file = File(dest, it)
+                    !file.isFile || file.length() <= 0L
+                }
+                "Моделът е непълен. Липсват: ${missing.joinToString()}"
+            }
         }
     }
 
@@ -70,6 +111,10 @@ class HeyIronEngine(
     @Volatile
     private var running = false
 
+    @Volatile
+    var lastError: String? = null
+        private set
+
     private var spotter: KeywordSpotter? = null
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
@@ -79,15 +124,31 @@ class HeyIronEngine(
     @Synchronized
     fun start(): Boolean {
         if (running) return true
+        lastError = null
         if (!isModelReady(context)) {
-            listener.onError("Офлайн моделът за „Хей Айрън“ липсва.")
+            val installError = installBundledModel(context)
+            if (installError != null) {
+                lastError = installError
+                listener.onError(installError)
+                return false
+            }
+        }
+        if (!isModelReady(context)) {
+            val message = "Офлайн моделът за „Хей Айрън“ липсва. Натисни „Опитай отново“."
+            lastError = message
+            listener.onError(message)
             return false
         }
         val engine = try {
             KeywordSpotter(config = createConfig())
         } catch (error: Throwable) {
             Log.e(LOG_TAG, "engine_failed", error)
-            listener.onError("Моделът не можа да се зареди на този телефон.")
+            val detail = listOfNotNull(error::class.java.simpleName, error.message)
+                .joinToString(": ")
+                .ifBlank { "неизвестна грешка" }
+            val message = "Моделът не можа да се зареди на този телефон. $detail"
+            lastError = message
+            listener.onError(message)
             return false
         }
         spotter = engine

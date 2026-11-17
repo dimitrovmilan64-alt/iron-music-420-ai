@@ -97,27 +97,30 @@ class HeyIronBridge(
                     "modelReady" to HeyIronEngine.isModelReady(activity),
                     "listening" to engine.isRunning(),
                     "archiveBytes" to HeyIronEngine.EXPECTED_ARCHIVE_BYTES,
+                    "lastError" to engine.lastError,
                 ),
             )
-            "downloadModel" -> {
-                if (HeyIronEngine.isModelReady(activity)) {
-                    result.success(true)
-                    return
-                }
+            "downloadModel", "prepareModel" -> {
                 Thread({
-                    val ok = try {
-                        downloadAndExtract()
-                    } catch (error: Exception) {
-                        Log.e(LOG_TAG, "download_failed", error)
-                        emit("error", mapOf("message" to (error.message ?: "Изтеглянето не успя.")))
-                        false
-                    }
-                    activity.runOnUiThread { result.success(ok) }
-                }, "HeyIronDownload").start()
+                    val payload = prepareModelOnWorker()
+                    activity.runOnUiThread { result.success(payload) }
+                }, "HeyIronPrepare").start()
             }
             "start" -> {
-                val started = engine.start()
-                result.success(started)
+                Thread({
+                    val started = try {
+                        engine.start()
+                    } catch (error: Exception) {
+                        Log.e(LOG_TAG, "start_failed", error)
+                        false
+                    }
+                    val error = if (started) null else (
+                        engine.lastError ?: "Слушането не можа да стартира."
+                    )
+                    activity.runOnUiThread {
+                        result.success(mapOf("ok" to started, "error" to error))
+                    }
+                }, "HeyIronStart").start()
             }
             "stop" -> {
                 engine.stop()
@@ -175,6 +178,30 @@ class HeyIronBridge(
         activity.stopService(Intent(activity, HeyIronForegroundService::class.java))
     }
 
+    private fun prepareModelOnWorker(): Map<String, Any?> {
+        val bundled = HeyIronEngine.installBundledModel(activity)
+        if (bundled == null && HeyIronEngine.isModelReady(activity)) {
+            return mapOf("ok" to true, "error" to null, "source" to "bundled")
+        }
+        return try {
+            val ok = downloadAndExtract()
+            if (ok) {
+                mapOf("ok" to true, "error" to null, "source" to "download")
+            } else {
+                val error = bundled
+                    ?: "Изтеглянето на модела не успя."
+                emit("error", mapOf("message" to error))
+                mapOf("ok" to false, "error" to error, "source" to "download")
+            }
+        } catch (error: Exception) {
+            Log.e(LOG_TAG, "download_failed", error)
+            val message = error.message?.takeIf { it.isNotBlank() }
+                ?: "Изтеглянето не успя."
+            emit("error", mapOf("message" to message))
+            mapOf("ok" to false, "error" to message, "source" to "download")
+        }
+    }
+
     private fun downloadAndExtract(): Boolean {
         if (downloading) return false
         downloading = true
@@ -187,6 +214,11 @@ class HeyIronBridge(
             connection.connectTimeout = 20_000
             connection.readTimeout = 60_000
             connection.connect()
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                connection.disconnect()
+                throw IllegalStateException("Сървърът за модела върна HTTP $code.")
+            }
             val total = connection.contentLengthLong.let {
                 if (it > 0) it else HeyIronEngine.EXPECTED_ARCHIVE_BYTES
             }
@@ -234,8 +266,24 @@ class HeyIronBridge(
                     }
                 }
             }
-            File(dest, "keywords.txt").writeText(KEYWORDS.trimIndent() + "\n")
-            return HeyIronEngine.isModelReady(activity)
+            // Prefer the bundled keyword list (Hey Iron + Хей Айрън).
+            val bundledKeywords = try {
+                activity.assets.open("${HeyIronEngine.ASSET_MODEL_DIR}/keywords.txt")
+                    .use { it.bufferedReader().readText() }
+            } catch (_: Exception) {
+                KEYWORDS.trimIndent() + "\n"
+            }
+            File(dest, "keywords.txt").writeText(bundledKeywords)
+            if (!HeyIronEngine.isModelReady(activity)) {
+                val missing = HeyIronEngine.REQUIRED_FILES.filter {
+                    val file = File(dest, it)
+                    !file.isFile || file.length() <= 0L
+                }
+                throw IllegalStateException(
+                    "След разархивирането липсват файлове: ${missing.joinToString()}.",
+                )
+            }
+            return true
         } finally {
             if (archive.exists()) archive.delete()
             downloading = false

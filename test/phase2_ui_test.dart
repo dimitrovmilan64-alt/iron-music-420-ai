@@ -62,7 +62,8 @@ Future<void> _saveShot(WidgetTester tester, String name) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('onboarding has three screens and can be finished', (tester) async {
+  testWidgets('onboarding has three screens and can be finished',
+      (tester) async {
     await _loadInter();
     await _prepareStore(onboardingComplete: false);
     final store = LocalStore();
@@ -70,7 +71,10 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData(fontFamily: 'Inter', useMaterial3: true, brightness: Brightness.dark),
+        theme: ThemeData(
+            fontFamily: 'Inter',
+            useMaterial3: true,
+            brightness: Brightness.dark),
         home: OnboardingPage(store: store),
       ),
     );
@@ -97,7 +101,8 @@ void main() {
     await store.setApiKey('AIza-test');
     await store.replaceChatHistory([
       ChatMessage(
-        text: 'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.',
+        text:
+            'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.',
         isUser: false,
         isLocalNotice: true,
         createdAt: DateTime(2026, 11, 13, 20),
@@ -178,7 +183,8 @@ void main() {
     await store.setApiKey('AIza-test');
     await store.replaceChatHistory([
       ChatMessage(
-        text: 'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.',
+        text:
+            'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.',
         isUser: false,
         isLocalNotice: true,
         createdAt: DateTime(2026, 11, 13, 20),
@@ -189,7 +195,8 @@ void main() {
         createdAt: DateTime(2026, 11, 13, 20, 1),
       ),
       ChatMessage(
-        text: '[Припев]\nНеонови улици, сърцето не спи, а римата държи ритъма жив.',
+        text:
+            '[Припев]\nНеонови улици, сърцето не спи, а римата държи ритъма жив.',
         isUser: false,
         createdAt: DateTime(2026, 11, 13, 20, 2),
       ),

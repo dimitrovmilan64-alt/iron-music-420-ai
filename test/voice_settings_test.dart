@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ironmusic420ai/pages/settings_page.dart';
 import 'package:ironmusic420ai/services/local_store.dart';
 import 'package:ironmusic420ai/theme/iron_theme.dart';
+import 'package:ironmusic420ai/widgets/voice_settings_panel.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,21 @@ void main() {
     return store;
   }
 
+  Future<void> revealVoiceSection(WidgetTester tester) async {
+    final pageScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Скорост'),
+      400,
+      scrollable: pageScroll,
+    );
+    for (var i = 0;
+        i < 16 && find.textContaining('Sulafat').evaluate().isEmpty;
+        i++) {
+      await tester.drag(pageScroll, const Offset(0, -280));
+      await tester.pump();
+    }
+  }
+
   testWidgets('settings show sliders and cloud voices when keys are saved',
       (tester) async {
     final store = await storeWithKeys(gemini: true, groq: true);
@@ -42,21 +58,29 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await tester.scrollUntilVisible(
-      find.text('Скорост'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await revealVoiceSection(tester);
 
     expect(find.text('Скорост'), findsOneWidget);
     expect(find.text('Височина'), findsOneWidget);
     expect(find.textContaining('Sulafat'), findsWidgets);
     expect(find.textContaining('Kore'), findsWidgets);
     expect(find.text('Чуй пробен глас'), findsWidgets);
+
+    final voiceScroll = find.descendant(
+      of: find.byType(VoiceSettingsPanel),
+      matching: find.byType(Scrollable),
+    );
+    expect(voiceScroll, findsOneWidget);
+    final pageScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      voiceScroll,
+      250,
+      scrollable: pageScroll,
+    );
     await tester.scrollUntilVisible(
       find.textContaining('Autumn'),
-      300,
-      scrollable: find.byType(Scrollable).last,
+      200,
+      scrollable: voiceScroll,
     );
     expect(find.textContaining('Autumn'), findsWidgets);
     expect(find.textContaining('само EN'), findsWidgets);

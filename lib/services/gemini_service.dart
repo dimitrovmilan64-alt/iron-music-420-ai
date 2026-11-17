@@ -34,11 +34,37 @@ class LyricGenerationStats {
   });
 }
 
+class ProviderTestResult {
+  final bool ok;
+  final String message;
+  final int? statusCode;
+  final String? model;
+
+  const ProviderTestResult({
+    required this.ok,
+    required this.message,
+    this.statusCode,
+    this.model,
+  });
+}
+
 class _AiMessage {
   final String role;
   final String text;
 
   const _AiMessage(this.role, this.text);
+}
+
+class _GeminiParse {
+  final String text;
+  final String finishReason;
+  final bool hadThoughts;
+
+  const _GeminiParse({
+    required this.text,
+    required this.finishReason,
+    required this.hadThoughts,
+  });
 }
 
 class GeminiService {
@@ -48,7 +74,7 @@ class GeminiService {
   static const _preferredModels = <String>[
     'gemini-3.8-flash',
     'gemini-3.6-flash',
-    'gemini-3.5-flash',
+    'gemini-4-hydrogen',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
@@ -60,6 +86,7 @@ class GeminiService {
   static const lyricPreferredModels = <String>[
     'gemini-3.8-flash',
     'gemini-3.6-flash',
+    'gemini-4-hydrogen',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
@@ -71,6 +98,7 @@ class GeminiService {
   static const lyricBackupModels = <String>[
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'qwen/qwen3.8-27b',
   ];
 
   static const Duration lyricCallTimeout = Duration(seconds: 18);
@@ -136,6 +164,9 @@ class GeminiService {
       maxOutputTokens: 3600,
       temperature: 0.82,
       timeout: chatCallTimeout,
+      skipModelDiscovery: true,
+      thinkingLevel: 'low',
+      preferredModels: _preferredModels,
     );
   }
 
@@ -379,9 +410,10 @@ class GeminiService {
         generationConfig['temperature'] = temperature;
         generationConfig['topP'] = 0.95;
       }
-      if (thinkingLevel != null &&
+      var useThinking = thinkingLevel != null &&
           thinkingLevel.isNotEmpty &&
-          model.startsWith('gemini-3')) {
+          _supportsThinkingLevel(model);
+      if (useThinking) {
         generationConfig['thinkingConfig'] = {
           'thinkingLevel': thinkingLevel,
         };
@@ -432,42 +464,64 @@ class GeminiService {
         }
 
         if (response.statusCode == 200) {
-          final text = _extractGeminiText(response.body);
-          if (text.isEmpty) {
-            throw const GeminiException('Gemini върна празен отговор.');
+          final parsed = _extractGeminiText(response.body);
+          if (parsed.text.isEmpty) {
+            final exhausted =
+                parsed.finishReason.toUpperCase().contains('MAX') ||
+                    parsed.hadThoughts;
+            if (exhausted && attempt == 0) {
+              generationConfig['maxOutputTokens'] =
+                  maxOutputTokens < 4096 ? 4096 : maxOutputTokens * 2;
+              continue;
+            }
+            lastError = const GeminiException(
+              'Gemini върна празен отговор.',
+            );
+            break;
           }
           _activeGeminiModel = model;
           _activeModel = 'Gemini · $model';
           _modelForKeyFingerprint = _fingerprint(apiKey);
-          return text;
+          return parsed.text;
         }
 
         final message = _extractError(response.body);
+        final lower = message.toLowerCase();
 
         if (response.statusCode == 404 ||
-            (response.statusCode == 400 &&
-                message.toLowerCase().contains('not found'))) {
+            (response.statusCode == 400 && lower.contains('not found'))) {
           _unavailableModels.add(model);
           lastError = GeminiException(
-            'Моделът „$model“ не е наличен за този ключ.',
+            'Моделът „$model“ не съществува за този ключ.',
           );
           break;
         }
 
-        if (response.statusCode == 429) {
-          throw const GeminiException(
-            'Лимитът на Gemini е достигнат. Преминавам към резервния доставчик.',
+        if (response.statusCode == 400 &&
+            useThinking &&
+            (lower.contains('thinking') || lower.contains('thinkinglevel'))) {
+          generationConfig.remove('thinkingConfig');
+          useThinking = false;
+          lastError = GeminiException(
+            'Моделът „$model“ не приема thinkingLevel. Пробвам без него.',
           );
+          continue;
+        }
+
+        if (response.statusCode == 429) {
+          lastError = const GeminiException(
+            'Лимитът на Gemini е изчерпан за този модел. Пробвам следващия.',
+          );
+          break;
         }
 
         if (response.statusCode == 401) {
           throw const GeminiException(
-            'Gemini API ключът не е валиден или няма разрешение.',
+            'Gemini API ключът не е валиден.',
           );
         }
 
         if (response.statusCode == 403) {
-          final lower = message.toLowerCase();
           final modelBlocked = lower.contains('not found') ||
               lower.contains('not supported') ||
               lower.contains('not available');
@@ -493,14 +547,16 @@ class GeminiService {
           continue;
         }
         if (transient) {
-          throw const GeminiException(
-            'Gemini временно не отговаря. Преминавам към резервния доставчик.',
+          lastError = const GeminiException(
+            'Gemini временно не отговаря. Пробвам следващия модел.',
           );
+          break;
         }
 
-        throw GeminiException(
+        lastError = GeminiException(
           _friendlyGeminiError(response.statusCode, message),
         );
+        break;
       }
     }
 
@@ -534,7 +590,7 @@ class GeminiService {
     final isGroq = config.backupBaseUrl.toLowerCase().contains('groq.com');
     final modelsToTry = <String>[
       configured,
-      if (isGroq && preferredModels != null) ...lyricBackupModels,
+      if (isGroq) ...lyricBackupModels,
     ].toSet().toList(growable: false);
 
     GeminiException? lastError;
@@ -553,11 +609,23 @@ class GeminiService {
       };
 
       final lowerModel = model.toLowerCase();
-      final reasoningModel = lowerModel.startsWith('gpt-5') ||
+      final gptOss = lowerModel.contains('gpt-oss');
+      final qwen = lowerModel.contains('qwen');
+      final legacyReasoning = lowerModel.startsWith('gpt-5') ||
           lowerModel.startsWith('o1') ||
           lowerModel.startsWith('o3') ||
           lowerModel.startsWith('o4');
-      if (reasoningModel) {
+      if (gptOss) {
+        payload['max_completion_tokens'] =
+            maxOutputTokens < 4096 ? 4096 : maxOutputTokens;
+        payload['reasoning_effort'] = 'low';
+        payload['reasoning_format'] = 'hidden';
+        payload['temperature'] = temperature;
+      } else if (qwen) {
+        payload['max_completion_tokens'] = maxOutputTokens;
+        payload['reasoning_effort'] = 'none';
+        payload['temperature'] = temperature;
+      } else if (legacyReasoning) {
         payload['max_completion_tokens'] = maxOutputTokens;
       } else {
         payload['max_tokens'] = maxOutputTokens;
@@ -599,6 +667,12 @@ class GeminiService {
         if (response.statusCode == 200) {
           final text = _extractBackupText(response.body);
           if (text.isEmpty) {
+            if (attempt == 0 && (gptOss || qwen || legacyReasoning)) {
+              payload['max_completion_tokens'] = 8192;
+              payload['reasoning_effort'] = gptOss ? 'low' : 'none';
+              payload['reasoning_format'] = 'hidden';
+              continue;
+            }
             lastError = const GeminiException(
               'Резервният AI доставчик върна празен отговор.',
             );
@@ -623,18 +697,20 @@ class GeminiService {
           case 401:
           case 403:
             throw const GeminiException(
-              'Резервният API ключ не е валиден или няма разрешение.',
+              'Резервният API ключ не е валиден.',
             );
           case 404:
             lastError = GeminiException(
-              'Резервният модел „$model“ не е наличен.',
+              'Резервният модел „$model“ не съществува.',
             );
             modelMissing = true;
             break;
           case 429:
-            throw const GeminiException(
-              'Лимитът на резервния AI доставчик също е достигнат.',
+            lastError = const GeminiException(
+              'Лимитът на резервния AI доставчик е изчерпан. Пробвам следващия модел.',
             );
+            modelMissing = true;
+            break;
           case 500:
           case 502:
           case 503:
@@ -733,27 +809,55 @@ class GeminiService {
     return 'gemini-2.5-flash';
   }
 
-  String _extractGeminiText(String body) {
+  static bool _supportsThinkingLevel(String model) {
+    final lower = model.toLowerCase();
+    return lower.startsWith('gemini-3') || lower.startsWith('gemini-4');
+  }
+
+  _GeminiParse _extractGeminiText(String body) {
     try {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final candidates = decoded['candidates'] as List<dynamic>?;
-      if (candidates == null || candidates.isEmpty) return '';
+      if (candidates == null || candidates.isEmpty) {
+        return const _GeminiParse(
+            text: '', finishReason: '', hadThoughts: false);
+      }
 
       final first = candidates.first;
-      if (first is! Map) return '';
+      if (first is! Map) {
+        return const _GeminiParse(
+            text: '', finishReason: '', hadThoughts: false);
+      }
+      final finishReason = first['finishReason']?.toString() ?? '';
       final content = first['content'];
-      if (content is! Map) return '';
+      if (content is! Map) {
+        return _GeminiParse(
+            text: '', finishReason: finishReason, hadThoughts: false);
+      }
       final parts = content['parts'];
-      if (parts is! List) return '';
+      if (parts is! List) {
+        return _GeminiParse(
+            text: '', finishReason: finishReason, hadThoughts: false);
+      }
 
-      return parts
-          .whereType<Map>()
-          .map((part) => part['text']?.toString() ?? '')
-          .where((text) => text.trim().isNotEmpty)
-          .join('\n')
-          .trim();
+      var hadThoughts = false;
+      final visible = <String>[];
+      for (final part in parts.whereType<Map>()) {
+        final isThought = part['thought'] == true;
+        final text = part['text']?.toString() ?? '';
+        if (isThought) {
+          hadThoughts = true;
+          continue;
+        }
+        if (text.trim().isNotEmpty) visible.add(text);
+      }
+      return _GeminiParse(
+        text: visible.join('\n').trim(),
+        finishReason: finishReason,
+        hadThoughts: hadThoughts,
+      );
     } catch (_) {
-      return '';
+      return const _GeminiParse(text: '', finishReason: '', hadThoughts: false);
     }
   }
 
@@ -767,15 +871,19 @@ class GeminiService {
       final message = first['message'];
       if (message is! Map) return '';
       final content = message['content'];
-      if (content is String) return content.trim();
+      if (content is String && content.trim().isNotEmpty) {
+        return content.trim();
+      }
       if (content is List) {
-        return content
+        final joined = content
             .whereType<Map>()
             .map((part) => part['text']?.toString() ?? '')
             .where((text) => text.trim().isNotEmpty)
             .join('\n')
             .trim();
+        if (joined.isNotEmpty) return joined;
       }
+      // Never use the reasoning/thinking field as the visible lyric or reply.
     } catch (_) {
       return '';
     }
@@ -800,12 +908,164 @@ class GeminiService {
     final compact = rawMessage.replaceAll(RegExp(r'\s+'), ' ').trim();
     switch (statusCode) {
       case 400:
-        return 'Gemini отхвърли заявката. Провери ключа или съкрати текста. $compact';
+        return 'Gemini отхвърли заявката. $compact';
       case 401:
       case 403:
-        return 'Gemini API ключът не е валиден или няма разрешение.';
+        return 'Gemini API ключът не е валиден.';
+      case 404:
+        return 'Моделът не съществува за този ключ.';
+      case 429:
+        return 'Лимитът на Gemini е изчерпан.';
       default:
         return 'Gemini грешка $statusCode: $compact';
+    }
+  }
+
+  Future<ProviderTestResult> testGeminiKey(String apiKey) async {
+    final key = apiKey.trim();
+    if (key.isEmpty) {
+      return const ProviderTestResult(
+        ok: false,
+        message: 'Липсва Gemini ключ.',
+      );
+    }
+    final model = lyricPreferredModels.first;
+    try {
+      final uri = Uri.parse('$_geminiBaseUrl/models/$model:generateContent');
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': key,
+            },
+            body: jsonEncode({
+              'contents': [
+                {
+                  'role': 'user',
+                  'parts': [
+                    {'text': 'Отговори само с OK.'},
+                  ],
+                },
+              ],
+              'generationConfig': {
+                'maxOutputTokens': 16,
+                'thinkingConfig': {'thinkingLevel': 'low'},
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final parsed = _extractGeminiText(response.body);
+        if (parsed.text.isNotEmpty) {
+          return ProviderTestResult(
+            ok: true,
+            message: 'Gemini ключът работи (модел $model).',
+            statusCode: 200,
+            model: model,
+          );
+        }
+        return ProviderTestResult(
+          ok: false,
+          message: 'Gemini върна празен отговор (модел $model).',
+          statusCode: 200,
+          model: model,
+        );
+      }
+      return ProviderTestResult(
+        ok: false,
+        message: _friendlyGeminiError(
+          response.statusCode,
+          _extractError(response.body),
+        ),
+        statusCode: response.statusCode,
+        model: model,
+      );
+    } on TimeoutException {
+      return ProviderTestResult(
+        ok: false,
+        message: 'Gemini не отговори навреме (модел $model).',
+        model: model,
+      );
+    } catch (_) {
+      return const ProviderTestResult(
+        ok: false,
+        message: 'Няма връзка с Gemini.',
+      );
+    }
+  }
+
+  Future<ProviderTestResult> testGroqKey(String apiKey, {String? model}) async {
+    final key = apiKey.trim();
+    if (key.isEmpty) {
+      return const ProviderTestResult(
+        ok: false,
+        message: 'Липсва Groq ключ.',
+      );
+    }
+    final chosen = (model ?? 'openai/gpt-oss-20b').trim();
+    try {
+      final uri = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $key',
+            },
+            body: jsonEncode({
+              'model': chosen,
+              'messages': [
+                {'role': 'user', 'content': 'Reply with OK only.'},
+              ],
+              'max_completion_tokens': 256,
+              'reasoning_effort': 'low',
+              'reasoning_format': 'hidden',
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final text = _extractBackupText(response.body);
+        if (text.isNotEmpty) {
+          return ProviderTestResult(
+            ok: true,
+            message: 'Groq ключът работи (модел $chosen).',
+            statusCode: 200,
+            model: chosen,
+          );
+        }
+        return ProviderTestResult(
+          ok: false,
+          message:
+              'Groq върна празен отговор (модел $chosen). Пробвай отново или смени модела.',
+          statusCode: 200,
+          model: chosen,
+        );
+      }
+      final raw = _extractError(response.body);
+      final message = switch (response.statusCode) {
+        401 || 403 => 'Groq API ключът не е валиден.',
+        404 => 'Моделът „$chosen“ не съществува.',
+        429 => 'Лимитът на Groq е изчерпан.',
+        _ => 'Groq грешка ${response.statusCode}: $raw',
+      };
+      return ProviderTestResult(
+        ok: false,
+        message: message,
+        statusCode: response.statusCode,
+        model: chosen,
+      );
+    } on TimeoutException {
+      return ProviderTestResult(
+        ok: false,
+        message: 'Groq не отговори навреме (модел $chosen).',
+        model: chosen,
+      );
+    } catch (_) {
+      return const ProviderTestResult(
+        ok: false,
+        message: 'Няма връзка с Groq.',
+      );
     }
   }
 

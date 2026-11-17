@@ -1,4 +1,3 @@
-
 /// Mirrors Android `IronVoiceService.SERVICE_ENABLED`.
 /// Keep this false until the wake-word service is safely re-enabled.
 const bool ironVoiceServiceEnabled = false;

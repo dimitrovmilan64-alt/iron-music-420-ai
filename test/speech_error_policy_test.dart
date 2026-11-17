@@ -10,8 +10,7 @@ void main() {
   });
 
   test('raw speech timeout is replaced with a Bulgarian instruction', () {
-    final message =
-        SpeechErrorPolicy.friendlyMessage('error_speech_timeout');
+    final message = SpeechErrorPolicy.friendlyMessage('error_speech_timeout');
 
     expect(message, contains('Не чух реч'));
     expect(message, isNot(contains('error_speech_timeout')));

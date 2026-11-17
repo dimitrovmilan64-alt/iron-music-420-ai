@@ -9,7 +9,8 @@ void main() {
     ).readAsStringSync();
 
     expect(service, contains('iron_voice_service_silent_v3'));
-    expect(service, contains('deleteNotificationChannel("iron_voice_service")'));
+    expect(
+        service, contains('deleteNotificationChannel("iron_voice_service")'));
     expect(service, contains('setSound(null, null)'));
     expect(service, contains('setShowBadge(false)'));
     expect(

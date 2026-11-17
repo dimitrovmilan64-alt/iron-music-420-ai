@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../app_info.dart';
 import '../services/ai_provider_config.dart';
+import '../services/gemini_service.dart';
 import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
 import '../services/local_store.dart';
@@ -28,6 +30,11 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _backupApiKeyController;
   bool _saving = false;
+  bool _testingGemini = false;
+  bool _testingGroq = false;
+  String? _geminiTestResult;
+  String? _groqTestResult;
+  GeminiService? _tester;
 
   @override
   void initState() {
@@ -43,6 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.store.removeListener(_onStore);
     _apiKeyController.dispose();
     _backupApiKeyController.dispose();
+    _tester?.dispose();
     super.dispose();
   }
 
@@ -76,6 +84,36 @@ class _SettingsPageState extends State<SettingsPage> {
     _toast('Gemini и Groq са запазени криптирано на телефона.');
   }
 
+  Future<void> _testGemini() async {
+    if (_testingGemini) return;
+    setState(() {
+      _testingGemini = true;
+      _geminiTestResult = 'Проверявам Gemini ключа…';
+    });
+    _tester ??= GeminiService();
+    final result = await _tester!.testGeminiKey(_apiKeyController.text);
+    if (!mounted) return;
+    setState(() {
+      _testingGemini = false;
+      _geminiTestResult = result.message;
+    });
+  }
+
+  Future<void> _testGroq() async {
+    if (_testingGroq) return;
+    setState(() {
+      _testingGroq = true;
+      _groqTestResult = 'Проверявам Groq ключа…';
+    });
+    _tester ??= GeminiService();
+    final result = await _tester!.testGroqKey(_backupApiKeyController.text);
+    if (!mounted) return;
+    setState(() {
+      _testingGroq = false;
+      _groqTestResult = result.message;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -86,7 +124,8 @@ class _SettingsPageState extends State<SettingsPage> {
           const PageTitle(
             eyebrow: 'IRON',
             title: 'Настройки',
-            subtitle: 'AI ключове, глас и бързи инструменти — на едно място.',
+            subtitle:
+                'Версия ${AppInfo.versionLabel}. AI ключове, глас и Хей Айрън — на едно място.',
           ),
           const SizedBox(height: 18),
           IronCard(
@@ -124,6 +163,25 @@ class _SettingsPageState extends State<SettingsPage> {
                     hintText: 'AIza...',
                   ),
                 ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: _testingGemini ? null : _testGemini,
+                    child: Text(
+                      _testingGemini ? 'Тестване…' : 'Тествай Gemini ключа',
+                    ),
+                  ),
+                ),
+                if (_geminiTestResult != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _geminiTestResult!,
+                      style:
+                          const TextStyle(color: Colors.white70, height: 1.35),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 const Text(
                   '2. Резервен доставчик · Groq',
@@ -146,6 +204,25 @@ class _SettingsPageState extends State<SettingsPage> {
                     hintText: 'gsk_...',
                   ),
                 ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: _testingGroq ? null : _testGroq,
+                    child: Text(
+                      _testingGroq ? 'Тестване…' : 'Тествай Groq ключа',
+                    ),
+                  ),
+                ),
+                if (_groqTestResult != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _groqTestResult!,
+                      style:
+                          const TextStyle(color: Colors.white70, height: 1.35),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 IronButton(
                   text: _saving ? 'Запазване...' : 'Запази AI доставчиците',
@@ -196,7 +273,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             subtitle: Text(
                               '${hey.statusLabel}. При първо включване се изтегля офлайн модел от около ${HeyIronController.formatSize(HeyIronController.modelBytes)}. Слушането е само докато приложението е отворено.',
-                              style: const TextStyle(color: Colors.white60, height: 1.35),
+                              style: const TextStyle(
+                                  color: Colors.white60, height: 1.35),
                             ),
                             value: hey.enabled,
                             activeColor: ironGreen,
@@ -217,8 +295,17 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           Text(
                             hey.message,
-                            style: const TextStyle(color: Colors.white70, height: 1.35),
+                            style: const TextStyle(
+                                color: Colors.white70, height: 1.35),
                           ),
+                          if (hey.phase == HeyIronPhase.error ||
+                              (hey.enabled &&
+                                  !hey.modelReady &&
+                                  hey.phase != HeyIronPhase.downloading))
+                            TextButton(
+                              onPressed: hey.retrySetup,
+                              child: const Text('Опитай отново'),
+                            ),
                           SwitchListTile.adaptive(
                             contentPadding: EdgeInsets.zero,
                             title: const Text(
@@ -230,18 +317,21 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             subtitle: const Text(
                               'Експериментално. Може да натовари слаби телефони. Изключено е по подразбиране.',
-                              style: TextStyle(color: Colors.white60, height: 1.35),
+                              style: TextStyle(
+                                  color: Colors.white60, height: 1.35),
                             ),
                             value: hey.backgroundExperimental,
                             activeColor: ironGreen,
                             onChanged: hey.enabled
-                                ? (value) => hey.setBackgroundExperimental(value)
+                                ? (value) =>
+                                    hey.setBackgroundExperimental(value)
                                 : null,
                           ),
                           if (hey.phase == HeyIronPhase.blocked)
                             TextButton(
                               onPressed: hey.resetWatchdog,
-                              child: const Text('Нулирай защитата и пробвай пак'),
+                              child:
+                                  const Text('Нулирай защитата и пробвай пак'),
                             ),
                         ],
                       );

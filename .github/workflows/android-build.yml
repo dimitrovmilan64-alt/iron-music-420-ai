@@ -63,21 +63,10 @@ jobs:
       - name: Verify Hey Iron runtime assets
         shell: bash
         run: |
-          SERVICE="android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt"
           AAR="android/app/libs/sherpa-onnx-1.13.4.aar"
+          ASSETS="android/app/src/main/assets/hey_iron"
           test -s "$AAR" || { echo "Missing sherpa-onnx AAR"; exit 1; }
-          if grep -q 'const val SERVICE_ENABLED = true' "$SERVICE"; then
-            MODEL="android/app/src/main/assets/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20"
-            for f in encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx \
-                     decoder-epoch-13-avg-2-chunk-16-left-64.onnx \
-                     joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx \
-                     tokens.txt keywords.txt; do
-              test -s "$MODEL/$f" || { echo "Missing model file: $f"; exit 1; }
-            done
-            echo "Offline Hey Iron models verified."
-          else
-            echo "Hey Iron is disabled; AAR is present for compile, models were skipped."
-          fi
+          python3 scripts/check_hey_iron_native.py --aar "$AAR" --assets "$ASSETS"
 
       - name: Force Gradle 8.10 URL
         shell: bash
@@ -122,6 +111,9 @@ jobs:
           EOF
           cat android/gradle/wrapper/gradle-wrapper.properties
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
+
+      - name: Verify APK 16KB native libs
+        run: python3 scripts/check_hey_iron_native.py --apk build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

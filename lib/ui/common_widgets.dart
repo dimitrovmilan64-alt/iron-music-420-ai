@@ -274,7 +274,8 @@ class IronInput extends StatelessWidget {
         hintStyle: const TextStyle(color: Colors.white30),
         filled: true,
         fillColor: ironSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: ironHairline),
@@ -437,9 +438,7 @@ class NeonPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: active
-            ? ironGreen.withValues(alpha: 0.14)
-            : ironSurface,
+        color: active ? ironGreen.withValues(alpha: 0.14) : ironSurface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           width: 1,

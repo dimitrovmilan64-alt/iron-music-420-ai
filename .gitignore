@@ -123,3 +123,8 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# Generated Hey Iron model files (prepared by scripts/prepare_sherpa_kws.sh)
+android/app/src/main/assets/hey_iron/*.onnx
+android/app/src/main/assets/hey_iron/en.phone
+android/app/src/main/assets/hey_iron/tokens.txt

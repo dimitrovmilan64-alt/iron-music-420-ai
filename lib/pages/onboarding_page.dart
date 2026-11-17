@@ -126,9 +126,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     height: 8,
                     width: selected ? 22 : 8,
                     decoration: BoxDecoration(
-                      color: selected
-                          ? ironGreen
-                          : Colors.transparent,
+                      color: selected ? ironGreen : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         width: 1,

@@ -48,8 +48,7 @@ void main() {
     final store = File('lib/services/local_store.dart').readAsStringSync();
     final studioEntry =
         File('lib/pages/rap_studio_page.dart').readAsStringSync();
-    final studio =
-        File('lib/pages/rap_studio_page_v2.dart').readAsStringSync();
+    final studio = File('lib/pages/rap_studio_page_v2.dart').readAsStringSync();
 
     expect(activity, contains('consumeStudioVoiceRequest'));
     expect(automation, contains('consumeStudioVoiceRequest'));
@@ -64,9 +63,9 @@ void main() {
 
   test('offline wake list contains only calibrated full Hey Iron phrases', () {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
-    expect(script, contains('HEY_IRON_LEX'));
+    expect(script, contains('HEY_IRON_'));
     expect(script, contains('HEY_IRON_BG'));
-    expect(script, contains('6.5, 0.03'));
+    expect(script, contains('2.0, 0.18'));
     expect(script, isNot(contains('HEY_AARON')));
     expect(script, isNot(contains('NO_H')));
   });

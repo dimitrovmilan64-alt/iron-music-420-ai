@@ -81,8 +81,7 @@ class AutomationService {
       }
       return NativeSpeechResult(
         success: false,
-        message: error.message ??
-            'Гласовото разпознаване не можа да стартира.',
+        message: error.message ?? 'Гласовото разпознаване не можа да стартира.',
       );
     } catch (_) {
       return const NativeSpeechResult(
