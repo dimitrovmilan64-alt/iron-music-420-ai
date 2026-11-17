@@ -1043,6 +1043,12 @@ class MainActivity : FlutterActivity() {
         result.success(successMessage)
     }
 
+    private fun deliverHeyIronDetection(intent: Intent?) {
+        val keyword = intent?.getStringExtra("hey_iron_detected") ?: return
+        intent.removeExtra("hey_iron_detected")
+        heyIronBridge?.onDetected(keyword)
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
