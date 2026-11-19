@@ -2,13 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-const ironGreen = Color(0xFF00FF66);
-const ironGreenSoft = Color(0xFF37FF88);
-const ironGreenDeep = Color(0xFF008F43);
-const ironDark = Color(0xFF010603);
-const ironPanel = Color(0xFF031108);
-const ironPanelRaised = Color(0xFF061A0D);
-const ironLine = Color(0xFF0A3A1C);
+import '../theme/iron_theme.dart';
+
+export '../theme/iron_theme.dart';
+
+const ironPanel = ironSurface;
+const ironPanelRaised = ironSurfaceHigh;
 
 String cleanMarkdownForDisplay(String text) {
   try {
@@ -66,35 +65,24 @@ class IronBackground extends StatelessWidget {
   const IronBackground({
     super.key,
     required this.child,
-    this.showHud = true,
+    this.showHud = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0.0, -0.78),
-          radius: 1.35,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: [
-            Color(0xFF063319),
-            Color(0xFF011008),
+            Color(0xFF0C1610),
             ironDark,
-            Colors.black,
+            Color(0xFF050806),
           ],
-          stops: [0.0, 0.35, 0.72, 1.0],
         ),
       ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (showHud)
-            const IgnorePointer(
-              child: CustomPaint(painter: _HudBackgroundPainter()),
-            ),
-          SafeArea(child: child),
-        ],
-      ),
+      child: SafeArea(child: child),
     );
   }
 }
@@ -134,19 +122,12 @@ class PageTitle extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
               ],
-              ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [ironGreenSoft, ironGreen],
-                ).createShader(bounds),
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 27,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.2,
-                    height: 1.05,
-                  ),
+              Text(
+                title,
+                style: ironText(
+                  size: 28,
+                  weight: FontWeight.w700,
+                  height: 1.1,
                 ),
               ),
               const SizedBox(height: 7),
@@ -209,42 +190,25 @@ class IronCard extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: ironGreen.withOpacity(bright ? 0.16 : 0.07),
-            blurRadius: bright ? 28 : 18,
-            spreadRadius: bright ? 1 : 0,
-          ),
-          const BoxShadow(
-            color: Colors.black54,
-            blurRadius: 16,
-            offset: Offset(0, 9),
+            color: Colors.black.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: radius,
+      child: Material(
+        color: bright ? const Color(0xFF102016) : ironSurfaceHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: ironBorderSide(accent: true, strong: bright),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: CustomPaint(
           foregroundPainter: _PanelAccentPainter(
             color: bright ? ironGreenSoft : ironGreen,
           ),
-          child: Container(
+          child: Padding(
             padding: padding,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  bright
-                      ? const Color(0xFF0A2814).withOpacity(0.98)
-                      : ironPanelRaised.withOpacity(0.96),
-                  ironPanel.withOpacity(0.97),
-                  const Color(0xFF010A05).withOpacity(0.98),
-                ],
-              ),
-              border: Border.all(
-                color: ironGreen.withOpacity(bright ? 0.62 : 0.34),
-              ),
-            ),
             child: child,
           ),
         ),
@@ -467,11 +431,12 @@ class NeonPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: active
-            ? ironGreen.withOpacity(0.15)
-            : Colors.black.withOpacity(0.28),
+            ? ironGreen.withValues(alpha: 0.14)
+            : ironSurface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: ironGreen.withOpacity(active ? 0.7 : 0.28),
+          width: 1,
+          color: ironGreen.withValues(alpha: active ? 0.75 : 0.38),
         ),
       ),
       child: Row(
@@ -695,90 +660,6 @@ class _PanelAccentPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PanelAccentPainter oldDelegate) =>
       oldDelegate.color != color;
-}
-
-class _HudBackgroundPainter extends CustomPainter {
-  const _HudBackgroundPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = ironGreen.withOpacity(0.022)
-      ..strokeWidth = 0.8;
-    const step = 36.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    final hudPaint = Paint()
-      ..color = ironGreen.withOpacity(0.055)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawCircle(
-      Offset(size.width * 0.5, size.height * 0.14),
-      size.width * 0.34,
-      hudPaint,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.5, size.height * 0.14),
-      size.width * 0.27,
-      hudPaint,
-    );
-
-    final wave = Path()..moveTo(0, size.height * 0.34);
-    for (double x = 0; x <= size.width; x += 5) {
-      final y = size.height * 0.34 +
-          math.sin(x / 18) * 3 +
-          math.sin(x / 7) * 1.2;
-      wave.lineTo(x, y);
-    }
-    canvas.drawPath(wave, hudPaint);
-
-    final watermarkPaint = Paint()
-      ..color = ironGreen.withOpacity(0.035)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.09, size.height * 0.58),
-      18,
-      watermarkPaint,
-    );
-    _drawTinyLeaf(
-      canvas,
-      Offset(size.width * 0.91, size.height * 0.79),
-      22,
-      watermarkPaint,
-    );
-  }
-
-  void _drawTinyLeaf(
-    Canvas canvas,
-    Offset center,
-    double radius,
-    Paint paint,
-  ) {
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    for (final angle in [-1.0, -0.55, 0.0, 0.55, 1.0]) {
-      canvas.save();
-      canvas.rotate(angle);
-      final path = Path()
-        ..moveTo(0, radius * 0.25)
-        ..quadraticBezierTo(-radius * 0.24, -radius * 0.1, 0, -radius)
-        ..quadraticBezierTo(radius * 0.24, -radius * 0.1, 0, radius * 0.25);
-      canvas.drawPath(path, paint);
-      canvas.restore();
-    }
-    canvas.drawLine(Offset.zero, Offset(0, radius * 0.7), paint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _HudCorePainter extends CustomPainter {

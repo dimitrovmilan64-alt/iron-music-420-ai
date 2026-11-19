@@ -41,6 +41,7 @@ class MainActivity : FlutterActivity() {
     private var pendingStudioOutputType = ""
     private var pendingStudioAutoGenerate = false
     private var automationChannel: MethodChannel? = null
+    private var heyIronBridge: HeyIronBridge? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cameraManager by lazy {
         getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -94,6 +95,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         captureIronSection(intent)
+        heyIronBridge = HeyIronBridge(this)
+        heyIronBridge?.attach(flutterEngine.dartExecutor.binaryMessenger)
         automationChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
@@ -624,6 +627,9 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureIronSection(intent)
+        intent.getStringExtra("hey_iron_detected")?.let { keyword ->
+            heyIronBridge?.onDetected(keyword)
+        }
         automationChannel?.invokeMethod("ironRequestAvailable", null)
     }
 
@@ -717,6 +723,8 @@ class MainActivity : FlutterActivity() {
         restoreIronVoiceAfterChatSpeech = false
         automationChannel?.setMethodCallHandler(null)
         automationChannel = null
+        heyIronBridge?.detach()
+        heyIronBridge = null
         super.onDestroy()
     }
 

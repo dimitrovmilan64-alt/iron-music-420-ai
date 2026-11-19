@@ -13,6 +13,7 @@ class LocalStore extends ChangeNotifier {
   static const _apiKeyKey = 'gemini_api_key';
   static const _backupApiKeyKey = 'backup_api_key';
   static const _apiKeyPromptDismissedKey = 'api_key_prompt_dismissed_v35';
+  static const _onboardingCompleteKey = 'onboarding_complete_v2';
   static const _backupBaseUrlKey = 'backup_base_url';
   static const _backupModelKey = 'backup_model';
   static const _voiceRepliesKey = 'voice_replies_enabled';
@@ -37,6 +38,7 @@ class LocalStore extends ChangeNotifier {
   String _apiKey = '';
   String _backupApiKey = '';
   bool _apiKeyPromptDismissed = false;
+  bool _onboardingComplete = false;
   String _backupBaseUrl = AiProviderConfig.defaultBackupBaseUrl;
   String _backupModel = AiProviderConfig.defaultBackupModel;
   bool _voiceRepliesEnabled = true;
@@ -62,6 +64,8 @@ class LocalStore extends ChangeNotifier {
     _preferences = await SharedPreferences.getInstance();
     _apiKeyPromptDismissed =
         _preferences.getBool(_apiKeyPromptDismissedKey) ?? false;
+    _onboardingComplete =
+        _preferences.getBool(_onboardingCompleteKey) ?? false;
     _apiKey = await _readSecret(
       secureKey: _apiKeyKey,
       legacyPrefsKey: _apiKeyKey,
@@ -180,6 +184,7 @@ class LocalStore extends ChangeNotifier {
   bool get hasApiKey => _apiKey.trim().isNotEmpty;
   String get backupApiKey => _backupApiKey;
   bool get apiKeyPromptDismissed => _apiKeyPromptDismissed;
+  bool get onboardingComplete => _onboardingComplete;
   bool get shouldPromptForApiKey =>
       !hasAnyAiProvider && !_apiKeyPromptDismissed;
   String get backupBaseUrl => _backupBaseUrl;
@@ -225,6 +230,12 @@ class LocalStore extends ChangeNotifier {
   Future<void> dismissApiKeyPrompt() async {
     _apiKeyPromptDismissed = true;
     await _preferences.setBool(_apiKeyPromptDismissedKey, true);
+    notifyListeners();
+  }
+
+  Future<void> completeOnboarding() async {
+    _onboardingComplete = true;
+    await _preferences.setBool(_onboardingCompleteKey, true);
     notifyListeners();
   }
 

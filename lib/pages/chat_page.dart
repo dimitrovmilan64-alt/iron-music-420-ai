@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
 import '../models/chat_message.dart';
 import '../services/ai_provider_config.dart';
 import '../services/automation_service.dart';
 import '../services/gemini_service.dart';
+import '../services/hey_iron_controller.dart';
 import '../services/iron_voice_flags.dart';
+import '../services/iron_tts.dart';
 import '../services/local_store.dart';
+import '../widgets/voice_settings_panel.dart';
 import '../ui/common_widgets.dart';
 
 class ChatPage extends StatefulWidget {
   final LocalStore store;
   final bool isActive;
+  final HeyIronController? heyIron;
   final VoidCallback? onOpenTools;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(String text)? onSendToStudio;
@@ -21,6 +24,7 @@ class ChatPage extends StatefulWidget {
     super.key,
     required this.store,
     this.isActive = true,
+    this.heyIron,
     this.onOpenTools,
     this.onOpenSettings,
     this.onSendToStudio,
@@ -36,37 +40,37 @@ class _ChatPageState extends State<ChatPage>
       'Аз съм Айрън. Говори или пиши тук — това е единният ни разговор.';
 
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _composerFocus = FocusNode();
   late final TextEditingController _apiKeyController;
   late final TextEditingController _backupApiKeyController;
   late final TextEditingController _backupBaseUrlController;
   late final TextEditingController _backupModelController;
   final ScrollController _scrollController = ScrollController();
-  final FlutterTts _flutterTts = FlutterTts();
+  final IronTts _tts = IronTts.instance;
   final GeminiService _gemini = GeminiService();
   final AutomationService _automation = AutomationService();
   late final AnimationController _coreController;
 
   late List<ChatMessage> _messages;
   bool _isLoading = false;
+  DateTime? _handledWakeAt;
   bool _isListening = false;
   bool _ironActive = false;
   bool _voiceToggleBusy = false;
   bool _processingPendingChatPrompt = false;
   bool _voiceReady = false;
-  List<Map<String, String>> _bulgarianVoices = const [];
-  String _selectedVoiceName = '';
-  String _selectedVoiceLocale = '';
-  double _voiceRate = 0.44;
-  double _voicePitch = 0.92;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _composerFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     widget.store.addListener(_handleStoreChange);
     _coreController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 240),
     );
     _syncCoreAnimation();
     _apiKeyController = TextEditingController(text: widget.store.apiKey);
@@ -90,11 +94,7 @@ class _ChatPageState extends State<ChatPage>
       Future.microtask(() => widget.store.replaceChatHistory(_messages));
     }
 
-    _voiceRate = widget.store.ttsRate;
-    _voicePitch = widget.store.ttsPitch;
-    _selectedVoiceName = widget.store.ttsVoiceName;
-    _selectedVoiceLocale = widget.store.ttsVoiceLocale;
-    _configureBulgarianVoice();
+    _prepareVoice();
     _automation.setNativeSpeechPartialListener((recognized) {
       if (!mounted || !_isListening) return;
       setState(() {
@@ -104,6 +104,12 @@ class _ChatPageState extends State<ChatPage>
         );
       });
     });
+    widget.heyIron?.onWakeWord = () {
+      if (!mounted) return;
+      if (_currentListeningLocked()) return;
+      _toggleListening();
+    };
+    widget.heyIron?.addListener(_onHeyIronChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadIronStatus();
       _consumePendingChatVoiceRequest();
@@ -115,18 +121,34 @@ class _ChatPageState extends State<ChatPage>
     WidgetsBinding.instance.removeObserver(this);
     widget.store.removeListener(_handleStoreChange);
     _coreController.dispose();
-    _flutterTts.stop();
+    _tts.stop();
     _automation.setNativeSpeechPartialListener(null);
     _automation.cancelNativeSpeechRecognition();
     _gemini.dispose();
+    _composerFocus.dispose();
     _messageController.dispose();
     _apiKeyController.dispose();
     _backupApiKeyController.dispose();
     _backupBaseUrlController.dispose();
     _backupModelController.dispose();
+    widget.heyIron?.removeListener(_onHeyIronChanged);
+    if (widget.heyIron?.onWakeWord != null) {
+      widget.heyIron!.onWakeWord = null;
+    }
     _scrollController.dispose();
     super.dispose();
   }
+
+  void _onHeyIronChanged() {
+    final wake = widget.heyIron?.lastWakeAt;
+    if (wake != null && wake != _handledWakeAt && !_currentListeningLocked()) {
+      _handledWakeAt = wake;
+      _toggleListening();
+    }
+    if (mounted) setState(() {});
+  }
+
+  bool _currentListeningLocked() => _isListening || _isLoading;
 
   @override
   void didUpdateWidget(ChatPage oldWidget) {
@@ -149,16 +171,19 @@ class _ChatPageState extends State<ChatPage>
   }
 
   void _syncCoreAnimation() {
-    final shouldAnimate = widget.isActive &&
+    final active = widget.isActive &&
         (WidgetsBinding.instance.lifecycleState == null ||
             WidgetsBinding.instance.lifecycleState ==
                 AppLifecycleState.resumed);
+    final shouldAnimate = active && (_isListening || _isLoading);
     if (shouldAnimate) {
       if (!_coreController.isAnimating) {
         _coreController.repeat(reverse: true);
       }
     } else if (_coreController.isAnimating) {
-      _coreController.stop();
+      _coreController
+        ..stop()
+        ..value = 0;
     }
   }
 
@@ -236,258 +261,36 @@ class _ChatPageState extends State<ChatPage>
     _showMessage(result.message);
   }
 
-  int _voiceScore(Map<String, String> voice) {
-    final name = (voice['name'] ?? '').toLowerCase();
-    var score = 0;
-    for (final word in const [
-      'natural',
-      'neural',
-      'network',
-      'online',
-      'enhanced',
-      'premium',
-      'wavenet',
-      'high',
-    ]) {
-      if (name.contains(word)) score += 10;
-    }
-    for (final word in const ['embedded', 'local', 'compact']) {
-      if (name.contains(word)) score -= 3;
-    }
-    return score;
-  }
-
-  Future<void> _applyVoice({
-    required double rate,
-    required double pitch,
-    required String voiceName,
-    required String voiceLocale,
-  }) async {
-    await _flutterTts.setLanguage(
-      voiceLocale.isEmpty ? 'bg-BG' : voiceLocale.replaceAll('_', '-'),
-    );
-    await _flutterTts.setSpeechRate(rate);
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(pitch);
-    await _flutterTts.awaitSpeakCompletion(true);
-
-    if (voiceName.isNotEmpty) {
-      await _flutterTts.setVoice({
-        'name': voiceName,
-        'locale': voiceLocale.isEmpty ? 'bg-BG' : voiceLocale,
-      });
-    }
-  }
-
-  Future<void> _configureBulgarianVoice() async {
+  Future<void> _prepareVoice() async {
     try {
-      final dynamic voices = await _flutterTts.getVoices;
-      final found = <Map<String, String>>[];
-
-      if (voices is List) {
-        for (final dynamic item in voices) {
-          if (item is! Map) continue;
-          final locale = item['locale']?.toString() ?? '';
-          final name = item['name']?.toString() ?? '';
-          if (locale.toLowerCase().startsWith('bg') && name.isNotEmpty) {
-            found.add({'name': name, 'locale': locale});
-          }
-        }
-      }
-
-      found.sort((a, b) {
-        final scoreCompare = _voiceScore(b).compareTo(_voiceScore(a));
-        if (scoreCompare != 0) return scoreCompare;
-        return (a['name'] ?? '').compareTo(b['name'] ?? '');
-      });
-
-      var selectedName = _selectedVoiceName;
-      var selectedLocale = _selectedVoiceLocale;
-      final savedVoiceExists = found.any(
-        (voice) =>
-            voice['name'] == selectedName && voice['locale'] == selectedLocale,
-      );
-
-      if (!savedVoiceExists && found.isNotEmpty) {
-        selectedName = found.first['name'] ?? '';
-        selectedLocale = found.first['locale'] ?? 'bg-BG';
-      }
-
-      await _applyVoice(
-        rate: _voiceRate,
-        pitch: _voicePitch,
-        voiceName: selectedName,
-        voiceLocale: selectedLocale,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _bulgarianVoices = found;
-        _selectedVoiceName = selectedName;
-        _selectedVoiceLocale = selectedLocale;
-        _voiceReady = true;
-      });
+      final voices = await _tts.listVoices(widget.store);
+      await _tts.resolveSelection(widget.store, voices);
+      if (mounted) setState(() => _voiceReady = true);
     } catch (_) {
-      try {
-        await _applyVoice(
-          rate: _voiceRate,
-          pitch: _voicePitch,
-          voiceName: '',
-          voiceLocale: 'bg-BG',
-        );
-      } catch (_) {
-        // Текстовите отговори остават достъпни и без TTS.
-      }
       if (mounted) setState(() => _voiceReady = false);
     }
   }
 
-  String _voiceKey(Map<String, String> voice) {
-    return '${voice['name'] ?? ''}|${voice['locale'] ?? ''}';
-  }
-
   Future<void> _openVoiceSettings() async {
-    var tempRate = _voiceRate;
-    var tempPitch = _voicePitch;
-    var tempVoiceName = _selectedVoiceName;
-    var tempVoiceLocale = _selectedVoiceLocale;
-
-    final saved = await showDialog<bool>(
+    await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final selectedKey =
-              tempVoiceName.isEmpty ? null : '$tempVoiceName|$tempVoiceLocale';
-          final validSelectedKey = _bulgarianVoices.any(
-            (voice) => _voiceKey(voice) == selectedKey,
-          )
-              ? selectedKey
-              : null;
-
-          return AlertDialog(
-            title: const Text('Настройки на гласа'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_bulgarianVoices.isEmpty)
-                    const Text(
-                      'На телефона не е намерен отделен български глас. Ще се използва системният.',
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      value: validSelectedKey,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Български глас',
-                      ),
-                      items: _bulgarianVoices.map((voice) {
-                        final name = voice['name'] ?? 'Глас';
-                        final locale = voice['locale'] ?? 'bg-BG';
-                        return DropdownMenuItem<String>(
-                          value: _voiceKey(voice),
-                          child: Text(
-                            '$name ($locale)',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        final selected = _bulgarianVoices.firstWhere(
-                          (voice) => _voiceKey(voice) == value,
-                        );
-                        setDialogState(() {
-                          tempVoiceName = selected['name'] ?? '';
-                          tempVoiceLocale = selected['locale'] ?? 'bg-BG';
-                        });
-                      },
-                    ),
-                  const SizedBox(height: 18),
-                  Text('Скорост: ${(tempRate * 100).round()}%'),
-                  Slider(
-                    value: tempRate,
-                    min: 0.30,
-                    max: 0.65,
-                    divisions: 14,
-                    label: tempRate.toStringAsFixed(2),
-                    onChanged: (value) {
-                      setDialogState(() => tempRate = value);
-                    },
-                  ),
-                  Text('Плътност на гласа: ${(tempPitch * 100).round()}%'),
-                  Slider(
-                    value: tempPitch,
-                    min: 0.75,
-                    max: 1.10,
-                    divisions: 14,
-                    label: tempPitch.toStringAsFixed(2),
-                    onChanged: (value) {
-                      setDialogState(() => tempPitch = value);
-                    },
-                  ),
-                  const Text(
-                    'За по-естествено звучене остави скоростта около 44% и плътността около 92%.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Отказ'),
-              ),
-              TextButton.icon(
-                onPressed: () async {
-                  try {
-                    await _flutterTts.stop();
-                    await _applyVoice(
-                      rate: tempRate,
-                      pitch: tempPitch,
-                      voiceName: tempVoiceName,
-                      voiceLocale: tempVoiceLocale,
-                    );
-                    await _playSpeechWithWakePaused(
-                      'Здравей. Аз съм Iron Music 420 AI. Това е тест на българския глас.',
-                    );
-                  } catch (_) {
-                    if (mounted) {
-                      _showMessage('Тестът на гласа не можа да стартира.');
-                    }
-                  }
-                },
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Тест'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Запази'),
-              ),
-            ],
-          );
-        },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Настройки на гласа'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: VoiceSettingsPanel(store: widget.store),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Готово'),
+          ),
+        ],
       ),
     );
-
-    if (saved != true || !mounted) {
-      await _configureBulgarianVoice();
-      return;
-    }
-
-    _voiceRate = tempRate;
-    _voicePitch = tempPitch;
-    _selectedVoiceName = tempVoiceName;
-    _selectedVoiceLocale = tempVoiceLocale;
-    await widget.store.saveVoiceSettings(
-      rate: tempRate,
-      pitch: tempPitch,
-      voiceName: tempVoiceName,
-      voiceLocale: tempVoiceLocale,
-    );
-    await _configureBulgarianVoice();
-    if (mounted) _showMessage('Настройките на гласа са запазени.');
+    if (mounted) setState(() {});
   }
 
   Future<void> _speak(String text) async {
@@ -509,13 +312,14 @@ class _ChatPageState extends State<ChatPage>
       if (resumeIronVoice) {
         await Future<void>.delayed(const Duration(milliseconds: 180));
       }
-      await _flutterTts.stop();
-      await _flutterTts
-          .speak(text)
-          .timeout(const Duration(minutes: 7));
+      await _tts.stop();
+      final notice = await _tts.speak(text, widget.store);
+      if (notice != null && mounted) {
+        _showMessage(notice);
+      }
     } catch (_) {
       try {
-        await _flutterTts.stop();
+        await _tts.stop();
       } catch (_) {
         // The wake listener still has to be restored below.
       }
@@ -535,7 +339,7 @@ class _ChatPageState extends State<ChatPage>
     if (enabled) {
       await _speak('Гласовите отговори са включени.');
     } else {
-      await _flutterTts.stop();
+      await _tts.stop();
     }
   }
 
@@ -547,15 +351,22 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
-    await _flutterTts.stop();
+    await _tts.stop();
     FocusManager.instance.primaryFocus?.unfocus();
+    if (!mounted) return;
+    await widget.heyIron?.stopListening(clean: false);
     if (!mounted) return;
 
     setState(() => _isListening = true);
+    _syncCoreAnimation();
     final result = await _automation.startNativeSpeechRecognition();
     if (!mounted) return;
 
     setState(() => _isListening = false);
+    _syncCoreAnimation();
+    if (widget.heyIron?.enabled == true) {
+      await widget.heyIron!.startListening();
+    }
     if (!result.success) {
       if (result.message.trim().isNotEmpty) {
         _showMessage(result.message.trim());
@@ -607,7 +418,9 @@ class _ChatPageState extends State<ChatPage>
 
   ChatMessage? _lastAssistantMessage() {
     for (final message in _messages.reversed) {
-      if (!message.isUser && !message.isLocalNotice && message.text.trim().isNotEmpty) {
+      if (!message.isUser &&
+          !message.isLocalNotice &&
+          message.text.trim().isNotEmpty) {
         return message;
       }
     }
@@ -738,6 +551,7 @@ class _ChatPageState extends State<ChatPage>
       _messageController.clear();
       _isLoading = true;
     });
+    _syncCoreAnimation();
     await widget.store.replaceChatHistory(_messages);
     _scrollToBottom();
 
@@ -769,6 +583,7 @@ class _ChatPageState extends State<ChatPage>
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        _syncCoreAnimation();
         _scrollToBottom();
       }
     }
@@ -1039,20 +854,12 @@ class _ChatPageState extends State<ChatPage>
             height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: active
-                  ? ironGreen.withOpacity(0.16)
-                  : Colors.black.withOpacity(0.28),
+              color:
+                  active ? ironGreen.withValues(alpha: 0.14) : ironSurfaceHigh,
               border: Border.all(
-                color: ironGreen.withOpacity(active ? 0.68 : 0.25),
+                width: 1,
+                color: active ? ironOutlineStrong : ironOutlineMuted,
               ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: ironGreen.withOpacity(0.16),
-                        blurRadius: 16,
-                      ),
-                    ]
-                  : null,
             ),
             child: Icon(
               icon,
@@ -1065,184 +872,162 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
-  Widget _buildAssistantCore(double size) {
+  Widget _buildStatusHeader() {
+    final hey = widget.heyIron;
     final status = _isListening
-        ? 'СЛУШАМ'
+        ? 'Слушам…'
         : _isLoading
-            ? 'МИСЛЯ'
-            : _ironActive
-                ? 'ХЕЙ АЙРЪН АКТИВЕН'
-                : 'ГОТОВ СЪМ';
-
-    return AnimatedBuilder(
-      animation: _coreController,
-      builder: (context, _) {
-        final activity = (_isListening || _isLoading) ? 0.22 : 0.0;
-        final progress =
-            (_coreController.value * 0.72 + activity).clamp(0.0, 1.0).toDouble();
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Semantics(
-              button: true,
-              label: _isListening ? 'Спри слушането' : 'Говори с Iron',
-              child: GestureDetector(
-                onTap: _isLoading ? null : _toggleListening,
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 180),
-                  scale: _isListening ? 1.05 : 1.0,
-                  child: CannabisCore(progress: progress, size: size),
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              status,
-              style: TextStyle(
-                color: _isListening ? ironGreenSoft : ironGreen,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2.2,
-                shadows: const [Shadow(color: ironGreen, blurRadius: 10)],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            ? 'Iron мисли…'
+            : hey != null && hey.enabled
+                ? hey.statusLabel
+                : ironVoiceServiceEnabled && _ironActive
+                    ? 'Хей Айрън е активен'
+                    : 'Готов за разговор';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 6, 4),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _coreController,
+            builder: (context, _) {
+              final pulse = _isListening || _isLoading
+                  ? 0.85 + (_coreController.value * 0.15)
+                  : 1.0;
+              return Transform.scale(
+                scale: pulse,
+                child: CannabisCore(
+                    progress: _isListening || _isLoading ? 0.6 : 0.15,
+                    size: 42),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _roundAction(
-                  icon: _ironActive
-                      ? Icons.hearing_rounded
-                      : Icons.hearing_disabled_rounded,
-                  tooltip: !ironVoiceServiceEnabled
-                      ? '„Hey Iron“ е временно изключен'
-                      : _ironActive
-                          ? 'Изключи „Хей Айрън“'
-                          : 'Включи „Хей Айрън“',
-                  active: _ironActive,
-                  onPressed: (!ironVoiceServiceEnabled || !_voiceToggleBusy)
-                      ? _toggleIronMode
-                      : null,
+                const Text(
+                  'Хей Айрън',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                const SizedBox(width: 12),
-                _roundAction(
-                  icon: widget.store.voiceRepliesEnabled
-                      ? Icons.volume_up_rounded
-                      : Icons.volume_off_rounded,
-                  tooltip: widget.store.voiceRepliesEnabled
-                      ? (_voiceReady ? 'Гласовите отговори са включени' : 'Системен глас')
-                      : 'Гласовите отговори са изключени',
-                  active: widget.store.voiceRepliesEnabled,
-                  onPressed: _toggleVoiceReplies,
-                ),
-                const SizedBox(width: 12),
-                _roundAction(
-                  icon: Icons.key_rounded,
-                  tooltip: 'AI доставчици',
-                  active: widget.store.hasAnyAiProvider,
-                  onPressed: _openApiKeySheet,
+                Text(
+                  status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: ironGreen,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
-          ],
-        );
-      },
+          ),
+          _roundAction(
+            icon: (widget.heyIron?.enabled ?? _ironActive)
+                ? Icons.hearing_rounded
+                : Icons.hearing_disabled_rounded,
+            tooltip: widget.heyIron != null
+                ? (widget.heyIron!.enabled
+                    ? 'Изключи „Хей Айрън“'
+                    : 'Включи „Хей Айрън“')
+                : !ironVoiceServiceEnabled
+                    ? '„Hey Iron“ е временно изключен'
+                    : _ironActive
+                        ? 'Изключи „Хей Айрън“'
+                        : 'Включи „Хей Айрън“',
+            active: widget.heyIron?.enabled ?? _ironActive,
+            onPressed: widget.heyIron != null
+                ? () {
+                    final hey = widget.heyIron!;
+                    if (hey.phase == HeyIronPhase.downloading) return;
+                    hey.setEnabled(!hey.enabled);
+                  }
+                : (!ironVoiceServiceEnabled || !_voiceToggleBusy)
+                    ? _toggleIronMode
+                    : null,
+          ),
+          const SizedBox(width: 6),
+          _roundAction(
+            icon: widget.store.voiceRepliesEnabled
+                ? Icons.volume_up_rounded
+                : Icons.volume_off_rounded,
+            tooltip: widget.store.voiceRepliesEnabled
+                ? (_voiceReady
+                    ? 'Гласовите отговори са включени'
+                    : 'Системен глас')
+                : 'Гласовите отговори са изключени',
+            active: widget.store.voiceRepliesEnabled,
+            onPressed: _toggleVoiceReplies,
+          ),
+          const SizedBox(width: 6),
+          _roundAction(
+            icon: Icons.key_rounded,
+            tooltip: 'AI доставчици',
+            active: widget.store.hasAnyAiProvider,
+            onPressed: _openApiKeySheet,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Настройки',
+            icon: const Icon(Icons.more_horiz_rounded, color: ironGreen),
+            onSelected: (value) {
+              if (value == 'api') {
+                _openApiKeySheet();
+              } else if (value == 'voice') {
+                _openVoiceSettings();
+              } else if (value == 'history') {
+                _clearHistory();
+              } else if (value == 'tools') {
+                widget.onOpenTools?.call();
+              } else if (value == 'settings') {
+                (widget.onOpenSettings ?? widget.onOpenTools)?.call();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'api',
+                child: Text('AI доставчици'),
+              ),
+              const PopupMenuItem(
+                value: 'voice',
+                child: Text('Настройки на гласа'),
+              ),
+              if (widget.onOpenSettings != null || widget.onOpenTools != null)
+                const PopupMenuItem(
+                  value: 'settings',
+                  child: Text('Настройки и инструменти'),
+                ),
+              if (widget.onOpenTools != null)
+                const PopupMenuItem(
+                  value: 'tools',
+                  child: Text('Инструменти'),
+                ),
+              const PopupMenuItem(
+                value: 'history',
+                child: Text('Изчисти историята'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final keyboardOpen = media.viewInsets.bottom > 0;
-    final compactHeight = media.size.height < 720;
-    final coreSize = compactHeight ? 126.0 : 156.0;
-
     return IronBackground(
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 8, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ХЕЙ АЙРЪН',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _ironActive
-                            ? 'Активен • глас и чат на едно място'
-                            : 'Глас и чат на едно място',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: ironGreen,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Настройки',
-                  icon: const Icon(Icons.more_horiz_rounded, color: ironGreen),
-                  onSelected: (value) {
-                    if (value == 'api') {
-                      _openApiKeySheet();
-                    } else if (value == 'voice') {
-                      _openVoiceSettings();
-                    } else if (value == 'history') {
-                      _clearHistory();
-                    } else if (value == 'tools') {
-                      widget.onOpenTools?.call();
-                    } else if (value == 'settings') {
-                      (widget.onOpenSettings ?? widget.onOpenTools)?.call();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'api',
-                      child: Text('AI доставчици'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'voice',
-                      child: Text('Настройки на гласа'),
-                    ),
-                    if (widget.onOpenSettings != null ||
-                        widget.onOpenTools != null)
-                      const PopupMenuItem(
-                        value: 'settings',
-                        child: Text('Настройки и инструменти'),
-                      ),
-                    if (widget.onOpenTools != null)
-                      const PopupMenuItem(
-                        value: 'tools',
-                        child: Text('Инструменти'),
-                      ),
-                    const PopupMenuItem(
-                      value: 'history',
-                      child: Text('Изчисти историята'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          _buildStatusHeader(),
           if (widget.store.shouldPromptForApiKey)
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: IronCard(
                 bright: true,
                 margin: EdgeInsets.zero,
@@ -1254,7 +1039,7 @@ class _ChatPageState extends State<ChatPage>
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1286,53 +1071,15 @@ class _ChatPageState extends State<ChatPage>
                 ),
               ),
             ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            child: keyboardOpen
-                ? const SizedBox(height: 4)
-                : Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      compactHeight ? 4 : 8,
-                      12,
-                      8,
-                    ),
-                    child: _buildAssistantCore(coreSize),
-                  ),
-          ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (_isLoading && index == _messages.length) {
-                  return const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(8, 6, 8, 14),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 17,
-                            height: 17,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: ironGreen,
-                            ),
-                          ),
-                          SizedBox(width: 9),
-                          Text(
-                            'Iron мисли...',
-                            style: TextStyle(color: ironGreen),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
+                  return const _ThinkingIndicator();
                 }
                 final message = _messages[index];
                 return _ChatBubble(
@@ -1344,62 +1091,147 @@ class _ChatPageState extends State<ChatPage>
               },
             ),
           ),
-          Container(
-            margin: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF010A05).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: ironGreen.withOpacity(0.30)),
-              boxShadow: [
-                BoxShadow(
-                  color: ironGreen.withOpacity(0.08),
-                  blurRadius: 18,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: ironSurfaceHigh,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  width: 1,
+                  color:
+                      _composerFocus.hasFocus ? ironOutlineStrong : ironOutline,
                 ),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    minLines: 1,
-                    maxLines: 4,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration.collapsed(
-                      hintText: _isListening
-                          ? 'Слушам на български...'
-                          : 'Говори или напиши на Iron...',
-                      hintStyle: const TextStyle(color: Colors.white38),
+                boxShadow: ironFocusGlow(_composerFocus.hasFocus),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        focusNode: _composerFocus,
+                        controller: _messageController,
+                        minLines: 1,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        style:
+                            const TextStyle(color: Colors.white, height: 1.35),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          hintText: _isListening
+                              ? 'Слушам на български...'
+                              : 'Напиши или говори с Iron...',
+                          hintStyle: const TextStyle(color: Colors.white38),
+                        ),
+                        onSubmitted: (_) {
+                          if (!_isLoading) _sendMessage();
+                        },
+                      ),
                     ),
-                    onSubmitted: (_) {
-                      if (!_isLoading) _sendMessage();
-                    },
-                  ),
+                    IconButton(
+                      tooltip: 'Микрофон',
+                      onPressed: _isLoading ? null : _toggleListening,
+                      icon: Icon(
+                        _isListening
+                            ? Icons.stop_circle_rounded
+                            : Icons.mic_rounded,
+                        color: _isListening ? Colors.redAccent : ironGreen,
+                      ),
+                    ),
+                    IconButton.filled(
+                      tooltip: 'Изпрати',
+                      onPressed: _isLoading ? null : _sendMessage,
+                      icon: const Icon(Icons.arrow_upward_rounded),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Микрофон',
-                  onPressed: _isLoading ? null : _toggleListening,
-                  icon: Icon(
-                    _isListening ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                    color: _isListening ? Colors.redAccent : ironGreen,
-                  ),
-                ),
-                IconButton.filled(
-                  tooltip: 'Изпрати',
-                  onPressed: _isLoading ? null : _sendMessage,
-                  icon: const Icon(Icons.arrow_upward_rounded),
-                ),
-              ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
 
+class _ThinkingIndicator extends StatefulWidget {
+  const _ThinkingIndicator();
+
+  @override
+  State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
+}
+
+class _ThinkingIndicatorState extends State<_ThinkingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 14),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                return Row(
+                  children: List.generate(3, (index) {
+                    final t = (_controller.value + (index * 0.2)) % 1.0;
+                    final dy = -3 * (t < 0.5 ? t * 2 : (1 - t) * 2);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Transform.translate(
+                        offset: Offset(0, dy),
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: ironGreen,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                );
+              },
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Iron мисли…',
+              style: TextStyle(
+                color: ironGreen,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ChatBubble extends StatelessWidget {
@@ -1415,42 +1247,37 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final alignment =
         message.isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final color = message.isUser
-        ? ironGreen.withOpacity(0.18)
-        : message.isLocalNotice
-            ? Colors.orange.withOpacity(0.12)
-            : const Color(0xFF04150A);
-    final borderColor = message.isUser
-        ? ironGreen
-        : message.isLocalNotice
-            ? Colors.orangeAccent.withOpacity(0.7)
-            : Colors.white12;
+    final Color fill;
+    final Color outline;
+    if (message.isUser) {
+      fill = ironUserFill;
+      outline = ironOutlineStrong;
+    } else if (message.isLocalNotice) {
+      fill = ironGraphite;
+      outline = ironOutline;
+    } else {
+      fill = ironGraphite;
+      outline = const Color(0x6600FF66);
+    }
+    final radius = BorderRadius.only(
+      topLeft: const Radius.circular(18),
+      topRight: const Radius.circular(18),
+      bottomLeft: Radius.circular(message.isUser ? 18 : 6),
+      bottomRight: Radius.circular(message.isUser ? 6 : 18),
+    );
 
     return Align(
       alignment: alignment,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.84,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.82,
         ),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(message.isUser ? 18 : 5),
-            bottomRight: Radius.circular(message.isUser ? 5 : 18),
-          ),
-          border: Border.all(color: borderColor.withOpacity(0.8)),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  (message.isUser ? ironGreen : Colors.black).withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
+          color: fill,
+          borderRadius: radius,
+          border: Border.all(color: outline, width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1461,9 +1288,9 @@ class _ChatBubble extends StatelessWidget {
                   child: Text(
                     message.sender,
                     style: TextStyle(
-                      color: message.isUser ? ironGreen : Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      color: message.isUser ? ironGreen : Colors.white54,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
                     ),
                   ),
                 ),
@@ -1505,10 +1332,10 @@ class _ChatBubble extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 4),
             SelectableText(
               cleanMarkdownForDisplay(message.text),
-              style: const TextStyle(color: Colors.white, height: 1.4),
+              style: const TextStyle(color: Colors.white, height: 1.45),
             ),
           ],
         ),
