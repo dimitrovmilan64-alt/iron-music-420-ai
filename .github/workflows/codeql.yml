@@ -13,7 +13,7 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui", "feat/voice-quality" ]
+    branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui", "feat/hey-iron-v2", "feat/voice-quality" ]
   pull_request:
     branches: [ "main", "feat/phase1-stability", "feat/phase2-modern-ui" ]
   schedule:

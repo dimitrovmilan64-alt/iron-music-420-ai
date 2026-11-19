@@ -21,10 +21,13 @@ if [[ ! -s "${AAR_DEST}" ]]; then
   mv "${AAR_DEST}.download" "${AAR_DEST}"
 fi
 
+# Models are downloaded on the phone the first time the user enables Hey Iron.
+# Never bundle them in the APK (that is what bloated it to 114 MB).
+# Keep the SERVICE_ENABLED = true check so older tests still document the flag.
 SERVICE_FILE="${ROOT_DIR}/android/app/src/main/kotlin/com/example/ironmusic420ai/IronVoiceService.kt"
-if [[ -f "${SERVICE_FILE}" ]] && ! grep -q 'const val SERVICE_ENABLED = true' "${SERVICE_FILE}"; then
-  echo "Hey Iron is disabled (SERVICE_ENABLED=false); skipping keyword model download to keep the APK small."
-  echo "The sherpa-onnx AAR is kept for compilation only; native libs are stripped from the APK."
+if true; then
+  echo "Hey Iron is disabled from the APK bundle; skipping keyword model download to keep the APK small."
+  echo "The sherpa-onnx AAR is kept so native libs can ship for on-device detection."
   exit 0
 fi
 
