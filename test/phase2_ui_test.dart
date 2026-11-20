@@ -24,12 +24,24 @@ Future<void> _loadInter() async {
   final inter = await rootBundle.load('assets/fonts/InterVariable.ttf');
   await (FontLoader('Inter')..addFont(Future.value(inter))).load();
 
-  const iconPath =
-      '/home/box/sdk/flutter-3.47.9/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot == null || flutterRoot.isEmpty) return;
+  final iconPath =
+      '$flutterRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
   if (File(iconPath).existsSync()) {
     final icons = await _fileBytes(iconPath);
     await (FontLoader('MaterialIcons')..addFont(Future.value(icons))).load();
   }
+}
+
+/// Screenshots go to `build/iron-shots/v2` inside the project (git-ignored).
+/// Set IRON_SHOTS_DIR to write them somewhere else.
+Directory _shotsDir() {
+  final override = Platform.environment['IRON_SHOTS_DIR'];
+  if (override != null && override.trim().isNotEmpty) {
+    return Directory(override.trim());
+  }
+  return Directory('build/iron-shots/v2');
 }
 
 Future<void> _prepareStore({required bool onboardingComplete}) async {
@@ -46,15 +58,7 @@ Future<void> _saveShot(WidgetTester tester, String name) async {
     );
     final image = await boundary.toImage(pixelRatio: 2.6);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final preferred = Directory('/workspace/iron-shots/v2');
-    late final Directory dir;
-    try {
-      preferred.createSync(recursive: true);
-      dir = preferred;
-    } on FileSystemException {
-      dir = Directory('${Directory.systemTemp.path}/iron-shots')
-        ..createSync(recursive: true);
-    }
+    final dir = _shotsDir()..createSync(recursive: true);
     File('${dir.path}/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
   });
 }
