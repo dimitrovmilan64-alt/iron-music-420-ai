@@ -1,10 +1,12 @@
 name: Android build
 
 on:
+  # Branch patterns instead of a hard-coded list, so a new feature stack does
+  # not need a workflow edit. Pushes to main (release) and to any feat/**
+  # branch build; every pull request builds, whatever its base branch is.
   push:
-    branches: [main, feat/phase1-stability, feat/phase2-modern-ui, feat/hey-iron-v2, feat/voice-quality]
+    branches: [main, 'feat/**']
   pull_request:
-    branches: [main, feat/phase1-stability, feat/phase2-modern-ui]
   workflow_dispatch:
 
 concurrency:
@@ -122,6 +124,16 @@ jobs:
           EOF
           cat android/gradle/wrapper/gradle-wrapper.properties
           flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation
+
+      # Kotlin JUnit tests (android/app/src/test): Zip Slip guard, model
+      # SHA-256 check, wake guard, parsers. `flutter test` does not run them.
+      - name: Set up Gradle 8.10 for Kotlin unit tests
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
+      - name: Kotlin unit tests
+        run: gradle -p android --no-daemon -PskipDependencyChecks=true :app:testDebugUnitTest
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

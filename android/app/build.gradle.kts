@@ -86,20 +86,11 @@ android {
 
     packaging {
         jniLibs {
+            // Keep only the first copy of libc++_shared.so. The sherpa-onnx /
+            // onnxruntime native libs are intentionally packaged: Hey Iron v2
+            // needs them at runtime. The keyword models are downloaded on first
+            // enable and never bundled, so the APK stays far below the old 114 MB.
             pickFirsts += setOf("**/libc++_shared.so")
-            // Hey Iron v2 needs sherpa/onnx native libs at runtime. Models are
-            // downloaded on first enable and are not bundled, so the APK stays
-            // far smaller than the old 114 MB build. Keep only the first copy of
-            // libc++_shared.so. Reference libsherpa-onnx*.so here so tooling can
-            // still find the previous exclude rule.
-            val keepSherpaNative = true
-            if (!keepSherpaNative) {
-                excludes += setOf(
-                    "**/libsherpa-onnx*.so",
-                    "**/libonnxruntime.so",
-                    "**/libonnxruntime*.so",
-                )
-            }
         }
         resources {
             excludes += setOf(

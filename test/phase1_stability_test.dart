@@ -15,13 +15,11 @@ void main() {
   test('CI skips sherpa models while the wake-word service is disabled', () {
     final script = File('scripts/prepare_sherpa_kws.sh').readAsStringSync();
     final workflow = File('.github/workflows/android-build.yml').readAsStringSync();
-    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
     final codeql = File('.github/workflows/codeql.yml').readAsStringSync();
 
     expect(script, contains('SERVICE_ENABLED = true'));
     expect(script, contains('skipping keyword model download'));
     expect(workflow, contains('Hey Iron is disabled'));
-    expect(gradle, contains('libsherpa-onnx*.so'));
     expect(codeql, contains("flutter-version: '3.47.9'"));
     expect(codeql, isNot(contains("flutter-version: '3.27.0'")));
   });

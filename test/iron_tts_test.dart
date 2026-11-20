@@ -128,4 +128,15 @@ void main() {
     expect(a, contains('gemini:Kore'));
     expect(a, contains('Здравей'));
   });
+
+  test('Gemini TTS sends the API key in a header, never in the URL', () {
+    final uri = IronTts.geminiSpeechUri('gemini-2.5-flash-preview-tts');
+    expect(uri.queryParameters, isNot(contains('key')));
+    expect(uri.toString(), isNot(contains('AIza-secret')));
+    expect(uri.path, endsWith('/models/gemini-2.5-flash-preview-tts:generateContent'));
+
+    final headers = IronTts.geminiSpeechHeaders('AIza-secret');
+    expect(headers['x-goog-api-key'], 'AIza-secret');
+    expect(headers['Content-Type'], 'application/json');
+  });
 }

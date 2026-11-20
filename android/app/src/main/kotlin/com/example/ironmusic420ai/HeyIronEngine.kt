@@ -39,6 +39,13 @@ class HeyIronEngine(
         const val MODEL_URL =
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2"
         const val EXPECTED_ARCHIVE_BYTES = 32_885_699L
+        /**
+         * SHA-256 of the release asset at [MODEL_URL]. Matches the digest GitHub
+         * publishes for that asset. Update together with [MODEL_URL] and
+         * [EXPECTED_ARCHIVE_BYTES] if the model is ever changed.
+         */
+        const val MODEL_SHA256 =
+            "68447f4fbc67e70eee3a93961f36e81e98f47aef73ce7e7ca00885c6cd3616a6"
         private const val SAMPLE_RATE = 16_000
         private const val FRAME_SAMPLES = 1_600
         private const val MIN_RMS = 0.006f

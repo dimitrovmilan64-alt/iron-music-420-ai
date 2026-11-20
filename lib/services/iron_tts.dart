@@ -528,6 +528,16 @@ class IronTts {
     return bytes;
   }
 
+  /// Gemini TTS endpoint. The API key is never put in the URL (URLs end up
+  /// in logs, proxies and crash reports); it goes in [geminiSpeechHeaders].
+  static Uri geminiSpeechUri(String model) =>
+      Uri.parse('$geminiBase/models/$model:generateContent');
+
+  static Map<String, String> geminiSpeechHeaders(String apiKey) => {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      };
+
   Future<Uint8List> _geminiSpeech(
       String text, String apiKey, String voiceName) async {
     if (apiKey.trim().isEmpty) {
@@ -541,12 +551,10 @@ class IronTts {
     for (final model in models) {
       for (final body in _geminiBodies(text, voiceName)) {
         try {
-          final uri = Uri.parse(
-              '$geminiBase/models/$model:generateContent?key=${Uri.encodeQueryComponent(apiKey)}');
           final response = await _http
               .post(
-                uri,
-                headers: const {'Content-Type': 'application/json'},
+                geminiSpeechUri(model),
+                headers: geminiSpeechHeaders(apiKey),
                 body: jsonEncode(body),
               )
               .timeout(const Duration(seconds: 45));
