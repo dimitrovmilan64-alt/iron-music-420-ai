@@ -9,8 +9,6 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -33,36 +31,6 @@ class HeyIronBridge(
             HH EY1 AY1 R AO0 N :6.5 #0.03 @HEY_IRON_BG_O
             HH EY1 AY1 R OW0 N :6.5 #0.03 @HEY_IRON_BG_OW
         """.trimIndent()
-
-        /**
-         * Resolves an archive entry into [dest], flattening to the basename so the
-         * model files land where [HeyIronEngine] expects them. Rejects absolute
-         * paths, `..` segments, and anything that would canonicalize outside [dest].
-         */
-        internal fun resolvedArchiveFile(dest: File, entryName: String): File? {
-            val targetDir = dest.canonicalFile
-            val normalized = entryName.replace("\\", "/")
-            if (normalized.isEmpty() ||
-                normalized.startsWith("/") ||
-                Regex("^[A-Za-z]:").containsMatchIn(normalized)
-            ) {
-                return null
-            }
-            val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
-            if (parts.isEmpty() || parts.any { it == ".." }) {
-                return null
-            }
-            val prefix = targetDir.path + File.separator
-            val candidate = File(targetDir, parts.joinToString(File.separator)).canonicalFile
-            if (candidate.path != targetDir.path && !candidate.path.startsWith(prefix)) {
-                return null
-            }
-            val flattened = File(targetDir, parts.last()).canonicalFile
-            if (!flattened.path.startsWith(prefix)) {
-                return null
-            }
-            return flattened
-        }
     }
 
     private var methodChannel: MethodChannel? = null
@@ -105,14 +73,27 @@ class HeyIronBridge(
                     return
                 }
                 Thread({
-                    val ok = try {
-                        downloadAndExtract()
+                    // Report a failure once, as a PlatformException with a clear
+                    // message. Emitting an "error" event as well would make the
+                    // Dart watchdog count the same failure twice.
+                    try {
+                        val ok = downloadAndExtract()
+                        activity.runOnUiThread { result.success(ok) }
+                    } catch (error: ModelIntegrityException) {
+                        Log.e(LOG_TAG, "model_integrity_failed", error)
+                        activity.runOnUiThread {
+                            result.error("MODEL_INTEGRITY", error.message, null)
+                        }
                     } catch (error: Exception) {
                         Log.e(LOG_TAG, "download_failed", error)
-                        emit("error", mapOf("message" to (error.message ?: "Изтеглянето не успя.")))
-                        false
+                        activity.runOnUiThread {
+                            result.error(
+                                "MODEL_DOWNLOAD",
+                                error.message ?: "Изтеглянето не успя.",
+                                null,
+                            )
+                        }
                     }
-                    activity.runOnUiThread { result.success(ok) }
                 }, "HeyIronDownload").start()
             }
             "start" -> {
@@ -213,27 +194,16 @@ class HeyIronBridge(
             }
             connection.disconnect()
 
-            val dest = HeyIronEngine.modelDir(activity)
-            if (dest.exists()) dest.deleteRecursively()
-            dest.mkdirs()
+            // Verify before touching the model directory: a corrupted or
+            // tampered archive is deleted and never extracted.
+            HeyIronModelArchive.verifyOrDelete(
+                archive,
+                expectedSha256 = HeyIronEngine.MODEL_SHA256,
+                expectedBytes = HeyIronEngine.EXPECTED_ARCHIVE_BYTES,
+            )
 
-            archive.inputStream().use { fileStream ->
-                BZip2CompressorInputStream(fileStream).use { bz ->
-                    TarArchiveInputStream(bz).use { tar ->
-                        var entry = tar.nextEntry
-                        while (entry != null) {
-                            if (!entry.isDirectory) {
-                                val outFile = resolvedArchiveFile(dest, entry.name)
-                                    ?: throw SecurityException("Rejected archive path: ${entry.name}")
-                                FileOutputStream(outFile).use { output ->
-                                    tar.copyTo(output)
-                                }
-                            }
-                            entry = tar.nextEntry
-                        }
-                    }
-                }
-            }
+            val dest = HeyIronEngine.modelDir(activity)
+            HeyIronModelArchive.extractTarBz2(archive, dest)
             File(dest, "keywords.txt").writeText(KEYWORDS.trimIndent() + "\n")
             return HeyIronEngine.isModelReady(activity)
         } finally {
