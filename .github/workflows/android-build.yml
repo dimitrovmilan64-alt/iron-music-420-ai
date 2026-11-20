@@ -1,10 +1,12 @@
 name: Android build
 
 on:
+  # Branch patterns instead of a hard-coded list, so a new feature stack does
+  # not need a workflow edit. Pushes to main (release) and to any feat/**
+  # branch build; every pull request builds, whatever its base branch is.
   push:
-    branches: [main, feat/phase1-stability, feat/phase2-modern-ui, feat/hey-iron-v2, feat/voice-quality]
+    branches: [main, 'feat/**']
   pull_request:
-    branches: [main, feat/phase1-stability, feat/phase2-modern-ui]
   workflow_dispatch:
 
 concurrency:
